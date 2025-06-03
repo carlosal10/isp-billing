@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect to MikroTik</title>
+    <link rel="stylesheet" href="css/connect.css">
+</head>
+<body>
+    <h1>Connect to MikroTik Router</h1>
+    <form id="connectForm">
+        <label for="ip">Router IP:</label>
+        <input type="text" id="ip" name="ip" required>
+        
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+
+        <button type="submit">Connect</button>
+    </form>
+
+    <div id="response" class="response-box"></div>
+
+    <script>
+        document.getElementById('connectForm').onsubmit = async function(e) {
+            e.preventDefault();
+
+            const formData = {
+                ip: document.getElementById('ip').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value
+            };
+
+            const responseDiv = document.getElementById('response');
+
+            try {
+                const response = await fetch('http://localhost:5000/api/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+                responseDiv.textContent = data.message;
+            } catch (error) {
+                responseDiv.textContent = 'Failed to connect to MikroTik.';
+          
+            }
+
+        };
+    </script>
+</body>
+</html>

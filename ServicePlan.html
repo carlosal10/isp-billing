@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plans - ISP Billing</title>
+    <link rel="stylesheet" href="css/plans.css">
+</head>
+<body>
+
+    <div class="container">
+        <h1>Plans</h1>
+        <a href="Dashpanel.html"> <button type="button">Dashboard</button></a> 
+        <a href="logout.php"> <button type="button">Logout</button></a> 
+    </div>
+    <div class="container">
+        <h2>Plans</h2>
+
+        <!-- Add Plan Form -->
+        <button id="addPlanButton">Add Plan</button>
+        <div id="addPlanForm" style="display: none;">
+            <button id="closePlanForm">X</button>
+            <h2>Add Plan</h2>
+            <form id="planForm">
+                <input type="text" id="planName" placeholder="Plan Name" required>
+                <input type="text" id="planDescription" placeholder="Description" required>
+                <input type="number" id="planPrice" placeholder="Price" required>
+                <input type="text" id="planDuration" placeholder="Duration (e.g., monthly)" required>
+                
+                <button type="submit">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <!-- Plans Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Price</th>
+                    <th>Duration</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="plansTable"></tbody>
+        </table>
+    </div>
+
+    <script src="js/Plans.js"></script>
+</body>
+</html>

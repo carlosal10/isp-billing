@@ -1,0 +1,115 @@
+body {
+    display: flex;
+    flex-direction: column; /* Arrange children in a column */
+    align-items: center; /* Center items horizontally */
+    justify-content: flex-start; /* Align content to the top */
+    height: 100vh; /* Full height of the viewport */
+    margin: 0;
+    background:  #e0f7fa;;
+}
+
+h1 {
+    margin: 20px 0; /* Add some spacing from the top */
+    font-size: 2.5rem;
+    color: #101313;
+    
+}
+
+form {
+    margin-top: 10px; /* Add spacing between h1 and the form */
+    background: rgb(221, 220, 220);
+    padding: 30px 40px;
+    border-radius: 15px;
+    box-shadow: 0 0 15px 5px rgba(0, 0, 0, 0.7),
+                0 0 25px 10px rgba(2, 35, 36, 0.4);
+    max-width: 400px;
+    width: 100%;
+}
+
+form label {
+    font-size: 1.2rem;
+    color: #e0e0e0;
+    margin-bottom: 10px;
+    display: block;
+}
+
+form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 20px;
+    border: none;
+    border-radius: 8px;
+    outline: none;
+    background: #16213e;
+    color: #00f5ff;
+    font-size: 1rem;
+    box-shadow: inset 0 0 10px rgba(0, 245, 255, 0.3),
+                0 0 5px rgba(0, 0, 0, 0.5);
+    transition: box-shadow 0.3s ease;
+}
+
+form input:focus {
+    box-shadow: inset 0 0 10px rgba(0, 245, 255, 0.6),
+                0 0 10px #00f5ff;
+}
+
+/* Submit Button */
+form button {
+    width: 100%;
+    padding: 10px 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #080808;
+    background: linear-gradient(145deg, #00f5ff, #00aaff);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 0 5px #00f5ff,
+                0 0 10px rgba(0, 245, 255, 0.5);
+    transition: all 0.3s ease;
+}
+
+form button:hover {
+    background: linear-gradient(145deg, #00aaff, #00f5ff);
+    box-shadow: 0 0 15px #00f5ff,
+                0 0 30px rgba(0, 245, 255, 0.7),
+                inset 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+/* Card Design for Sci-Fi Effect */
+form {
+    position: relative;
+}
+
+form::before,
+form::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    border-radius: 15px;
+    box-shadow: 0 0 15px 2px rgba(0, 245, 255, 0.4);
+    z-index: -1;
+  
+}
+
+form::before {
+    filter: blur(5px);
+}
+
+form::after {
+    filter: blur(15px);
+    opacity: 0.6;
+}
+
+/* Animation for Sci-Fi Glow */
+@keyframes glow {
+    0% {
+        box-shadow: 0 0 15px 2px rgba(0, 245, 255, 0.4);
+    }
+    100% {
+        box-shadow: 0 0 25px 4px rgba(0, 245, 255, 0.7);
+    }
+}
