@@ -8,7 +8,7 @@
 
 body {
     display: flex;
-    background-color: #0b0c10;
+    background-color: #ebfcff;
     color: #e0f7fa; /* Light cyan text */
     height: 100vh;
     overflow: hidden;
@@ -23,7 +23,7 @@ body {
     flex-direction: column;
     align-items: center;
     padding: 20px 10px;
-    color: #00f5ff;
+    color: #e0f7fa;
 }
 
 .sidebar h2 {
@@ -43,7 +43,7 @@ body {
 
 .sidebar ul li a {
     text-decoration: none;
-    color: #00f5ff;
+    color: #ebfcff;
     font-size: 1.2rem;
     padding: 10px;
     display: block;
@@ -52,14 +52,14 @@ body {
 }
 
 .sidebar ul li a:hover {
-    background-color: #00bcd4;
+    background-color: #1b6069;
     color: #0d1b2a;
-    box-shadow: 0 0 5px #00f5ff, 0 0 10px #00f5ff;
+    box-shadow: 0 0 5px #0b4547, 0 0 10px #2e6c6e;
     transform: scale(1.05);
 }
 
 .container button {
-    background: linear-gradient(90deg, #00f5ff, #00bcd4);
+    background: linear-gradient(90deg, #0b5fb0, #2ba3ec);
     color: #0d1b2a;
     border: none;
     border-radius: 5px;
@@ -72,8 +72,8 @@ body {
 }
 
 .container button:hover {
-    background: linear-gradient(90deg, #00bcd4, #00838f);
-    box-shadow: 0 0 10px #00f5ff;
+    background: linear-gradient(90deg, #efedce, #ebfcff);
+    box-shadow: 0 0 10px #aaf1ff;
     transform: scale(1.05);
 }
 
@@ -88,7 +88,7 @@ body {
 
 .main-content h1 {
     font-size: 3rem;
-    color: #00f5ff;
+    color: #000000;
     margin-bottom: 30px;
 }
 
@@ -102,11 +102,11 @@ body {
 }
 
 .card {
-    background-color: #0c121b;
+    background-color: #0f214d;
     border-radius: 10px;
    /*box-shadow: 0 0 5px #00f5ff, 0 0 10px #00bcd4;*/
     padding: 20px 30px;
-    color: #00f5ff;
+    color: #efedce;
     font-size: 1.5rem;
     text-align: center;
     transition: all 0.3s ease-in-out;
@@ -114,7 +114,7 @@ body {
 }
 
 .card:hover {
-    box-shadow: 0 0 10px #00f5ff, 0 0 15px #00bcd4;
+    box-shadow: 0 0 10px #efedce, 0 0 15px #ebfcff;
     transform: translateY(-10px);
     background-color: #0a192f;
 }

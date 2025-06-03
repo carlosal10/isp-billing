@@ -3,11 +3,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Arial', sans-serif;
+    font-family: 'Times New Roman', Times, serif;
 }
 
 body {
-    background-color: #0b0c10; /* Deep sci-fi blue */
+    background-color: #ebfcff; /* Deep sci-fi blue */
     color: #e0f7fa; /* Light cyan text */
     display: flex;
     flex-direction: column;
@@ -21,14 +21,14 @@ body {
 /* Header Section */
 h1 {
     font-size: 3rem;
-    color: #00f5ff;
+    color: #000000;
     margin-bottom: 20px;
     text-align: center;
 }
 
 h2 {
     font-size: 2rem;
-    color: #00bcd4;
+    color: #000000;
     margin: 10px 0;
     text-align: center;
 }
