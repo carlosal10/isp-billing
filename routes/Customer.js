@@ -34,17 +34,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-
-// GET all customers with populated plan details
-router.get('/', async (req, res) => {
-    try {
-        const customers = await Customer.find().populate('plan', 'name price duration'); // Populate plan details
-        res.json(customers);
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to retrieve customers', error: err.message });
-    }
-});
-
 // GET a specific customer by ID with populated plan details
 router.get('/:id', async (req, res) => {
     try {
