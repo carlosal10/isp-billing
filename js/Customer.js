@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('phone').value = customer.phone;
             document.getElementById('address').value = customer.address;
             document.getElementById('routerIp').value = customer.routerIp || '';
-            planDropdown.value = customer.plan || '';
+            planDropdown.value = customer.plan?._id || '';
 
             showForm();
             editingCustomerId = id; // Set editing state
