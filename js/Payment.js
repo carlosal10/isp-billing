@@ -12,7 +12,7 @@ document.getElementById("paymentForm").addEventListener("submit", async function
 
     try {
         // Fetch customer data using the account number
-        const response = await fetch(`http://localhost:5000/api/customers/${accountNumber}`);
+        const response = await fetch(`https://isp-billing-uq58.onrender.com/api/customers/${accountNumber}`);
 
         const customer = await response.json();
 
@@ -37,7 +37,7 @@ document.getElementById("paymentForm").addEventListener("submit", async function
         };
 
         // Send payment data to backend
-        const paymentResponse = await fetch('http://localhost:5000/api/payProcess/stkpush', {
+        const paymentResponse = await fetch('https://isp-billing-uq58.onrender.com/api/payProcess/stkpush', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

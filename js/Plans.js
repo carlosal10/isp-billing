@@ -1,4 +1,4 @@
-const apiUrl = 'http://localhost:5000/api/plans';
+const apiUrl = 'https://isp-billing-uq58.onrender.com/api/plans';
 
 document.addEventListener('DOMContentLoaded', () => {
     const addPlanButton = document.getElementById('addPlanButton');

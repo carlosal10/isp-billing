@@ -7,7 +7,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     const password = document.getElementById('password').value;
 
     try {
-        const response = await fetch('http://localhost:5000/api/admin/login', {
+        const response = await fetch('https://isp-billing-uq58.onrender.com/api/admin/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -31,7 +31,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
 // Dashboard stats script
 async function loadStats() {
     try {
-        const response = await fetch('http://localhost:5000/api/stats');
+        const response = await fetch('https://isp-billing-uq58.onrender.com/api/stats');
         
         // Check for response success
         if (!response.ok) {
