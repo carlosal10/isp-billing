@@ -19,13 +19,6 @@ mongoose.connect(process.env.MONGO_URI)
     console.log('Connected to MongoDB Atlas');
   })
   .catch(err => console.error('MongoDB connection error:', err));
-
-
-
-
-    
-    
-       
 const authenticate = (req, res, next) => {
       const token = req.headers.authorization?.split(' ')[1];
   
