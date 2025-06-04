@@ -18,6 +18,7 @@
             <li><a href="Dashpanel.html">Dashboard</a></li>
             <li><a href="Customers.html">Customers</a></li>
             <li><a href="ServicePlan.html">Plans</a></li>
+            <li><a href="#" id="pppoeBtn">PPPoE Users</a></li>
             <li><a href="#">Invoices</a></li>
             <li><a href="#">Payments</a></li>
             <li><a href="Payment.html">Payment Link</Link></a></li>
@@ -33,6 +34,34 @@
             <div class="card">Pending Invoices: <span id="pendingInvoices">0</span></div>
         </div>
     </div>
+    <div id="pppoeModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Manage PPPoE Users</h2>
+
+    <!-- Add User Form -->
+    <form id="addUserForm">
+      <input type="text" id="username" placeholder="Username" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <input type="text" id="profile" placeholder="Profile" required>
+      <button type="submit">Add User</button>
+    </form>
+
+    <!-- Update User Password -->
+    <form id="updateUserForm">
+      <input type="text" id="updateUsername" placeholder="Username" required>
+      <input type="password" id="newPassword" placeholder="New Password" required>
+      <button type="submit">Update Password</button>
+    </form>
+
+    <!-- Remove User -->
+    <form id="removeUserForm">
+      <input type="text" id="removeUsername" placeholder="Username" required>
+      <button type="submit">Remove User</button>
+    </form>
+  </div>
+</div>
+
     <script src="js/Script.js"></script>
 </body>
 </html>
