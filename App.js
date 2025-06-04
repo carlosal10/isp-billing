@@ -10,10 +10,15 @@ app.use(cors());
 
 
 // MongoDB Connection
-mongoose
-  .connect("mongodb+srv://infotechhaven6:ptg5DCbH6iqlEYxs@cluster0.u8flr.mongodb.net/",)
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error('Error connecting to MongoDB:', err));
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('Connected to MongoDB Atlas');
+    app.listen(process.env.PORT, () => {
+      console.log(`Server running on port ${process.env.PORT}`);
+    });
+  })
+  .catch(err => console.error(err));
+
 
     
     

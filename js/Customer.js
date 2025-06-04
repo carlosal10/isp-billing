@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeFormButton = document.getElementById('closeForm');
     const customerForm = document.getElementById('customerForm');
     const planDropdown = document.getElementById('plan'); // Dropdown for plans
+    const profileDropdown = document.getElementById('profile'); 
 
     let editingCustomerId = null; // Track if we are editing a customer
 
@@ -42,22 +43,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load plans into dropdown
     async function loadPlans() {
-        try {
-            const response = await fetch(plansApiUrl);
-            const plans = await response.json();
-            planDropdown.innerHTML = '<option value="">Select Plan</option>'; // Default option
+    try {
+        const response = await fetch(plansApiUrl);
+        const plans = await response.json();
 
+        // Populate Plan Dropdown (e.g., for invoice/payment form)
+        const planDropdown = document.getElementById('planDropdown');
+        if (planDropdown) {
+            planDropdown.innerHTML = '<option value="">Select Plan</option>';
             plans.forEach(plan => {
                 const option = document.createElement('option');
                 option.value = plan._id;
                 option.textContent = `${plan.name} - $${plan.price} (${plan.duration})`;
                 planDropdown.appendChild(option);
             });
-        } catch (error) {
-            console.error('Error fetching plans:', error);
-            alert('Failed to load plans. Please refresh and try again.');
         }
+
+        // Populate Profile Dropdown (e.g., PPPoE modal)
+        const profileDropdown = document.getElementById('profile');
+        if (profileDropdown) {
+            profileDropdown.innerHTML = '<option value="">Select Profile</option>';
+            plans.forEach(plan => {
+                const option = document.createElement('option');
+                option.value = plan.name;
+                option.textContent = `${plan.name} - ${plan.duration}`;
+                profileDropdown.appendChild(option);
+            });
+        }
+
+    } catch (error) {
+        console.error('Error fetching plans:', error);
+        alert('Failed to load plans. Please refresh and try again.');
     }
+}
+
 
     // Handle form submission
     customerForm.addEventListener('submit', async (event) => {

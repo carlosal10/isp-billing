@@ -77,7 +77,7 @@ document.getElementById("addUserForm")?.addEventListener("submit", async (e) => 
     const password = document.getElementById("pppoePassword").value;
     const profile = document.getElementById("profile").value;
 
-    const res = await fetch('/api/pppoe/add', {
+    const res = await fetch('https://isp-billing-uq58.onrender.com/api/pppoe/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, profile })
@@ -92,7 +92,7 @@ document.getElementById("updateUserForm")?.addEventListener("submit", async (e) 
     const username = document.getElementById("updateUsername").value;
     const password = document.getElementById("newPassword").value;
 
-    const res = await fetch(`/api/pppoe/update/${username}`, {
+    const res = await fetch(`https://isp-billing-uq58.onrender.com/api/pppoe/update/${username}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -106,7 +106,7 @@ document.getElementById("removeUserForm")?.addEventListener("submit", async (e) 
     e.preventDefault();
     const username = document.getElementById("removeUsername").value;
 
-    const res = await fetch(`/api/pppoe/remove/${username}`, {
+    const res = await fetch(`https://isp-billing-uq58.onrender.com/api/pppoe/remove/${username}`, {
         method: 'DELETE'
     });
 

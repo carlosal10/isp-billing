@@ -42,12 +42,17 @@
     <h2>Manage PPPoE Users</h2>
 
     <!-- Add User Form -->
-    <form id="addUserForm">
-      <input type="text" id="username" placeholder="Username" required>
-      <input type="password" id="password" placeholder="Password" required>
-      <input type="text" id="profile" placeholder="Profile" required>
-      <button type="submit">Add User</button>
-    </form>
+    <!-- PPPoE Add User Form -->
+<form id="addUserForm">
+    <input type="text" id="pppoeUsername" placeholder="Username" required>
+    <input type="password" id="pppoePassword" placeholder="Password" required>
+    <select id="profile" required>
+    <option value="">Loading profiles...</option>
+</select>
+
+    <button type="submit">Add User</button>
+</form>
+
 
     <!-- Update User Password -->
     <form id="updateUserForm">
