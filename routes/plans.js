@@ -53,6 +53,7 @@ router.post('/', async (req, res) => {
     } catch (err) {
         res.status(400).json({ message: 'Error creating plan: ' + err.message });
     }
+    console.log(req.body);
 });
 
 // Update an existing plan
