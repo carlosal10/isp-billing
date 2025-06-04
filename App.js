@@ -52,7 +52,7 @@ app.use('/api/usageLogs', usageLogsRoutes);
 app.use('/api/auth', adminAuthRoutes);
 app.use('/api', statsRoutes);
 app.use('/api/payProcess', payProcessRoutes);
-app.use('/api/mikrotik/users', mikrotikUserRoutes);
+app.use('/api/connect', mikrotikUserRoutes);
 app.use('/api', routerConnectRoutes);
 
 
