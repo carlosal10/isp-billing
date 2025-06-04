@@ -25,7 +25,7 @@ router.get('/:accountNumber', async (req, res) => {
     }
 });
 // GET all plans
-router.get('/plans', async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const plans = await Plan.find(); // Or select only needed fields
         res.json(plans);
