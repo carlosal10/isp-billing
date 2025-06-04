@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mikrotikClient = require('./mikrotikclient');
 
-// Create a new user on MikroTik
+// Create a new PPPoE user
 router.post('/add', async (req, res) => {
     const { username, password, profile } = req.body;
 
@@ -25,13 +25,23 @@ router.post('/add', async (req, res) => {
     }
 });
 
-// Remove user from MikroTik
+// Remove PPPoE user by username
 router.delete('/remove/:username', async (req, res) => {
     const { username } = req.params;
 
     try {
+        const users = await mikrotikClient.write('/ppp/secret/print', [
+            '?name=' + username
+        ]);
+
+        if (!users.length) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userId = users[0]['.id'];
+
         const result = await mikrotikClient.write('/ppp/secret/remove', [
-            '?.name=' + username
+            '=.id=' + userId
         ]);
 
         res.status(200).json({ message: 'User removed successfully', result });
@@ -41,7 +51,7 @@ router.delete('/remove/:username', async (req, res) => {
     }
 });
 
-// Update user password
+// Update PPPoE user password
 router.put('/update/:username', async (req, res) => {
     const { username } = req.params;
     const { password } = req.body;
@@ -51,9 +61,19 @@ router.put('/update/:username', async (req, res) => {
     }
 
     try {
+        const users = await mikrotikClient.write('/ppp/secret/print', [
+            '?name=' + username
+        ]);
+
+        if (!users.length) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userId = users[0]['.id'];
+
         const result = await mikrotikClient.write('/ppp/secret/set', [
-            '=password=' + password,
-            '?.name=' + username
+            '=.id=' + userId,
+            '=password=' + password
         ]);
 
         res.status(200).json({ message: 'Password updated successfully', result });
@@ -63,5 +83,28 @@ router.put('/update/:username', async (req, res) => {
     }
 });
 
+// GET /api/pppoe/list
+router.get('/list', async (req, res) => {
+    try {
+        const result = await mikrotikClient.write('/ppp/secret/print');
+        res.status(200).json({ message: 'PPPoE users fetched successfully', users: result });
+    } catch (error) {
+        console.error('Error fetching PPPoE users:', error);
+        res.status(500).json({ message: 'Failed to fetch PPPoE users from MikroTik' });
+    }
+});
+
+// GET /api/pppoe/online
+router.get('/online', async (req, res) => {
+    try {
+        const result = await mikrotikClient.write('/ppp/active/print');
+        res.status(200).json({ message: 'Online users fetched', users: result });
+    } catch (error) {
+        console.error('Error fetching online users:', error);
+        res.status(500).json({ message: 'Failed to fetch online PPPoE users' });
+    }
+});
+
 
 module.exports = router;
+
