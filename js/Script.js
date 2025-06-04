@@ -77,7 +77,7 @@ document.getElementById("addUserForm")?.addEventListener("submit", async (e) => 
     const password = document.getElementById("pppoePassword").value;
     const profile = document.getElementById("profile").value;
 
-    const res = await fetch('https://isp-billing-uq58.onrender.com/api/pppoe/add', {
+    const res = await fetch('https://isp-billing-uq58.onrender.com/api/pppoe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, profile })
