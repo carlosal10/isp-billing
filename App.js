@@ -43,7 +43,7 @@ const adminAuthRoutes = require('./routes/AdminAuth');
 const statsRoutes = require('./routes/Stats');
 const payProcessRoutes = require('./routes/PayProcess');
 const mikrotikUserRoutes = require('./routes/mikrotikUser');
-const routerConnectRoutes = require('./routes/mikrotikclient');
+const ConnectRoutes = require('./routes/mikrotikclient');
 
 app.use('/api/customers', customerRoutes);
 app.use('/api/plans', planRoutes);
@@ -53,7 +53,7 @@ app.use('/api/auth', adminAuthRoutes);
 app.use('/api', statsRoutes);
 app.use('/api/payProcess', payProcessRoutes);
 app.use('/api/mikrotik/users', mikrotikUserRoutes);
-app.use('/api/connect', routerConnectRoutes);
+app.use('/api/connect', ConnectRoutes);
 
 
 // Start Server
