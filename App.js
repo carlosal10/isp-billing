@@ -11,7 +11,7 @@ app.use(cors());
 
 // MongoDB Connection
 mongoose
-  .connect("mongodb://localhost:27017/isp_billing",)
+  .connect("mongodb+srv://infotechhaven6:wAhgKJosejqRyiAQ@cluster0.u8flr.mongodb.net/",)
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('Error connecting to MongoDB:', err));
 
