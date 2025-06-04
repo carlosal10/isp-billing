@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const plans = await response.json();
 
         // Populate Plan Dropdown (e.g., for invoice/payment form)
-        const planDropdown = document.getElementById('planDropdown');
+        const planDropdown = document.getElementById('plan');
         if (planDropdown) {
             planDropdown.innerHTML = '<option value="">Select Plan</option>';
             plans.forEach(plan => {
