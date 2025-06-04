@@ -1,57 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect to MikroTik</title>
-    <link rel="stylesheet" href="css/connect.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Connect to MikroTik</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    form {
+      max-width: 400px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: 0.75rem;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    .response-box {
+      margin-top: 1.5rem;
+      text-align: center;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-    <h1>Connect to MikroTik Router</h1>
-    <form id="connectForm">
-        <label for="ip">Router IP:</label>
-        <input type="text" id="ip" name="ip" required>
-        
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required>
-        
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
+  <h1>Connect to MikroTik Router</h1>
+  <form id="connectForm">
+    <label for="ip">Router IP:</label>
+    <input type="text" id="ip" name="ip" required />
 
-        <button type="submit">Connect</button>
-    </form>
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required />
 
-    <div id="response" class="response-box"></div>
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required />
 
-    <script>
-        document.getElementById('connectForm').onsubmit = async function(e) {
-            e.preventDefault();
+    <button type="submit">Connect</button>
+  </form>
 
-            const formData = {
-                ip: document.getElementById('ip').value,
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value
-            };
+  <div id="response" class="response-box"></div>
 
-            const responseDiv = document.getElementById('response');
+  <script>
+    document.getElementById('connectForm').onsubmit = async function(e) {
+      e.preventDefault();
 
-            try {
-                const response = await fetch('https://isp-billing-uq58.onrender.com/api/connect', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
+      const formData = {
+        ip: document.getElementById('ip').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      };
 
-                const data = await response.json();
-                responseDiv.textContent = data.message;
-            } catch (error) {
-                responseDiv.textContent = 'Failed to connect to MikroTik.';
-          
-            }
+      const responseDiv = document.getElementById('response');
 
-        };
-    </script>
+      try {
+        const res = await fetch('https://isp-billing-uq58.onrender.com/api/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const data = await res.json();
+        responseDiv.textContent = data.message || 'Connected successfully!';
+      } catch (err) {
+        responseDiv.textContent = 'Failed to connect to MikroTik.';
+      }
+    };
+  </script>
 </body>
 </html>
