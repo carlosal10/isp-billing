@@ -33,14 +33,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (editingPlanId) {
                 // Update an existing plan
-                response = await fetch(`${apiUrl}/${editingPlanId}`, {
+                response = await fetch(`${plansApiUrl}/${editingPlanId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(planData),
                 });
             } else {
                 // Add a new plan
-                response = await fetch(apiUrl, {
+                response = await fetch(plansApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(planData),
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Fetch and display plans
 async function loadPlans() {
     try {
-        const response = await fetch(apiUrl);
+        const response = await fetch(plansApiUrl);
         const plans = await response.json();
         const plansTable = document.getElementById('plansTable');
         plansTable.innerHTML = ''; // Clear the table before re-rendering
