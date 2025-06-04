@@ -34,7 +34,7 @@ const authenticate = (req, res, next) => {
   
   module.exports = authenticate;
 // Routes
-const customerRoutes = require('./routes/customer');
+const customerRoutes = require('./routes/Customer');
 const planRoutes = require('./routes/plans');
 const invoiceRoutes = require('./routes/invoices');
 const usageLogsRoutes = require('./routes/usageLogs');
