@@ -24,13 +24,13 @@ router.get('/:accountNumber', async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
-// GET all plans
+// GET all customers with populated plan details
 router.get('/', async (req, res) => {
     try {
-        const plans = await Plan.find(); // Or select only needed fields
-        res.json(plans);
+        const customers = await Customer.find().populate('plan', 'name price duration'); // Populate plan details
+        res.json(customers);
     } catch (err) {
-        res.status(500).json({ message: 'Failed to retrieve plans', error: err.message });
+        res.status(500).json({ message: 'Failed to retrieve customers', error: err.message });
     }
 });
 
