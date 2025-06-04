@@ -36,9 +36,9 @@ const authenticate = (req, res, next) => {
 // Routes
 const customerRoutes = require('./routes/Customer');
 const planRoutes = require('./routes/plans');
-const invoiceRoutes = require('./routes/invoices');
+const invoiceRoutes = require('./routes/Invoices');
 const usageLogsRoutes = require('./routes/usageLogs');
-const adminAuthRoutes = require('./routes/adminAuth');
+const adminAuthRoutes = require('./routes/AdminAuth');
 const statsRoutes = require('./routes/Stats');
 const payProcessRoutes = require('./routes/PayProcess');
 const mikrotikUserRoutes = require('./routes/mikrotikUser');
