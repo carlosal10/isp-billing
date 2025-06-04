@@ -29,6 +29,7 @@ body {
 .sidebar h2 {
     font-size: 2rem;
     margin-bottom: 30px;
+    color: #e0f7fa;
 }
 
 .sidebar ul {
@@ -162,13 +163,15 @@ body {
 }
 
 .modal-content {
-    background-color: #fff;
+    background-color: #ebfcff;
     margin: auto;
     padding: 20px;
     border-radius: 4px;
     width: 50%;
 }
-
+h2{
+    color: #000000;
+}
 .modal-content form {
     margin-top: 10px;
 }
@@ -178,4 +181,18 @@ body {
     margin: 5px 0;
     padding: 8px;
     width: 100%;
+}
+.sidebar-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-align: center;
+    padding: 10px;
+    width: 100%;
+    cursor: pointer;
+}
+
+.sidebar-btn:hover {
+    background-color: #1b6069;
 }

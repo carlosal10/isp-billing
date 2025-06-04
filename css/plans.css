@@ -6,17 +6,7 @@
     font-family: 'Times New Roman', Times, serif;
 }
 
-body {
-    background-color: #ebfcff; /* Deep sci-fi blue */
-    color: #e0f7fa; /* Light cyan text */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    height: 100vh;
-    margin: 0;
-    padding: 20px;
-}
+
 
 /* Header Section */
 h1 {
@@ -41,7 +31,6 @@ button {
     border-radius: 5px;
     padding: 10px 20px;
     font-size: 1rem;
-    text-transform: uppercase;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s ease-in-out;

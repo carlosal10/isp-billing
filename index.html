@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ISP Billing</title>
+    <link rel="stylesheet" href="css/Style.css">
+    <link rel="stylesheet" href="css/plans.css">
+    <link rel="stylesheet" href="css/customer.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>ISP Billing</h2>
+        
+    <div class="container">
+        <a href="logout.php"> <button type="button">Logout</button></a> 
+    </div>
+    
+        <ul>
+            <li><a href="Dashpanel.html">Dashboard</a></li>
+            <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
+            <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
+            <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
+            <li><a href="#">Invoices</a></li>
+            <li><a href="#">Payments</a></li>
+            <li><a href="Payment.html">Payment Link</Link></a></li>
+            <li><a href="connect.html">Connect to Mikrotik</a></li>
+            <li><a href="#">Usage Logs</a></li>
+        </ul>
+    </div>
+    <div class="main-content">
+        <h1>Welcome, Admin</h1>
+        <div class="stats">
+            <div class="card">Total Clients: <span id="totalCustomers">0</span></div>
+            <div class="card">Active Plans: <span id="activePlans">0</span></div>
+            <div class="card">Pending Invoices: <span id="pendingInvoices">0</span></div>
+        </div>
+    </div>
+    <div id="pppoeModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Manage PPPoE Users</h2>
+
+    <!-- Add User Form -->
+    <form id="addUserForm">
+      <input type="text" id="username" placeholder="Username" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <input type="text" id="profile" placeholder="Profile" required>
+      <button type="submit">Add User</button>
+    </form>
+
+    <!-- Update User Password -->
+    <form id="updateUserForm">
+      <input type="text" id="updateUsername" placeholder="Username" required>
+      <input type="password" id="newPassword" placeholder="New Password" required>
+      <button type="submit">Update Password</button>
+    </form>
+
+    <!-- Remove User -->
+    <form id="removeUserForm">
+      <input type="text" id="removeUsername" placeholder="Username" required>
+      <button type="submit">Remove User</button>
+    </form>
+  </div>
+</div>
+
+<!-- Add Plan Modal -->
+<div id="addPlanModal" class="modal">
+  <div class="modal-content">
+    <span class="close" id="closePlanForm">&times;</span>
+    <h2>Add Plan</h2>
+    <!-- Add Plan Form -->
+        <button id="addPlanButton">Add Plan</button>
+        <div id="addPlanForm" style="display: none;">
+            <button id="closePlanForm">X</button>
+            <h2>Add Plan</h2>
+            <form id="planForm">
+                <input type="text" id="planName" placeholder="Plan Name" required>
+                <input type="text" id="planDescription" placeholder="Description" required>
+                <input type="number" id="planPrice" placeholder="Price" required>
+                <input type="text" id="planDuration" placeholder="Duration (e.g., monthly)" required>
+                
+                <button type="submit">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <!-- Plans Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Price</th>
+                    <th>Duration</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="plansTable"></tbody>
+        </table>
+    </div>
+</div>
+<!-- Add Customer Modal -->
+<div id="addCustomerModal" class="modal">
+  <div class="modal-content">
+    <span class="close" id="closeCustomerForm">&times;</span>
+    <h2>Add Clients</h2>
+     <!-- Add Customer Section -->
+    <div class="container">
+        <button id="addCustomerButton">Add Customer</button>
+        <div id="formOverlay" style="display: none;"></div> <!-- Overlay for popup form -->
+        
+        <!-- Add Customer Form -->
+        <div id="addCustomerForm" style="display: none;">
+            <button id="closeForm">X</button>
+            <h2>Add Customer</h2>
+            <form id="customerForm">
+                <input type="text" id="name" placeholder="Name" required>
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="text" id="phone" placeholder="Phone" required>
+                <input type="text" id="address" placeholder="Address">
+                
+                <!-- Auto-generated Account Number -->
+                <input type="text" id="accountNumber" placeholder="Account Number" readonly>
+                
+                <!-- Plan Dropdown -->
+                <label for="plan">Select Plan:</label>
+                <select id="plan" required>
+                    <option value="">-- Select Plan --</option>
+                </select>
+                
+                <input type="text" id="routerIp" placeholder="Router IP (Optional)">
+                <button type="submit">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customers Table -->
+    <div class="table-container">    
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Address</th>
+                    <th>Account Number</th>
+                    <th>Plan</th>
+                    <th>Router IP</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="customersTable"></tbody>
+        </table>
+    </div>
+  </div>
+    <script src="js/Customer.js"></script>
+    <script src="js/Plans.js"></script>
+    <script src="js/Script.js"></script>
+</body>
+</html>
