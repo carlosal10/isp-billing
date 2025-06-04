@@ -6,7 +6,11 @@ const app = express();
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: 'https://carlosal10.github.io', // 👈 allow your frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true // optional, depending on your use
+}));
 
 
 // MongoDB Connection
