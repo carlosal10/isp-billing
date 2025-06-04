@@ -2,7 +2,7 @@ const express = require('express');
 const { RouterOSAPI } = require('routeros-client');
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+router.post('/connect', async (req, res) => {
     const { ip, username, password } = req.body;
 
     if (!ip || !username || !password) {
