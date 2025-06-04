@@ -1,17 +1,13 @@
 body {
-    font-family: 'Times New Roman', Times, serif;
-    background-color: #0b0c10;
-    color: #c5c6c7;
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-}
-
- form {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    form {
       max-width: 400px;
       margin: 0 auto;
       padding: 2rem;
