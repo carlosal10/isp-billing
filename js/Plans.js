@@ -95,7 +95,7 @@ async function loadPlans() {
 // Edit plan
 function editPlan(id) {
     // Fetch the plan data
-    fetch(`${apiUrl}/${id}`)
+    fetch(`${plansApiUrl}/${id}`)
         .then(response => response.json())
         .then(plan => {
             // Pre-fill the form with plan data
@@ -118,7 +118,7 @@ async function deletePlan(id) {
     if (!confirm('Are you sure you want to delete this plan?')) return;
 
     try {
-        const response = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+        const response = await fetch(`${plansApiUrl}/${id}`, { method: 'DELETE' });
 
         if (response.ok) {
             alert('Plan deleted successfully!');

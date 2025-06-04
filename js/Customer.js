@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load plans into dropdown
     async function loadPlans() {
     try {
-        const response = await fetch(plansApiUrl);
+        const response = await fetch(plansApiUrl, apiUrl,);
         const plans = await response.json();
 
         // Populate Plan Dropdown (e.g., for invoice/payment form)

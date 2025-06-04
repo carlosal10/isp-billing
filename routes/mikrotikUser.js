@@ -3,7 +3,7 @@ const router = express.Router();
 const mikrotikClient = require('./mikrotikclient');
 
 // Create a new PPPoE user
-router.post('/add', async (req, res) => {
+router.post('/', async (req, res) => {
     const { username, password, profile } = req.body;
 
     if (!username || !password || !profile) {
