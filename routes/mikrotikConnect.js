@@ -32,12 +32,25 @@ router.post('/', async (req, res) => {
       router: identity
     });
 
-  } catch (error) {
+ } catch (error) {
     console.error('💥 Connect Error (full):', error);
-    res.status(500).json({
+
+    let errorType = 'Unknown error';
+
+    if (error.message.includes('timeout') || error.errno === -110) {
+      errorType = 'Connection timed out. Router may be unreachable or blocked.';
+    } else if (error.message.includes('ECONNREFUSED')) {
+      errorType = 'Connection refused. Router API port may be closed or filtered.';
+    } else if (error.message.toLowerCase().includes('login failure')) {
+      errorType = 'Invalid username or password.';
+    } else if (error.code === 'ETIMEDOUT') {
+      errorType = 'Timeout error. Router might be offline or unreachable.';
+    }
+
+    return res.status(500).json({
       success: false,
       message: 'Failed to connect to MikroTik',
-      error: error.message || 'Unknown error'
+      error: errorType
     });
   }
 });
