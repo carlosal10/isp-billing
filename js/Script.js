@@ -23,6 +23,63 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     }
 });
 
+
+document.addEventListener("DOMContentLoaded", () => {
+    const totalIn = document.getElementById("totalBytesIn");
+    const totalOut = document.getElementById("totalBytesOut");
+    const chartCtx = document.getElementById("pppoeChart").getContext("2d");
+
+    // Dummy data - replace with real API call
+    const pppoeUsers = [
+        { username: "user1", disabled: false, bytesIn: 100000, bytesOut: 250000 },
+        { username: "user2", disabled: true, bytesIn: 50000, bytesOut: 70000 },
+        { username: "user3", disabled: false, bytesIn: 220000, bytesOut: 140000 }
+    ];
+
+    const renderStats = (users) => {
+        const totalBytesIn = users.reduce((sum, u) => sum + u.bytesIn, 0);
+        const totalBytesOut = users.reduce((sum, u) => sum + u.bytesOut, 0);
+        totalIn.textContent = totalBytesIn.toLocaleString();
+        totalOut.textContent = totalBytesOut.toLocaleString();
+    };
+
+    const renderChart = (users) => {
+        const active = users.filter(u => !u.disabled).length;
+        const disabled = users.filter(u => u.disabled).length;
+
+        new Chart(chartCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Active', 'Disabled'],
+                datasets: [{
+                    label: 'Users',
+                    data: [active, disabled],
+                    backgroundColor: ['#28a745', '#dc3545'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    };
+
+    // Initial render
+    renderStats(pppoeUsers);
+    renderChart(pppoeUsers);
+
+    // Toggle expired/disabled
+    document.getElementById("showExpiredToggle").addEventListener("change", function () {
+        const filtered = this.checked ? pppoeUsers : pppoeUsers.filter(u => !u.disabled);
+        renderStats(filtered);
+        renderChart(filtered);
+    });
+});
+
+
 // ========== Modal Logic ==========
 
 // PPPoE Modal
