@@ -31,11 +31,15 @@ router.post('/', async (req, res) => {
       message: `Connected to ${identity[0].name}`,
       router: identity
     });
+
   } catch (error) {
-    console.error('Connect Error:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to connect to MikroTik', error: error.message });
+    console.error('💥 Connect Error (full):', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to connect to MikroTik',
+      error: error.message || 'Unknown error'
+    });
   }
 });
-
 
 module.exports = router;
