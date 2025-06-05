@@ -2,47 +2,44 @@ const express = require('express');
 const { RouterOSAPI } = require('routeros-client');
 const router = express.Router();
 
-router.post('/', async (req, res) => {
-    const { ip, username, password } = req.body;
+router.post('/connect', async (req, res) => {
+  const { ip, username, password } = req.body;
 
-    if (!ip || !username || !password) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
+  if (!ip || !username || !password) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
 
-    // Create new RouterOS API client for each request
-    const mikrotikClient = new RouterOSAPI({
-        host: ip,
-        user: username,
-        password: password,
-        port: 8728,  // Default API port
-        timeout: 30000
+  const mikrotikClient = new RouterOSAPI({
+    host: ip,
+    user: username,
+    password: password,
+    port: 8728,
+    timeout: 10000,
+  });
+
+  try {
+    await mikrotikClient.connect();
+
+    const identity = await mikrotikClient.write('/system/identity/print');
+    const routerName = identity?.[0]?.name || ip;
+
+    res.status(200).json({
+      message: `Successfully connected to router: ${routerName}`,
+      identity: identity[0],
     });
-
+  } catch (error) {
+    console.error('MikroTik connection error:', error);
+    res.status(500).json({
+      message: 'Failed to connect to MikroTik',
+      error: error.message || 'Unknown error',
+    });
+  } finally {
     try {
-        // Attempt to connect to the router
-        await mikrotikClient.connect();
-        console.log('Connected to MikroTik router at:', ip);
-        
-        // Fetch system identity as a test command
-        const identity = await mikrotikClient.write('/system/identity/print');
-        console.log('System Identity:', identity);
-        
-        // Send successful response to frontend
-        res.status(200).json({
-            message: `Successfully connected to ${identity[0].name}`,
-            router: identity
-        });
-
-        // Close connection after operation
-        mikrotikClient.close();
-    } catch (error) {
-        console.error('Failed to connect to MikroTik:', error.message);
-        res.status(500).json({
-            message: 'Failed to connect to MikroTik',
-            error: error.message
-        });
+      await mikrotikClient.close();
+    } catch (closeError) {
+      console.warn('Failed to close MikroTik connection:', closeError.message);
     }
+  }
 });
 
 module.exports = router;
-
