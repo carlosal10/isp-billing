@@ -170,20 +170,18 @@
         <div class="modal-content">
             <span class="close" id="connectForm">&times;</span>
             <h2>Connect To Mikrotik</h2>
+  <form id="connectForm">
+    <label for="ip">Router IP:</label>
+    <input type="text" id="ip" required />
 
-            <form id="connectForm">
-                <label for="ip">Router IP:</label>
-                    <input type="text" id="ip" name="ip" required>
-        
-                <label for="username">Username:</label>
-                  <input type="text" id="username" name="username" required>
-        
-                <label for="password">Password:</label>
-                 <input type="password" id="password" name="password" required>
+    <label for="username">Username:</label>
+    <input type="text" id="username" required />
 
-                 <button type="submit">Connect</button>
-             </form>
+    <label for="password">Password:</label>
+    <input type="password" id="password" required />
 
+    <button type="submit">Connect</button>
+  </form>
                 <div id="response" class="response-box"></div>
         </div>
     </div> 
