@@ -52,6 +52,26 @@
         <tbody></tbody>
     </table>
     </div>
+        <!-- Toggle and Stats Section -->
+<div class="pppoe-usage-controls">
+    <label>
+        <input type="checkbox" id="showExpiredToggle">
+        Show Expired/Disabled Users
+    </label>
+</div>
+
+<!-- Usage Stats Section -->
+<div class="pppoe-usage-stats">
+    <h2>Usage Summary</h2>
+    <div class="usage-box">
+        <div>Total Bytes In: <span id="totalBytesIn">0</span></div>
+        <div>Total Bytes Out: <span id="totalBytesOut">0</span></div>
+    </div>
+</div>
+
+<!-- Chart Placeholder -->
+<canvas id="pppoeChart" width="100%" height="60"></canvas>
+
 
     </div>
     <div id="pppoeModal" class="modal">
