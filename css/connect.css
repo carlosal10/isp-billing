@@ -1,37 +1,127 @@
+/* Base reset and body */
+* {
+  box-sizing: border-box;
+}
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #f4f4f4;
+  overflow-x: hidden;
+}
 
-    form {
-      max-width: 400px;
-      margin: 0 auto;
-      padding: 2rem;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 1rem;
-      font-weight: bold;
-      color: black;
-    }
-    input {
-      width: 100%;
-      padding: 0.5rem;
-      margin-top: 0.5rem;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-  
-    .response-box {
-      margin-top: 1.5rem;
-      text-align: center;
-      color: red;
-    }
+/* Form styling */
+form {
+  width: 100%;
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+/* Input elements */
+label {
+  display: block;
+  margin-top: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.3rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+/* Error/response message box */
+.response-box {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: red;
+  font-size: 0.95rem;
+}
+
+/* Modal styling (connect modal and others) */
 .connect-modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    padding-top: 60px;
-    margin-left: 20%; top: 20%; width: 70%; height: 70%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.4);
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: rgba(0,0,0,0.4);
+  padding: 2rem 1rem;
+}
+
+/* Modal inner box */
+.connect-modal .modal-content {
+  margin: auto;
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+}
+
+/* Responsive tables and charts */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+table th, table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95rem;
+}
+table th {
+  background-color: #f0f0f0;
+  font-weight: 600;
+}
+
+/* Chart responsiveness */
+canvas {
+  max-width: 100%;
+  height: auto !important;
+}
+
+/* Media Queries for Mobile/Tablet */
+@media (max-width: 768px) {
+  form {
+    margin: 1rem;
+    padding: 1.5rem;
+  }
+  .connect-modal .modal-content {
+    padding: 1.5rem;
+    max-width: 95%;
+  }
+  table th, table td {
+    font-size: 0.85rem;
+  }
+}
+@media (max-width: 480px) {
+  form {
+    padding: 1rem;
+  }
+  input {
+    font-size: 0.95rem;
+  }
+  table th, table td {
+    font-size: 0.8rem;
+  }
 }
