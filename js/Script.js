@@ -127,6 +127,40 @@ document.getElementById("removeUserForm")?.addEventListener("submit", async (e) 
     alert((await res.json()).message);
 });
 
+async function fetchOnlinePppoeUsers() {
+    try {
+        const response = await fetch('https://isp-billing-uq58.onrender.com/api/pppoe/online');
+        const data = await response.json();
+
+        const tableBody = document.querySelector('#onlinePppoeTable tbody');
+        tableBody.innerHTML = '';
+
+        if (data.users && data.users.length > 0) {
+            data.users.forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.name || 'N/A'}</td>
+                    <td>${user.address || 'N/A'}</td>
+                    <td>${user.uptime || 'N/A'}</td>
+                    <td>${user['bytes-in'] || '0'}</td>
+                    <td>${user['bytes-out'] || '0'}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td colspan="5">No users currently online</td>`;
+            tableBody.appendChild(row);
+        }
+
+    } catch (error) {
+        console.error('Error fetching online PPPoE users:', error);
+    }
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', fetchOnlinePppoeUsers);
+
 // ========== Dashboard Stats ==========
 
 async function loadStats() {
