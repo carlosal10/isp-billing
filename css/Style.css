@@ -10,8 +10,11 @@ body {
     display: flex;
     background-color: #ebfcff;
     color: #e0f7fa; /* Light cyan text */
-    height: 100vh;
     overflow: hidden;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
 }
 
 .pppoe-status-section {
