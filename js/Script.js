@@ -61,13 +61,54 @@ customerClose?.addEventListener("click", () => {
     customerModal.style.display = "none";
 });
 
+// PPPoE Modal
+const pppoeModal = document.getElementById("connectModal");
+const pppoeBtn = document.getElementById("connectBtn");
+const pppoeClose = document.querySelector(".close.connectForm");
+
+connectBtn?.addEventListener("click", () => {
+    connectModal.style.display = "block";
+});
+connectClose?.addEventListener("click", () => {
+    connectModal.style.display = "none";
+});
+
+
 // Window click to close any modal
 window.addEventListener("click", (e) => {
     if (e.target === pppoeModal) pppoeModal.style.display = "none";
     if (e.target === planModal) planModal.style.display = "none";
-    if (e.target === customerModal) planModal.style.display = "none";
+    if (e.target === customerModal) customerModal.style.display = "none";
+    if (e.target === connectModal) connectModal.style.display = "none";
 });
 
+
+document.getElementById('connectForm').onsubmit = async function(e) {
+      e.preventDefault();
+
+      const formData = {
+        ip: document.getElementById('ip').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      };
+
+      const responseDiv = document.getElementById('response');
+
+      try {
+        const res = await fetch('https://isp-billing-uq58.onrender.com/api/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const data = await res.json();
+        responseDiv.textContent = data.message || 'Connected successfully!';
+      } catch (err) {
+        responseDiv.textContent = 'Failed to connect to MikroTik.';
+      }
+    };
 // ========== PPPoE User Logic ==========
 
 // Add User
