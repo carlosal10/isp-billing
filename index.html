@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="css/Style.css">
     <link rel="stylesheet" href="css/plans.css">
     <link rel="stylesheet" href="css/customer.css">
+    <link rel="stylesheet" href="css/connect.css">
     <link rel="icon" type="image/png" sizes="32x32" href="isp-billing\favicon-32x32.png">
 </head>
 <body>
@@ -30,7 +31,7 @@
         </ul>
     </div>
     <div class="main-content">
-        <h1>Welcome, Admin</h1>
+        <h1>Welcome</h1>
         <div class="stats">
             <div class="card">Total Clients: <span id="totalCustomers">0</span></div>
             <div class="card">Active Plans: <span id="activePlans">0</span></div>
@@ -71,8 +72,8 @@
 </div>
 
 <!-- Add Plan Modal -->
-<div id="addPlanModal" class="modal">
-  <div class="modal-content">
+<div id="addPlanModal" class="addPlan-modal">
+  <div class="addPlanmodal-content">
     <span class="close" id="closePlanForm">&times;</span>
     <h2>Add Plan</h2>
     <!-- Add Plan Form -->
@@ -109,8 +110,8 @@
     </div>
 </div>
 <!-- Add Customer Modal -->
-<div id="addCustomerModal" class="modal">
-  <div class="modal-content">
+<div id="addCustomerModal" class="AddCustomer-modal">
+  <div class="addCustomermodal-content">
     <span class="close" id="closeCustomerForm">&times;</span>
     <h2>Add Clients</h2>
      <!-- Add Customer Section -->
@@ -163,6 +164,30 @@
         </table>
     </div>
   </div>
+    <!-- Connect to mikrotik modal -->
+      </div>
+    <div id="connectModal" class="connect-modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Connect To Mikrotik</h2>
+
+       <form id="connectForm">
+        <label for="ip">Router IP:</label>
+        <input type="text" id="ip" name="ip" required>
+        
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+
+        <button type="submit">Connect</button>
+    </form>
+
+    <div id="response" class="response-box"></div>
+  </div>
+
+      
     <script src="js/Customer.js"></script>
     <script src="js/Plans.js"></script>
     <script src="js/Script.js"></script>
