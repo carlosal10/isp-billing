@@ -1,12 +1,7 @@
 /* General Reset */
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
     font-family: 'Times New Roman', Times, serif;
 }
-
-
 
 /* Header Section */
 h1 {
@@ -23,14 +18,18 @@ h2 {
     text-align: center;
 }
 
+/* Modal */
 .addPlan-modal {
     display: none;
     position: fixed;
     z-index: 1000;
     padding-top: 60px;
-    left: 20%; top: 20%; width: 70%; height: 70%;
+    left: 20%;
+    top: 20%;
+    width: 70%;
+    height: 70%;
     overflow: auto;
-    background-color: rgba(0,0,0,0.4);
+    background-color: rgba(0, 0, 0, 0.4);
 }
 
 /* Buttons */
@@ -44,7 +43,6 @@ button {
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s ease-in-out;
-   
 }
 
 button:hover {
@@ -53,7 +51,7 @@ button:hover {
     transform: scale(1.05);
 }
 
-/* Add Plan Form and Overlay */
+/* Add Plan Form */
 #addPlanForm {
     position: fixed;
     top: 50%;
@@ -65,7 +63,6 @@ button:hover {
     width: 350px;
     box-shadow: 0 0 5px #00f5ff, 0 0 10px #00bcd4;
     z-index: 1001;
-    
 }
 
 #addPlanForm h2 {
@@ -107,7 +104,7 @@ button:hover {
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s ease-in-out;
-    width: 5px;
+    width: auto;
 }
 
 #closePlanForm:hover {
@@ -167,11 +164,59 @@ tbody td button {
 .container button {
     margin: 10px;
 }
+
+/* Glow Animation */
 @keyframes glow {
     0% {
         box-shadow: 0 0 15px 2px rgba(0, 245, 255, 0.4);
     }
     100% {
         box-shadow: 0 0 25px 4px rgba(0, 245, 255, 0.7);
+    }
+}
+
+/* ------------------------------
+   Responsive Styles (Mobile)
+--------------------------------- */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    .addPlan-modal {
+        left: 5%;
+        top: 10%;
+        width: 90%;
+        height: auto;
+        padding-top: 30px;
+    }
+
+    #addPlanForm {
+        width: 90%;
+        padding: 15px;
+    }
+
+    button, #closePlanForm {
+        font-size: 0.9rem;
+        padding: 8px 16px;
+    }
+
+    th, td {
+        padding: 8px;
+        font-size: 0.9rem;
+    }
+
+    .table-container {
+        width: 100%;
+    }
+
+    .container button {
+        display: block;
+        width: 90%;
+        margin: 10px auto;
     }
 }
