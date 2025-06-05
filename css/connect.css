@@ -31,8 +31,15 @@
     position: fixed;
     z-index: 1000;
     padding-top: 60px;
+<<<<<<< HEAD
     margin-left: 20%; top: 10%; width: 70%; height: 70%;
     overflow: auto;
     background-color: rgba(0,0,0,0.4);
     
 }
+=======
+    margin-left: 20%; top: 20%; width: 70%; height: 70%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+>>>>>>> 82ddf615e9f5cea4bcd06603cc9fca265a7fbfee
