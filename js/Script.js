@@ -62,9 +62,9 @@ customerClose?.addEventListener("click", () => {
 });
 
 // PPPoE Modal
-const pppoeModal = document.getElementById("connectModal");
-const pppoeBtn = document.getElementById("connectBtn");
-const pppoeClose = document.querySelector(".close.connectForm");
+const connectModal = document.getElementById("connectModal");
+const connectBtn = document.getElementById("connectBtn");
+const connectClose = document.querySelector(".close.connectForm");
 
 connectBtn?.addEventListener("click", () => {
     connectModal.style.display = "block";
