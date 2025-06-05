@@ -53,7 +53,7 @@ app.use('/api/auth', adminAuthRoutes);
 app.use('/api', statsRoutes);
 app.use('/api/payProcess', payProcessRoutes);
 app.use('/api/mikrotik/users', mikrotikUserRoutes);
-app.use('/api', mikrotikConnect);
+app.use('/api/connect', mikrotikConnect);
 
 
 // Start Server
