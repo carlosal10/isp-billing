@@ -14,11 +14,46 @@ body {
     overflow: hidden;
 }
 
-.pppoe-status-section{
-    margin-top: 30px;
-    width: 90%;
-    overflow-x: auto;
+.pppoe-status-section {
+    background-color: #ffffff;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
+
+.pppoe-status-section h2 {
+    font-size: 24px;
+    margin-bottom: 16px;
+    color: #333;
+}
+
+#onlinePppoeTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+}
+
+#onlinePppoeTable thead {
+    background-color: #007bff;
+    color: white;
+}
+
+#onlinePppoeTable th,
+#onlinePppoeTable td {
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+#onlinePppoeTable tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+#onlinePppoeTable tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
 
 /* Sidebar */
 .sidebar {
