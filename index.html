@@ -170,7 +170,7 @@
         <div class="modal-content">
             <span class="close" id="connectForm">&times;</span>
             <h2>Connect To Mikrotik</h2>
-  <form id="connectForm">
+  <form id="connectForm" autocomplete="off">
     <label for="ip">Router IP:</label>
     <input type="text" id="ip" required />
 
@@ -180,15 +180,62 @@
     <label for="password">Password:</label>
     <input type="password" id="password" required />
 
-    <button type="submit">Connect</button>
+    <button type="submit" id="submitBtn">Connect</button>
   </form>
-                <div id="response" class="response-box"></div>
-        </div>
-    </div> 
-</div>
+
+  <div id="loading"></div>
+  <div id="response"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const form = document.getElementById('connectForm');
+      const responseDiv = document.getElementById('response');
+      const loadingDiv = document.getElementById('loading');
+      const submitBtn = document.getElementById('submitBtn');
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault(); // Prevent default form submission
+
+        const ip = document.getElementById('ip').value.trim();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        if (!ip || !username || !password) {
+          responseDiv.textContent = 'All fields are required.';
+          return;
+        }
+
+        loadingDiv.textContent = 'Connecting...';
+        responseDiv.textContent = '';
+        submitBtn.disabled = true;
+
+        try {
+          const res = await fetch('https://isp-billing-uq58.onrender.com/api/connect', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ip, username, password })
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            responseDiv.textContent = `✅ ${data.message}`;
+          } else {
+            responseDiv.textContent = `❌ ${data.message || 'Connection failed'}`;
+          }
+        } catch (err) {
+          responseDiv.textContent = '🚫 Network or server error.';
+        } finally {
+          loadingDiv.textContent = '';
+          submitBtn.disabled = false;
+        }
+      });
+    });
+  </script>
     <script src="js/Customer.js"></script>
     <script src="js/Plans.js"></script>
     <script src="js/Script.js"></script>
-    <script src="js/connect.js"></script>
+    
 </body>
 </html>
