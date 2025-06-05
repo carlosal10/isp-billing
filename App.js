@@ -55,6 +55,11 @@ app.use('/api/payProcess', payProcessRoutes);
 app.use('/api/mikrotik/users', mikrotikUserRoutes);
 app.use('/api/connect', mikrotikConnect);
 
+app.use('*', (req, res) => {
+  res.status(404).json({ message: `Route not found: ${req.originalUrl}` });
+});
+
+console.log('🔗 /api/connect route registered');
 
 // Start Server
 const PORT = process.env.PORT || 5000;
