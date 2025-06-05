@@ -14,7 +14,15 @@ h1 {
     margin-bottom: 20px;
     text-align: center;
 }
-
+.AddCustomer-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    padding-top: 60px;
+    left: 20%; top: 10%; width: 70%; height: 70%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
 /* Buttons */
 button {
     background: linear-gradient(90deg, #0b5fb0, #2ba3ec);
