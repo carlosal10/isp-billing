@@ -11,6 +11,7 @@
       display: block;
       margin-top: 1rem;
       font-weight: bold;
+      color: black;
     }
     input {
       width: 100%;
@@ -23,14 +24,14 @@
     .response-box {
       margin-top: 1.5rem;
       text-align: center;
-      color: #555;
+      color: red;
     }
 .connect-modal {
     display: none;
     position: fixed;
     z-index: 1000;
     padding-top: 60px;
-    left: 10%; top: 10%; width: 70%; height: 70%;
+    left: 20%; top: 10%; width: 70%; height: 70%;
     overflow: auto;
     background-color: rgba(0,0,0,0.4);
 }
