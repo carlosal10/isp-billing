@@ -8,7 +8,7 @@ document.getElementById('connectForm').onsubmit = async function(e) {
     };
 
     const responseDiv = document.getElementById('response');
-    responseDiv.style.color = '#333';
+    responseDiv.style.color = '#000000;
     responseDiv.textContent = 'Connecting...';
 
     try {
