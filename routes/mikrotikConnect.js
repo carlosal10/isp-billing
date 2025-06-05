@@ -2,11 +2,11 @@ const express = require('express');
 const { RouterOSAPI } = require('routeros-client');
 const router = express.Router();
 
-router.post('/connect', async (req, res) => {
+router.post('/', async (req, res) => {
   const { ip, username, password } = req.body;
 
   if (!ip || !username || !password) {
-    return res.status(400).json({ message: 'All fields are required' });
+    return res.status(400).json({ success: false, message: 'All fields are required' });
   }
 
   const mikrotikClient = new RouterOSAPI({
@@ -14,7 +14,7 @@ router.post('/connect', async (req, res) => {
     user: username,
     password: password,
     port: 8728,
-    timeout: 5000
+    timeout: 30000
   });
 
   try {
@@ -22,19 +22,20 @@ router.post('/connect', async (req, res) => {
     const identity = await mikrotikClient.write('/system/identity/print');
     mikrotikClient.close();
 
-    return res.status(200).json({
+    if (!identity || identity.length === 0 || !identity[0].name) {
+      return res.status(500).json({ success: false, message: 'Connected but failed to read identity' });
+    }
+
+    res.status(200).json({
       success: true,
-      message: `Connected to ${identity[0]['name']}`,
-      identity: identity[0]
+      message: `Connected to ${identity[0].name}`,
+      router: identity
     });
-  } catch (err) {
-    console.error('[MikroTik Error]:', err.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to connect to MikroTik',
-      error: err.message
-    });
+  } catch (error) {
+    console.error('Connect Error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to connect to MikroTik', error: error.message });
   }
 });
+
 
 module.exports = router;
