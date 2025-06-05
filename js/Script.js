@@ -25,37 +25,69 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    const onlineTable = document.getElementById("onlinePppoeTable").querySelector("tbody");
     const totalIn = document.getElementById("totalBytesIn");
     const totalOut = document.getElementById("totalBytesOut");
+    const showExpiredToggle = document.getElementById("showExpiredToggle");
     const chartCtx = document.getElementById("pppoeChart").getContext("2d");
+    let chartInstance = null;
+    let users = [];
 
-    // Dummy data - replace with real API call
-    const pppoeUsers = [
-        { username: "user1", disabled: false, bytesIn: 100000, bytesOut: 250000 },
-        { username: "user2", disabled: true, bytesIn: 50000, bytesOut: 70000 },
-        { username: "user3", disabled: false, bytesIn: 220000, bytesOut: 140000 }
-    ];
+    async function fetchPPPoeStatus() {
+        try {
+            const res = await fetch('https://your-domain.com/api/pppoe/status');
+            const data = await res.json();
+            users = data;
+            updateView();
+        } catch (error) {
+            console.error('Failed to fetch PPPoE data:', error);
+        }
+    }
 
-    const renderStats = (users) => {
+    function updateView() {
+        const showDisabled = showExpiredToggle.checked;
+        const filtered = showDisabled ? users : users.filter(u => !u.disabled);
+
+        renderTable(filtered);
+        renderStats(filtered);
+        renderChart(filtered);
+    }
+
+    function renderTable(users) {
+        onlineTable.innerHTML = "";
+        users.forEach(user => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${user.username}</td>
+                <td>${user.ip || '-'}</td>
+                <td>${user.uptime || '-'}</td>
+                <td>${formatBytes(user.bytesIn)}</td>
+                <td>${formatBytes(user.bytesOut)}</td>
+            `;
+            onlineTable.appendChild(tr);
+        });
+    }
+
+    function renderStats(users) {
         const totalBytesIn = users.reduce((sum, u) => sum + u.bytesIn, 0);
         const totalBytesOut = users.reduce((sum, u) => sum + u.bytesOut, 0);
-        totalIn.textContent = totalBytesIn.toLocaleString();
-        totalOut.textContent = totalBytesOut.toLocaleString();
-    };
+        totalIn.textContent = formatBytes(totalBytesIn);
+        totalOut.textContent = formatBytes(totalBytesOut);
+    }
 
-    const renderChart = (users) => {
+    function renderChart(users) {
         const active = users.filter(u => !u.disabled).length;
         const disabled = users.filter(u => u.disabled).length;
 
-        new Chart(chartCtx, {
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(chartCtx, {
             type: 'doughnut',
             data: {
                 labels: ['Active', 'Disabled'],
                 datasets: [{
-                    label: 'Users',
                     data: [active, disabled],
-                    backgroundColor: ['#28a745', '#dc3545'],
-                    borderWidth: 1
+                    backgroundColor: ['#28a745', '#dc3545']
                 }]
             },
             options: {
@@ -65,21 +97,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         });
-    };
+    }
 
-    // Initial render
-    renderStats(pppoeUsers);
-    renderChart(pppoeUsers);
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
 
-    // Toggle expired/disabled
-    document.getElementById("showExpiredToggle").addEventListener("change", function () {
-        const filtered = this.checked ? pppoeUsers : pppoeUsers.filter(u => !u.disabled);
-        renderStats(filtered);
-        renderChart(filtered);
-    });
+    // Event listener for toggle
+    showExpiredToggle.addEventListener("change", updateView);
+
+    // Initial fetch
+    fetchPPPoeStatus();
+
+    // Optional: Refresh every 60 seconds
+    setInterval(fetchPPPoeStatus, 60000);
 });
-
-
 // ========== Modal Logic ==========
 
 // PPPoE Modal
