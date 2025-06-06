@@ -192,11 +192,13 @@ tbody td button {
         width: 90%;
         height: auto;
         padding-top: 30px;
+        background:#b1b2b5;
     }
 
     #addCustomerForm {
         width: 90%;
         padding: 15px;
+        
     }
 
     button {
