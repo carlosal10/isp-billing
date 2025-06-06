@@ -97,7 +97,7 @@ canvas {
   width: 100% !important;
   height: auto !important;
 }
-.usageModal{
+.usage-Modal{
     display: none;
     position: fixed;
     z-index: 1001;
