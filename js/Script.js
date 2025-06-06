@@ -205,7 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
 bindModal("pppoeBtn", "pppoeModal", ".close.pppoe");
 bindModal("planBtn", "addPlanModal", "#closePlanForm");
 bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
-bindModal("connectBtn", "connectModal", ".close.connectForm");
+
 
 
 // ====== Trends API Calls & Charts ======
