@@ -87,6 +87,10 @@ html, body {
     color: #00f5ff;
     margin-bottom: 10px;
     text-align: center;
+    position: sticky;
+    padding: 1rem;
+    z-index: 10;
+    top: 0;
 }
 
 .sidebar ul {
