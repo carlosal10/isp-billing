@@ -44,6 +44,7 @@ html, body {
     padding: 20px 10px;
     transition: left 0.3s ease;
     overflow-y: auto;
+    gap: 1rem; 
 }
 
 /* Sidebar Active (Shown) */
