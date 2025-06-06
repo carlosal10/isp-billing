@@ -274,40 +274,7 @@
         }
       });
     });
-      
-   const sidebar = document.getElementById('sidebar');
-const hamburger = document.querySelector('.hamburger');
-
-// Toggle sidebar
-function toggleSidebar() {
-    sidebar.classList.toggle('show');
-}
-
-// Close sidebar when clicking outside of it
-document.addEventListener('click', function (e) {
-    if (
-        sidebar.classList.contains('show') &&
-        !sidebar.contains(e.target) &&
-        !hamburger.contains(e.target)
-    ) {
-        sidebar.classList.remove('show');
-    }
-});
-
-// Close sidebar when clicking any sidebar link or button
-sidebar.querySelectorAll('a, button').forEach((el) => {
-    el.addEventListener('click', () => {
-        sidebar.classList.remove('show');
-    });
-});
-
-</script>
-
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/Customer.js"></script>
-    <script src="js/Plans.js"></script>
-    <script src="js/Script.js"></script>
+  </script>
     
 </body>
 </html>
