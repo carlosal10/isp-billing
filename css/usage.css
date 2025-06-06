@@ -1,1 +1,120 @@
+.dashboard-section {
+  margin-top: 40px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-section h2 {
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.reports-buttons button {
+  margin-right: 10px;
+  padding: 10px 16px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.reports-buttons button:hover {
+  background-color: #0056b3;
+}
+#graphSection {
+  margin: 2rem auto;
+  max-width: 1200px;
+}
+
+.chart-card {
+  background: #fff;
+  padding: 1rem;
+  margin-bottom: 2rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#reportsSection {
+  margin: 2rem auto;
+  max-width: 1200px;
+}
+
+.report-card {
+  background: #fff;
+  padding: 1rem;
+  margin-bottom: 2rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#invoiceTable, #usageLogsTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#invoiceTable th, #usageLogsTable th,
+#invoiceTable td, #usageLogsTable td {
+  border: 1px solid #ddd;
+  padding: 0.6rem;
+  text-align: left;
+}
+/* Base structure */
+#graphSection, #reportsSection {
+  margin: 2rem auto;
+  max-width: 1200px;
+  padding: 0 1rem;
+}
+
+/* Cards layout */
+.chart-card, .report-card {
+  background: #fff;
+  padding: 1rem;
+  margin-bottom: 2rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow-x: auto;
+}
+
+/* Tables */
+#invoiceTable, #usageLogsTable {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+}
+
+#invoiceTable th, #usageLogsTable th,
+#invoiceTable td, #usageLogsTable td {
+  border: 1px solid #ddd;
+  padding: 0.6rem;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+/* Charts */
+canvas {
+  width: 100% !important;
+  height: auto !important;
+}
+.usageModal{
+
+  
+}
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  h2, h3 {
+    font-size: 1.2rem;
+    text-align: center;
+  }
+
+  table th, table td {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+  }
+
+  .chart-card, .report-card {
+    padding: 0.75rem;
+  }
+}
 
