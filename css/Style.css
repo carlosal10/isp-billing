@@ -13,14 +13,11 @@ html, body {
   overflow-x: hidden;
   background-color: #ebfcff;
   color: #0d1b2a; /* Changed for better readability */
-}
-
-/* Flex container for layout */
-body {
   display: flex;
   flex-direction: row;
   overflow-y: auto;
 }
+/* Hamburger menu for mobile */
 /* Hamburger menu for mobile */
 .hamburger {
     display: none;
@@ -162,6 +159,7 @@ body {
     box-shadow: 0 0 5px #0b4547, 0 0 10px #2e6c6e;
     transform: scale(1.05);
 }
+
 .sidebar-toggle {
   display: none; /* Hidden by default */
   background:#b1b2b5;
