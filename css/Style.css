@@ -68,6 +68,14 @@ html, body {
   color: #e0f7fa;
 }
 
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background-color: #00bcd4;
+  border-radius: 5px;
+}
 
 /* Sidebar Active (Shown) */
 .sidebar.show {
@@ -139,6 +147,15 @@ html, body {
       align-items: center;
     }
 }
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background-color: #00bcd4;
+  border-radius: 5px;
+}
+
 
 .sidebar-toggle {
   display: none; /* Hidden by default */
