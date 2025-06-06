@@ -47,7 +47,7 @@ input {
 }
 
 /* Modal styling (connect modal and others) */
-.connect-modal {
+.modal-overlay {
   display: none;
   position: fixed;
   z-index: 1000;
@@ -60,7 +60,7 @@ input {
 }
 
 /* Modal inner box */
-.connect-modal .modal-content {
+.modal-overlay .modal-content {
   margin: auto;
   background: white;
   padding: 2rem;
@@ -106,7 +106,7 @@ canvas {
     margin: 1rem;
     padding: 1.5rem;
   }
-  .connect-modal .modal-content {
+  .modal-overlay .modal-content {
     padding: 1.5rem;
     max-width: 95%;
   }
