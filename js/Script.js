@@ -33,11 +33,11 @@ function bindModal(buttonId, modalId, closeSelector) {
 }
 
 // ====== Modal Bindings ======
-bindModal("pppoeBtn", "pppoeModal", ".close.pppoe");
-bindModal("planBtn", "addPlanModal", "#closePlanForm");
-bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
-bindModal("connectBtn", "connectModal", "#connectClose");
-bindModal("usageBtn", "usageModal", "#usageClose");
+bindModal("pppoeBtn", "modal-overlay", ".close.pppoe");
+bindModal("planBtn", "modal-overlay", "#closePlanForm");
+bindModal("customerBtn", "modal-overlay", "#closeCustomerForm");
+bindModal("connectBtn", "modal-overlay", "#connectClose");
+bindModal("usageBtn", "modal-overlay", "#usageClose");
 
       console.log("Clicked usageBtn");
 document.getElementById("usageBtn").addEventListener("click", () => {
