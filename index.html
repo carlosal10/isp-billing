@@ -437,6 +437,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (event.target === connectModal) connectModal.style.display = "none";
   });
 });
+      console.log("Clicked usageBtn");
+document.getElementById("usageBtn").addEventListener("click", () => {
+  console.log("Opening usageModal");
+  const modal = document.getElementById("usageModal");
+  modal.style.display = "block";
+});
+
 </script>
 
 
