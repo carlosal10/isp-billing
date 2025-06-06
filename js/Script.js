@@ -278,3 +278,38 @@ async function renderUsageTrendsChart() {
     }
   });
 }
+async function loadInvoices() {
+  const res = await fetch(`${baseApi}/reports/invoices`);
+  const invoices = await res.json();
+  const tbody = document.querySelector('#invoiceTable tbody');
+  tbody.innerHTML = '';
+  invoices.forEach((inv, i) => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${inv.customerName}</td>
+        <td>${inv.amount}</td>
+        <td>${new Date(inv.date).toLocaleDateString()}</td>
+        <td><a href="${inv.downloadUrl}" target="_blank">Download</a></td>
+      </tr>
+    `;
+  });
+}
+
+async function loadUsageLogs() {
+  const res = await fetch(`${baseApi}/reports/usage-logs`);
+  const logs = await res.json();
+  const tbody = document.querySelector('#usageLogsTable tbody');
+  tbody.innerHTML = '';
+  logs.forEach((log, i) => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${log.username}</td>
+        <td>${new Date(log.date).toLocaleDateString()}</td>
+        <td>${formatBytes(log.bytesIn)}</td>
+        <td>${formatBytes(log.bytesOut)}</td>
+      </tr>
+    `;
+  });
+}
