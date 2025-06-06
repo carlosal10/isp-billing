@@ -1,5 +1,6 @@
 // ====== Central API base URL ======
 const baseApi = 'https://isp-billing-uq58.onrender.com/api';
+
 // ====== Utility: Format bytes ======
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -235,5 +236,79 @@ async function fetchOnlinePppoeUsers() {
     console.error('Error fetching online PPPoE users:', err);
   }
 }
+async function fetchActiveUsers(days = 7) {
+  const res = await fetch(`/api/pppoe/stats/active-daily?days=${days}`);
+  return res.json();
+}
 
-document.addEventListener('DOMContentLoaded', fetchOnlinePppoeUsers);
+async function fetchUsageTrends(days = 7) {
+  const res = await fetch(`/api/pppoe/stats/usage-trends?days=${days}`);
+  return res.json();
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString();
+}
+
+async function renderActiveUsersChart() {
+  const data = await fetchActiveUsers();
+  const labels = data.map(item => formatDate(item.date));
+  const counts = data.map(item => item.activeUsersCount);
+
+  new Chart(document.getElementById('activeUsersChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Daily Active PPPoE Users',
+        data: counts,
+        borderColor: 'blue',
+        fill: false,
+        tension: 0.3
+      }]
+    }
+  });
+}
+
+async function renderUsageTrendsChart() {
+  const data = await fetchUsageTrends();
+  const labels = data.map(item => formatDate(item.date));
+  
+  // Aggregate bytes in/out per day across all users
+  const bytesIn = data.map(item =>
+    item.usagePerUser.reduce((sum, u) => sum + u.bytesIn, 0)
+  );
+  const bytesOut = data.map(item =>
+    item.usagePerUser.reduce((sum, u) => sum + u.bytesOut, 0)
+  );
+
+  new Chart(document.getElementById('usageTrendsChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Bytes In',
+          data: bytesIn,
+          borderColor: 'green',
+          fill: false,
+          tension: 0.3
+        },
+        {
+          label: 'Bytes Out',
+          data: bytesOut,
+          borderColor: 'red',
+          fill: false,
+          tension: 0.3
+        }
+      ]
+    }
+  });
+}
+
+renderActiveUsersChart();
+renderUsageTrendsChart();
+
+document.addEventListener('DOMContentLoaded', fetchOnlinePppoeUsers; renderActiveUsersChart();
+renderUsageTrendsChart(););
