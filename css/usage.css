@@ -98,8 +98,17 @@ canvas {
   height: auto !important;
 }
 .usageModal{
-
-  
+    display: none;
+    position: fixed;
+    z-index: 1001;
+    padding-top: 60px;
+    left: 20%;
+    top: 20%;
+    width: 90%;
+    height: 100%;
+    overflow: auto;
+    background-color: #f9ebea;
+}
 }
 /* Responsive tweaks */
 @media (max-width: 768px) {
