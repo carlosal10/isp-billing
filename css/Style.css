@@ -396,7 +396,9 @@ html, body {
     flex-direction: column;
     align-items: center;
   }
-
+.modal{
+  background-color: white;
+}
   .modal-content {
     width: 95%;
   }
