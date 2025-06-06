@@ -36,11 +36,11 @@ body {
   cursor: pointer;
 }
 
-/* Sidebar */
+/* Sidebar Base */
 .sidebar {
   position: fixed;
   top: 0;
-  left: -250px;
+  left: -250px; /* Hidden by default */
   width: 250px;
   height: 100%;
   background-color: #17191f;
@@ -55,6 +55,12 @@ body {
   color: #e0f7fa;
   flex-shrink: 0;
 }
+
+/* Sidebar Active (Shown) */
+.sidebar.show {
+  left: 0;
+}
+
 
 /* Sidebar Active (Shown) */
 .sidebar.show {
@@ -120,16 +126,28 @@ body {
   cursor: pointer;
 }
 
-/* Show hamburger only on small screens */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 80%; /* Still fixed sidebar */
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .main-content {
+    padding-left: 0; /* remove desktop padding if added */
+  }
+}
+.hamburger {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .hamburger {
     display: block;
   }
-
-  .sidebar {
-    width: 80%;
-  }
 }
+
 
 /* Main Content */
 .main-content {
