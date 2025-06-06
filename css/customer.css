@@ -193,6 +193,9 @@ tbody td button {
         height: auto;
         padding-top: 30px;
         background-color: #f4f4f4;
+        border-size: 5px;
+        border-color: #000000;
+        border: 5px;
     }
 
     #addCustomerForm {
