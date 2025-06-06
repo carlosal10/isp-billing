@@ -20,7 +20,7 @@
 <div id="sidebar" class="sidebar">
     <div class="sidebar-header">
         <h2>ISP Billing</h2>
-        <span class="close-btn" onclick="toggleSidebar()">×</span>
+
     </div>
     <ul>
         <li><a href="Dashpanel.html">Dashboard</a></li>
@@ -274,13 +274,27 @@
         }
       });
     });
-  </script>
-    <script>
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         sidebar.classList.toggle('show');
     }
+
+    // Close sidebar when clicking outside of it
+    document.addEventListener('click', function (e) {
+        const sidebar = document.getElementById('sidebar');
+        const hamburger = document.querySelector('.hamburger');
+
+        // If sidebar is open and click is outside sidebar and hamburger
+        if (
+            sidebar.classList.contains('show') &&
+            !sidebar.contains(e.target) &&
+            !hamburger.contains(e.target)
+        ) {
+            sidebar.classList.remove('show');
+        }
+    });
 </script>
+
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/Customer.js"></script>
