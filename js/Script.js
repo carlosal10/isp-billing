@@ -1,34 +1,5 @@
 // ====== Central API base URL ======
 const baseApi = 'https://isp-billing-uq58.onrender.com/api';
-document.addEventListener('DOMContentLoaded', function () {
-    const sidebar = document.getElementById('sidebar');
-    const hamburger = document.querySelector('.hamburger');
-
-    function toggleSidebar() {
-        sidebar.classList.toggle('show');
-    }
-
-    hamburger.addEventListener('click', toggleSidebar);
-
-    // Close when clicking outside
-    document.addEventListener('click', function (e) {
-        if (
-            sidebar.classList.contains('show') &&
-            !sidebar.contains(e.target) &&
-            !hamburger.contains(e.target)
-        ) {
-            sidebar.classList.remove('show');
-        }
-    });
-
-    // Close when clicking on links/buttons inside sidebar
-    sidebar.querySelectorAll('a, button').forEach((el) => {
-        el.addEventListener('click', () => {
-            sidebar.classList.remove('show');
-        });
-    });
-});
-
 // ====== Utility: Format bytes ======
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
