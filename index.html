@@ -11,25 +11,31 @@
     <link rel="icon" type="image/png" sizes="32x32" href="isp-billing\favicon-32x32.png">
 </head>
 <body>
-    <div class="sidebar">
+    <!-- Hamburger Menu (visible on mobile only) -->
+<div class="hamburger" onclick="toggleSidebar()">
+    ☰
+</div>
+
+<!-- Sidebar -->
+<div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
         <h2>ISP Billing</h2>
-        
-    <div class="container">
-        <a href="logout.php"> <button type="button">Logout</button></a> 
+        <span class="close-btn" onclick="toggleSidebar()">×</span>
     </div>
-    
-        <ul>
-            <li><a href="Dashpanel.html">Dashboard</a></li>
-            <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
-            <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
-            <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
-            <li><a href="#">Invoices</a></li>
-            <li><a href="#">Payments</a></li>
-            <li><a href="Payment.html">Payment Link</Link></a></li>
-            <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
-            <li><a href="#">Usage Logs</a></li>
-        </ul>
-    </div>
+    <ul>
+        <li><a href="Dashpanel.html">Dashboard</a></li>
+        <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
+        <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
+        <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
+        <li><a href="#">Invoices</a></li>
+        <li><a href="#">Payments</a></li>
+        <li><a href="Payment.html">Payment Link</a></li>
+        <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
+        <li><a href="#">Usage Logs</a></li>
+        <li><a href="logout.php"><button type="button">Logout</button></a></li>
+    </ul>
+</div>
+
     <div class="main-content">
         <h1>Welcome</h1>
         <div class="stats">
@@ -269,6 +275,13 @@
       });
     });
   </script>
+    <script>
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('show');
+    }
+</script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/Customer.js"></script>
     <script src="js/Plans.js"></script>
