@@ -304,6 +304,8 @@
 
 
         </div>
+    <canvas id="activeUsersChart"></canvas>
+<canvas id="usageTrendsChart"></canvas>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const form = document.getElementById('connectForm');
@@ -392,6 +394,13 @@ window.addEventListener('resize', handleResize);
 
 // Run once on load to set correct state
 handleResize();
+document.getElementById('downloadUsageReport')?.addEventListener('click', () => {
+  window.open(`${baseApi}/reports/usage`, '_blank');
+});
+
+document.getElementById('downloadInvoiceReport')?.addEventListener('click', () => {
+  window.open(`${baseApi}/reports/invoices`, '_blank');
+});
 
 </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
