@@ -229,7 +229,80 @@
 
   <div id="loading"></div>
   <div id="response"></div>
+<div id="usageModal" class="usage-modal">
+        <div class="modal-content">
+            <span class="close" id="usageClose">&times;</span>
+            <h2>Logs</h2>
+            <!-- Graphs Section -->
+            <section class="dashboard-section">
+                  <h2>PPPoE Usage Trends</h2>
+                  <canvas id="usageTrendsChart" height="100"></canvas>
+            </section>
 
+            <section class="dashboard-section">
+              <h2>Active PPPoE Users (Daily)</h2>
+              <canvas id="activeUsersChart" height="100"></canvas>
+            </section>
+
+        <!-- Reports Section -->
+            <section class="dashboard-section">
+              <h2>Reports</h2>
+              <div class="reports-buttons">
+                <button id="downloadUsageReport">Download Usage Report</button>
+                <button id="downloadInvoiceReport">Download Invoice Report</button>
+              </div>
+            </section>
+            <section id="graphSection">
+              <h2>Usage Analytics</h2>
+
+                  <div class="chart-card">
+                    <h3>Daily Active Users</h3>
+                        <canvas id="activeUsersChart"></canvas>
+                  </div>
+
+                  <div class="chart-card">
+                        <h3>Daily Usage Trends</h3>
+                            <canvas id="usageTrendsChart"></canvas>
+                  </div>
+            </section>
+            <section id="reportsSection">
+              <h2>Reports</h2>
+
+                  <div class="report-card">
+                    <h3>Invoices</h3>
+                    <table id="invoiceTable">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Customer</th>
+                          <th>Amount</th>
+                          <th>Date</th>
+                          <th>Download</th>
+                        </tr>
+                         </thead>
+                          <tbody></tbody>
+                        </table>
+                  </div>
+
+                  <div class="report-card">
+                <h3>Usage Logs</h3>
+                    <table id="usageLogsTable">
+              <thead>
+                    <tr>
+                          <th>#</th>
+                          <th>User</th>
+                          <th>Date</th>
+                          <th>Bytes In</th>
+                          <th>Bytes Out</th>
+                    </tr>
+              </thead>
+              <tbody></tbody>
+                </table>
+                  </div>
+                </section>
+
+
+        </div>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const form = document.getElementById('connectForm');
