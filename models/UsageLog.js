@@ -1,9 +1,15 @@
 const mongoose = require('mongoose');
 
-const usageLogSchema = new mongoose.Schema({
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-    dataUsed: { type: Number, required: true }, // in GB
-    loggedAt: { type: Date, default: Date.now }
+const DailyUsageSchema = new mongoose.Schema({
+  date: { type: Date, required: true, unique: true },
+  activeUsersCount: { type: Number, default: 0 },
+  usagePerUser: [
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      bytesIn: { type: Number, default: 0 },
+      bytesOut: { type: Number, default: 0 },
+    },
+  ],
 });
 
-module.exports = mongoose.model('UsageLog', usageLogSchema);
+module.exports = mongoose.model('DailyUsage', DailyUsageSchema);
