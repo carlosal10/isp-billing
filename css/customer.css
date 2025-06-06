@@ -77,7 +77,7 @@ button:hover {
 #addCustomerForm {
     position: fixed;
     top: 50%;
-    left: 50%;
+    left: 40%;
     transform: translate(-50%, -50%);
     background: #112240;
     border-radius: 10px;
