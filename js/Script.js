@@ -39,7 +39,12 @@ bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
 bindModal("connectBtn", "connectModal", "#connectClose");
 bindModal("usageBtn", "usageModal", "#usageClose");
 
-
+      console.log("Clicked usageBtn");
+document.getElementById("usageBtn").addEventListener("click", () => {
+  console.log("Opening usageModal");
+  const modal = document.getElementById("usageModal");
+  modal.style.display = "block";
+});
 // ====== Auth: Login Handler ======
 document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
