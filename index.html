@@ -403,48 +403,7 @@ document.getElementById('downloadInvoiceReport')?.addEventListener('click', () =
 });
 
 </script>
-  <script>
-document.addEventListener("DOMContentLoaded", function () {
-  const connectBtn = document.getElementById("connectBtn");
-  const connectModal = document.getElementById("connectModal");
-  const connectClose = document.getElementById("connectClose");
-
-  const usageBtn = document.getElementById("usageBtn");
-  const usageModal = document.getElementById("usageModal");
-  const usageClose = document.getElementById("usageClose");
-
-  if (connectBtn && connectModal && connectClose) {
-    connectBtn.addEventListener("click", () => {
-      connectModal.style.display = "block";
-    });
-    connectClose.addEventListener("click", () => {
-      connectModal.style.display = "none";
-    });
-  }
-
-  if (usageBtn && usageModal && usageClose) {
-    usageBtn.addEventListener("click", () => {
-      usageModal.style.display = "block";
-    });
-    usageClose.addEventListener("click", () => {
-      usageModal.style.display = "none";
-    });
-  }
-
-  // Optional global click handler to close if clicked outside
-  window.addEventListener("click", function (event) {
-    if (event.target === usageModal) usageModal.style.display = "none";
-    if (event.target === connectModal) connectModal.style.display = "none";
-  });
-});
-      console.log("Clicked usageBtn");
-document.getElementById("usageBtn").addEventListener("click", () => {
-  console.log("Opening usageModal");
-  const modal = document.getElementById("usageModal");
-  modal.style.display = "block";
-});
-
-</script>
+  
 
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
