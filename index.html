@@ -274,25 +274,33 @@
         }
       });
     });
-    function toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        sidebar.classList.toggle('show');
+      
+   const sidebar = document.getElementById('sidebar');
+const hamburger = document.querySelector('.hamburger');
+
+// Toggle sidebar
+function toggleSidebar() {
+    sidebar.classList.toggle('show');
+}
+
+// Close sidebar when clicking outside of it
+document.addEventListener('click', function (e) {
+    if (
+        sidebar.classList.contains('show') &&
+        !sidebar.contains(e.target) &&
+        !hamburger.contains(e.target)
+    ) {
+        sidebar.classList.remove('show');
     }
+});
 
-    // Close sidebar when clicking outside of it
-    document.addEventListener('click', function (e) {
-        const sidebar = document.getElementById('sidebar');
-        const hamburger = document.querySelector('.hamburger');
-
-        // If sidebar is open and click is outside sidebar and hamburger
-        if (
-            sidebar.classList.contains('show') &&
-            !sidebar.contains(e.target) &&
-            !hamburger.contains(e.target)
-        ) {
-            sidebar.classList.remove('show');
-        }
+// Close sidebar when clicking any sidebar link or button
+sidebar.querySelectorAll('a, button').forEach((el) => {
+    el.addEventListener('click', () => {
+        sidebar.classList.remove('show');
     });
+});
+
 </script>
 
 
