@@ -114,7 +114,7 @@ document.getElementById("removeUserForm")?.addEventListener("submit", async (e) 
   }
 });
 
-// ====== PPPoE Online Users + Stats + Chart ======
+// ====== Chart + PPPoE Status Handling ======
 document.addEventListener("DOMContentLoaded", () => {
   const tableBody = document.querySelector('#onlinePppoeTable tbody');
   const totalIn = document.getElementById("totalBytesIn");
@@ -197,6 +197,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   fetchPPPoeStatus();
   setInterval(fetchPPPoeStatus, 60000);
+  renderActiveUsersChart();
+  renderUsageTrendsChart();
 });
 
 // ====== Modal Bindings ======
@@ -205,37 +207,7 @@ bindModal("planBtn", "addPlanModal", "#closePlanForm");
 bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
 bindModal("connectBtn", "connectModal", ".close.connectForm");
 
-// ====== Fetch and Render Online PPPoE Users Table (alternative) ======
-async function fetchOnlinePppoeUsers() {
-  try {
-    const res = await fetch(`${baseApi}/pppoe/online`);
-    const { users = [] } = await res.json();
-    const tbody = document.querySelector('#onlinePppoeTable tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    if (users.length === 0) {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td colspan="5" style="text-align:center;">No users currently online</td>`;
-      tbody.appendChild(row);
-      return;
-    }
-
-    users.forEach(user => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${user.name || 'N/A'}</td>
-        <td>${user.address || 'N/A'}</td>
-        <td>${user.uptime || 'N/A'}</td>
-        <td>${formatBytes(user['bytes-in'])}</td>
-        <td>${formatBytes(user['bytes-out'])}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  } catch (err) {
-    console.error('Error fetching online PPPoE users:', err);
-  }
-}
+// ====== Trends API Calls & Charts ======
 async function fetchActiveUsers(days = 7) {
   const res = await fetch(`/api/pppoe/stats/active-daily?days=${days}`);
   return res.json();
@@ -256,7 +228,8 @@ async function renderActiveUsersChart() {
   const labels = data.map(item => formatDate(item.date));
   const counts = data.map(item => item.activeUsersCount);
 
-  new Chart(document.getElementById('activeUsersChart').getContext('2d'), {
+  if (window.activeChart) window.activeChart.destroy();
+  window.activeChart = new Chart(document.getElementById('activeUsersChart').getContext('2d'), {
     type: 'line',
     data: {
       labels,
@@ -274,8 +247,6 @@ async function renderActiveUsersChart() {
 async function renderUsageTrendsChart() {
   const data = await fetchUsageTrends();
   const labels = data.map(item => formatDate(item.date));
-  
-  // Aggregate bytes in/out per day across all users
   const bytesIn = data.map(item =>
     item.usagePerUser.reduce((sum, u) => sum + u.bytesIn, 0)
   );
@@ -283,7 +254,8 @@ async function renderUsageTrendsChart() {
     item.usagePerUser.reduce((sum, u) => sum + u.bytesOut, 0)
   );
 
-  new Chart(document.getElementById('usageTrendsChart').getContext('2d'), {
+  if (window.usageChart) window.usageChart.destroy();
+  window.usageChart = new Chart(document.getElementById('usageTrendsChart').getContext('2d'), {
     type: 'line',
     data: {
       labels,
@@ -306,9 +278,3 @@ async function renderUsageTrendsChart() {
     }
   });
 }
-
-renderActiveUsersChart();
-renderUsageTrendsChart();
-
-document.addEventListener('DOMContentLoaded', fetchOnlinePppoeUsers; renderActiveUsersChart();
-renderUsageTrendsChart(););
