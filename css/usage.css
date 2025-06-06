@@ -109,6 +109,16 @@ canvas {
     overflow: auto;
     background-color: #f9ebea;
 }
+.usage-modal .modal-content {
+  margin: auto;
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+}
+
 }
 /* Responsive tweaks */
 @media (max-width: 768px) {
