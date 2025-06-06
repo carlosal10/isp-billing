@@ -16,25 +16,24 @@
     ☰
 </div>
 
-<!-- Sidebar -->
-<div id="sidebar" class="sidebar">
-    <div class="sidebar-header">
-        <h2>ISP Billing</h2>
+<!-- Hamburger (visible mobile only) -->
+  <div class="hamburger" onclick="toggleSidebar()">☰</div>
 
-    </div>
+  <!-- Sidebar -->
+  <div id="sidebar" class="sidebar">
     <ul>
-        <li><a href="Dashpanel.html">Dashboard</a></li>
-        <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
-        <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
-        <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
-        <li><a href="#">Invoices</a></li>
-        <li><a href="#">Payments</a></li>
-        <li><a href="Payment.html">Payment Link</a></li>
-        <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
-        <li><a href="#">Usage Logs</a></li>
-        <li><a href="logout.php"><button type="button">Logout</button></a></li>
+      <li><a href="Dashpanel.html">Dashboard</a></li>
+      <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
+      <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
+      <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
+      <li><a href="#">Invoices</a></li>
+      <li><a href="#">Payments</a></li>
+      <li><a href="Payment.html">Payment Link</a></li>
+      <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
+      <li><a href="#">Usage Logs</a></li>
+      <li><a href="logout.php"><button type="button">Logout</button></a></li>
     </ul>
-</div>
+  </div>
 
     <div class="main-content">
         <h1>Welcome</h1>
@@ -275,6 +274,35 @@
       });
     });
   </script>
-    
+    <script>
+    const sidebar = document.getElementById('sidebar');
+    const hamburger = document.querySelector('.hamburger');
+
+    function toggleSidebar() {
+      sidebar.classList.toggle('show');
+    }
+
+    // Close sidebar on outside click
+    document.addEventListener('click', (e) => {
+      if (
+        sidebar.classList.contains('show') &&
+        !sidebar.contains(e.target) &&
+        !hamburger.contains(e.target)
+      ) {
+        sidebar.classList.remove('show');
+      }
+    });
+
+    // Close sidebar on nav click
+    sidebar.querySelectorAll('a, button').forEach(el => {
+      el.addEventListener('click', () => sidebar.classList.remove('show'));
+    });
+  </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="js/Customer.js"></script>
+    <script src="js/Plans.js"></script>
+    <script src="js/Script.js"></script>
+    <script src="js/connect.js"></script>
 </body>
 </html>
