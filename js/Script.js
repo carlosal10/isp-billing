@@ -15,12 +15,30 @@ function bindModal(buttonId, modalId, closeSelector) {
   const modal = document.getElementById(modalId);
   const close = document.querySelector(closeSelector);
 
-  btn?.addEventListener("click", () => modal.style.display = "block");
-  close?.addEventListener("click", () => modal.style.display = "none");
+  if (!btn || !modal || !close) return;
+
+  btn.addEventListener("click", () => {
+    modal.style.display = "block";
+  });
+
+  close.addEventListener("click", () => {
+    modal.style.display = "none";
+  });
+
   window.addEventListener("click", (e) => {
-    if (e.target === modal) modal.style.display = "none";
+    if (e.target === modal) {
+      modal.style.display = "none";
+    }
   });
 }
+
+// ====== Modal Bindings ======
+bindModal("pppoeBtn", "pppoeModal", ".close.pppoe");
+bindModal("planBtn", "addPlanModal", "#closePlanForm");
+bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
+bindModal("connectBtn", "connectModal", "#connectClose");
+bindModal("usageBtn", "usageModal", "#usageClose");
+
 
 // ====== Auth: Login Handler ======
 document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
@@ -200,11 +218,6 @@ document.addEventListener("DOMContentLoaded", () => {
   renderActiveUsersChart();
   renderUsageTrendsChart();
 });
-
-// ====== Modal Bindings ======
-bindModal("pppoeBtn", "pppoeModal", ".close.pppoe");
-bindModal("planBtn", "addPlanModal", "#closePlanForm");
-bindModal("customerBtn", "addCustomerModal", "#closeCustomerForm");
 
 
 
