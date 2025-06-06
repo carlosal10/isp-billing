@@ -21,131 +21,146 @@ body {
   flex-direction: row;
   overflow-y: auto;
 }
-
 /* Hamburger menu for mobile */
 .hamburger {
-  display: none;
-  font-size: 2rem;
-  color: #00f5ff;
-  background-color: transparent;
-  padding: 10px 15px;
-  position: fixed;
-  top: 15px;
-  left: 15px;
-  z-index: 1001;
-  cursor: pointer;
+    display: none;
+    font-size: 2rem;
+    color: red;
+    background-color: transparent;
+    padding: 10px 15px;
+    position: fixed;
+    left: 15px;
+    z-index: 1001;
+    cursor: pointer;
 }
 
 /* Sidebar Base */
 .sidebar {
-  position: fixed;
-  top: 0;
-  left: -250px; /* Hidden by default */
-  width: 250px;
-  height: 100%;
-  background-color: #17191f;
-  box-shadow: 3px 0 10px rgba(0, 188, 212, 0.3);
-  z-index: 1000;
-  padding: 20px 10px;
-  transition: left 0.3s ease;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #e0f7fa;
-  flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: -250px;
+    width: 250px;
+    height: 100%;
+    background-color: #0d1b2a;
+    box-shadow: 3px 0 10px rgba(0, 188, 212, 0.3);
+    z-index: 1000;
+    padding: 20px 10px;
+    transition: left 0.3s ease;
+    overflow-y: auto;
 }
 
 /* Sidebar Active (Shown) */
 .sidebar.show {
-  left: 0;
-}
-
-
-/* Sidebar Active (Shown) */
-.sidebar.show {
-  left: 0;
+    left: 0;
 }
 
 /* Sidebar Content */
 .sidebar h2 {
-  font-size: 2rem;
-  margin-bottom: 30px;
-  color: #fff;
-  text-align: center;
+    color: #00f5ff;
+    margin-bottom: 10px;
+    text-align: center;
 }
 
 .sidebar ul {
-  list-style-type: none;
-  width: 100%;
-  margin-top: 20px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+    list-style-type: none;
+    padding: 0;
+    margin-top: 20px;
 }
 
 .sidebar ul li {
-  margin: 15px 0;
-  text-align: center;
+    margin: 15px 0;
 }
 
 .sidebar ul li a,
-.sidebar ul li button,
-.sidebar-btn {
-  display: block;
-  text-decoration: none;
-  color: #ebfcff;
-  font-size: 1.2rem;
-  padding: 10px;
-  width: 100%;
-  text-align: center;
-  border: none;
-  border-radius: 5px;
-  background: none;
-  transition: 0.3s;
-  cursor: pointer;
+.sidebar ul li button {
+    display: block;
+    text-decoration: none;
+    color: #e0f7fa;
+    font-weight: bold;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    padding: 8px 15px;
+    border-radius: 5px;
+    transition: background 0.3s;
+    font-size: 1rem;
 }
 
 .sidebar ul li a:hover,
-.sidebar ul li button:hover,
-.sidebar-btn:hover {
-  background-color: #1b6069;
-  color: #0d1b2a;
-  box-shadow: 0 0 5px #0b4547, 0 0 10px #2e6c6e;
-  transform: scale(1.05);
+.sidebar ul li button:hover {
+    background-color: #00bcd4;
+    color: #0d1b2a;
 }
 
 /* Close Button in Sidebar */
 .sidebar .close-btn {
-  position: absolute;
-  top: 15px;
-  right: 20px;
-  font-size: 1.5rem;
-  color: #ff1744;
-  cursor: pointer;
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 1.5rem;
+    color: #ff1744;
+    cursor: pointer;
 }
 
+/* Show hamburger only on small screens */
 @media (max-width: 768px) {
-  .sidebar {
-    width: 80%; /* Still fixed sidebar */
+    .hamburger {
+        display: block;
+    }
+
+    .sidebar {
+        width: 80%;
+    }
+}
+@media (max-width: 768px) {
+    .sidebar ul {
+        flex-direction: column;
+    }
+}
+/* Sidebar */
+.sidebar {
+    width: 230px;
+    background-color: #17191f;
+    /*box-shadow: 0 0 5px #00f5ff;*/
+    display: flex;
     flex-direction: column;
-    justify-content: flex-start;
     align-items: center;
-  }
-
-  .main-content {
-    padding-left: 0; /* remove desktop padding if added */
-  }
-}
-.hamburger {
-  display: none;
+    padding: 20px 10px;
+    color: #e0f7fa;
 }
 
-@media (max-width: 768px) {
-  .hamburger {
+.sidebar h2 {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    color: #e0f7fa;
+}
+
+.sidebar ul {
+    list-style-type: none;
+    width: 100%;
+}
+
+.sidebar ul li {
+    margin: 15px 0;
+    text-align: center;
+}
+
+.sidebar ul li a {
+    text-decoration: none;
+    color: #ebfcff;
+    font-size: 1.2rem;
+    padding: 10px;
     display: block;
-  }
+    border-radius: 5px;
+    transition: all 0.3s ease-in-out;
+}
+
+.sidebar ul li a:hover {
+    background-color: #1b6069;
+    color: #0d1b2a;
+    box-shadow: 0 0 5px #0b4547, 0 0 10px #2e6c6e;
+    transform: scale(1.05);
 }
 
 
