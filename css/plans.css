@@ -188,10 +188,12 @@ tbody td button {
     }
 
     .addPlan-modal {
-        width: 100%;
-        height: 100%;
+        left: 5%;
+        top: 10%;
+        width: 90%;
+        height: auto;
         padding-top: 30px;
-        background: #b1b2b5;
+        background-color: #b1b2b5;
     }
 
     #addPlanForm {
