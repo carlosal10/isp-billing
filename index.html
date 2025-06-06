@@ -403,6 +403,31 @@ document.getElementById('downloadInvoiceReport')?.addEventListener('click', () =
 });
 
 </script>
+    <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const usageBtn = document.getElementById("usageBtn");
+    const usageModal = document.getElementById("usageModal");
+    const usageClose = document.getElementById("usageClose");
+
+    if (usageBtn && usageModal && usageClose) {
+      usageBtn.addEventListener("click", () => {
+        usageModal.style.display = "block";
+      });
+
+      usageClose.addEventListener("click", () => {
+        usageModal.style.display = "none";
+      });
+
+      // Optional: Hide modal if clicked outside of modal content
+      window.addEventListener("click", function (e) {
+        if (e.target === usageModal) {
+          usageModal.style.display = "none";
+        }
+      });
+    }
+  });
+</script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script src="js/Customer.js"></script>
