@@ -19,7 +19,7 @@ h2 {
 }
 
 /* Modal */
-.Modal {
+.modal-overlay {
     display: none;
     position: fixed;
     z-index: 1000;
@@ -187,7 +187,7 @@ tbody td button {
         font-size: 1.5rem;
     }
 
-    .Modal {
+    .modal-overlay {
         left: 5%;
         top: 10%;
         width: 90%;
