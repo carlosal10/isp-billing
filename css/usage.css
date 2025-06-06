@@ -97,7 +97,7 @@ canvas {
   width: 100% !important;
   height: auto !important;
 }
-.usage-modal{
+.modal-overlay{
     display: none;
     position: fixed;
     z-index: 1001;
@@ -109,7 +109,7 @@ canvas {
     overflow: auto;
     background-color: #f9ebea;
 }
-.usage-modal .modal-content {
+.modal-overlay .modal-content {
   margin: auto;
   background: white;
   padding: 2rem;
@@ -117,8 +117,6 @@ canvas {
   max-width: 600px;
   width: 100%;
   box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-}
-
 }
 /* Responsive tweaks */
 @media (max-width: 768px) {
