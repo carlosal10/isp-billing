@@ -209,12 +209,12 @@ bindModal("connectBtn", "connectModal", ".close.connectForm");
 
 // ====== Trends API Calls & Charts ======
 async function fetchActiveUsers(days = 7) {
-  const res = await fetch(`/api/pppoe/stats/active-daily?days=${days}`);
+  const res = await fetch(`${baseApi}/api/pppoe/stats/active-daily?days=${days}`);
   return res.json();
 }
 
 async function fetchUsageTrends(days = 7) {
-  const res = await fetch(`/api/pppoe/stats/usage-trends?days=${days}`);
+  const res = await fetch(`${baseApi}/api/pppoe/stats/usage-trends?days=${days}`);
   return res.json();
 }
 
