@@ -7,5 +7,7 @@ const {
 
 router.get('/servers', getHotspotServers);
 router.get('/profiles', getHotspotProfiles);
+router.get('/available-plans', getAvailableHotspotPlans);
+
 
 module.exports = router;
