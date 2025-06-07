@@ -96,11 +96,11 @@ body {
   height: 100%;
   background-color: #17191f;
   box-shadow: 3px 0 10px rgba(0, 188, 212, 0.3);
-  z-index: 9999;
+  z-index: 1000;
   padding: 20px 10px;
   overflow-y: auto;
   transition: left 0.3s ease;
-  display: block;
+  display: flex;
   flex-direction: column;
   align-items: center;
   color: #e0f7fa;
@@ -420,7 +420,7 @@ body {
     font-size: 20px;
   }
   .sidebar {
-    width: 100%;
+    width: 60%;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
