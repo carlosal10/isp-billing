@@ -43,6 +43,7 @@ window.addEventListener("DOMContentLoaded", () => {
   bindModal("customerBtn", "customerModal", "#customerClose");
   bindModal("connectBtn", "connectModal", "#connectClose");
   bindModal("usageBtn", "usageModal", "#usageClose");
+  bindModal("hotspotBtn", "hotspotModal", "#hotspotClose");
 });
 
 // ====== Auth: Login Handler ======

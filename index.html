@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="css/customer.css">
     <link rel="stylesheet" href="css/connect.css">
     <link rel="stylesheet" href="css/usage.css">
+    <link rel="stylesheet" href="css/hotspot.css">
     <link rel="icon" type="image/png" sizes="32x32" href="isp-billing\favicon-32x32.png">
 </head>
 <body>
@@ -28,10 +29,11 @@
         <li><a href="Dashpanel.html">Dashboard</a></li>
         <li><button id="customerBtn" class="sidebar-btn">Clients</button></li>
         <li><button id="planBtn" class="sidebar-btn">Subscription Plans</button></li>
-        <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Users</button></li>
+        <li><button id="pppoeBtn" class="sidebar-btn">PPPoE Setup</button></li>
+        <li><button id="hotspotBtn" class="sidebar-btn">Hotspot Setup</button></li>
         <li><a href="#">Invoices</a></li>
         <li><a href="#">Payments</a></li>
-        <li><a href="Payment.html">Payment Link</a></li>
+        <li><button id="paymentBtn" class="sidebar-btn">Link Payment Account</button></li>
         <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
         <li><button id="usageBtn" class="sidebar-btn">Usage Logs</button></li>
         <li><a href="logout.php">Logout</a></li>
@@ -303,7 +305,69 @@
   </div>
 </div>
 
-  
+<div class="modal-overlay" id="hotspotModal">
+    <div class="Modal-content">
+      <div class="container">
+        <span class="close" id="hotspotClose">&times;</span>
+    <h2>Configure Hotspot Plan</h2>
+
+  <form id="hotspotPlanForm">
+    <!-- Plan Details -->
+    <fieldset>
+      <legend>Plan Details</legend>
+      <input type="text" id="planName" placeholder="Plan Name" required />
+      <input type="number" id="planPrice" placeholder="Price (KES)" required />
+      <input type="text" id="planDuration" placeholder="Duration (e.g., 1h, 1d, 30m)" required />
+      <input type="text" id="planSpeed" placeholder="Speed (e.g., 2M/1M)" required />
+    </fieldset>
+
+    <!-- MikroTik Configuration -->
+     <!-- MikroTik Configuration -->
+  <fieldset>
+    <legend>MikroTik Hotspot Settings</legend>
+
+    <select id="mikrotikServer" required>
+      <option value="">Select Hotspot Server</option>
+    </select>
+
+    <select id="mikrotikProfile" required>
+      <option value="">Select Hotspot Profile</option>
+    </select>
+    <div id="hotspotLoaders" style="display: none; margin: 10px 0;">
+  <span>Loading hotspot configurations...</span>
+  <div class="spinner"></div>
+</div>
+
+
+    <input type="text" id="sharedSecret" placeholder="Shared Secret (if any)" />
+  </fieldset>
+    <button type="submit">Save Plan</button>
+  </form>
+
+  <!-- Table to list existing hotspot plans -->
+  <div class="table-container">
+    <h3>Available Hotspot Plans</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Price</th>
+          <th>Duration</th>
+          <th>Speed</th>
+          <th>Server</th>
+          <th>Profile</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="hotspotPlansTable">
+        <!-- Dynamic Rows Inserted by JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+    </div>
+</div>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const form = document.getElementById('connectForm');
@@ -409,6 +473,7 @@ document.getElementById('downloadInvoiceReport')?.addEventListener('click', () =
     <script src="js/Customer.js"></script>
     <script src="js/Plans.js"></script>
     <script src="js/Script.js"></script>
+    <script src="js/hotspotPlan.js"></script>
     
 </body>
 </html>

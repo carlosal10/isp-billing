@@ -44,6 +44,9 @@ const statsRoutes = require('./routes/Stats');
 const payProcessRoutes = require('./routes/PayProcess');
 const mikrotikUserRoutes = require('./routes/mikrotikUser');
 const mikrotikConnect = require('./routes/mikrotikConnect');
+const hotspotPlansRouter = require('./routes/hotspotPlans');
+const hotspotRoutes = require('./routes/hotspot');
+
 
 app.use('/api/customers', customerRoutes);
 app.use('/api/plans', planRoutes);
@@ -54,6 +57,9 @@ app.use('/api', statsRoutes);
 app.use('/api/payProcess', payProcessRoutes);
 app.use('/api/mikrotik/users', mikrotikUserRoutes);
 app.use('/api/connect', mikrotikConnect);
+app.use('/api/hotspot-plans', hotspotPlansRouter);
+app.use('/api/hotspot', hotspotRoutes);
+
 
 app.use('*', (req, res) => {
   res.status(404).json({ message: `Route not found: ${req.originalUrl}` });
