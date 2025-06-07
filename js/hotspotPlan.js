@@ -137,46 +137,62 @@ const hotspotApiUrl = 'https://isp-billing-uq58.onrender.com/api/hotspot-plans';
 
  document.addEventListener('DOMContentLoaded', () => {
   const serverSelect = document.getElementById('mikrotikServer');
+const loaderDiv = document.getElementById('hotspotLoaders');
+
+async function loadHotspotServers() {
+  loaderDiv.style.display = 'block';
+
+  try {
+    const res = await fetch('https://isp-billing-uq58.onrender.com/api/hotspot/servers');
+    const data = await res.json();
+
+    // Ensure we have the expected array
+    const servers = data.servers;
+    if (!Array.isArray(servers)) throw new Error('Invalid server list format');
+
+    serverSelect.innerHTML = '<option value="">Select Hotspot Server</option>';
+    
+    servers.forEach(server => {
+      const option = document.createElement('option');
+      option.value = server.name;
+      option.textContent = `${server.name} (${server.interface || 'no interface'})`;
+      serverSelect.appendChild(option);
+    });
+
+  } catch (err) {
+    console.error('Failed to load hotspot servers:', err);
+  } finally {
+    loaderDiv.style.display = 'none';
+  }
+}
+
+
   const profileSelect = document.getElementById('mikrotikProfile');
-  const loaderDiv = document.getElementById('hotspotLoaders');
+async function loadHotspotProfiles() {
+  loaderDiv.style.display = 'block';
 
-  async function loadHotspotServers() {
-    loaderDiv.style.display = 'block';
-    try {
-      const res = await fetch('https://isp-billing-uq58.onrender.com/api/hotspot/servers');
-      const servers = await res.json();
-      serverSelect.innerHTML = '<option value="">Select Hotspot Server</option>';
-      servers.forEach(server => {
-        const option = document.createElement('option');
-        option.value = server.name;
-        option.textContent = `${server.name} (${server.interface})`;
-        serverSelect.appendChild(option);
-      });
-    } catch (err) {
-      console.error('Failed to load hotspot servers:', err);
-    } finally {
-      loaderDiv.style.display = 'none';
-    }
-  }
+  try {
+    const res = await fetch('https://isp-billing-uq58.onrender.com/api/hotspot/profiles');
+    const data = await res.json();
 
-  async function loadHotspotProfiles() {
-    loaderDiv.style.display = 'block';
-    try {
-      const res = await fetch('https://isp-billing-uq58.onrender.com/api/hotspot/profiles');
-      const profiles = await res.json();
-      profileSelect.innerHTML = '<option value="">Select Hotspot Profile</option>';
-      profiles.forEach(profile => {
-        const option = document.createElement('option');
-        option.value = profile.name;
-        option.textContent = `${profile.name} (${profile.rateLimit || 'no limit'})`;
-        profileSelect.appendChild(option);
-      });
-    } catch (err) {
-      console.error('Failed to load hotspot profiles:', err);
-    } finally {
-      loaderDiv.style.display = 'none';
-    }
+    const profiles = data.profiles;
+    if (!Array.isArray(profiles)) throw new Error('Invalid profile list format');
+
+    profileSelect.innerHTML = '<option value="">Select Hotspot Profile</option>';
+
+    profiles.forEach(profile => {
+      const option = document.createElement('option');
+      option.value = profile.name;
+      option.textContent = `${profile.name} (${profile.rateLimit || 'no limit'})`;
+      profileSelect.appendChild(option);
+    });
+
+  } catch (err) {
+    console.error('Failed to load hotspot profiles:', err);
+  } finally {
+    loaderDiv.style.display = 'none';
   }
+}
 
   // Trigger both
   loadHotspotServers();
