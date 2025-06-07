@@ -11,9 +11,9 @@ const hotspotApiUrl = 'https://isp-billing-uq58.onrender.com/api/hotspot-plans';
       e.preventDefault();
 
       const plan = {
-        name: document.getElementById('planName').value.trim(),
-        price: parseFloat(document.getElementById('planPrice').value.trim()),
-        duration: document.getElementById('planDuration').value.trim(),
+        name: document.getElementById('plan-Name').value.trim(),
+        price: parseFloat(document.getElementById('plan-Price').value.trim()),
+        duration: document.getElementById('plan-Duration').value.trim(),
         speed: document.getElementById('planSpeed').value.trim(),
         mikrotikServer: document.getElementById('mikrotikServer').value,
         mikrotikProfile: document.getElementById('mikrotikProfile').value,
@@ -106,9 +106,9 @@ const hotspotApiUrl = 'https://isp-billing-uq58.onrender.com/api/hotspot-plans';
       const response = await fetch(`${hotspotApiUrl}/${id}`);
       const plan = await response.json();
 
-      document.getElementById('planName').value = plan.name;
-      document.getElementById('planPrice').value = plan.price;
-      document.getElementById('planDuration').value = plan.duration;
+      document.getElementById('plan-Name').value = plan.name;
+      document.getElementById('plan-Price').value = plan.price;
+      document.getElementById('plan-Duration').value = plan.duration;
       document.getElementById('planSpeed').value = plan.speed;
       document.getElementById('mikrotikServer').value = plan.mikrotikServer;
       document.getElementById('mikrotikProfile').value = plan.mikrotikProfile;
