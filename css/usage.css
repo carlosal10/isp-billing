@@ -97,34 +97,70 @@ canvas {
   width: 100% !important;
   height: auto !important;
 }
-.modal-overlay{
-    display: none;
-    position: fixed;
-    z-index: 1001;
-    padding-top: 60px;
-    left: 20%;
-    top: 20%;
-    width: 90%;
-    height: 100%;
-    overflow: auto;
-    background-color: #f9ebea;
-}
-.modal-overlay .modal-content {
-  margin: auto;
-  background: white;
-  padding: 2rem;
-  border-radius: 10px;
-  max-width: 600px;
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* semi-transparent dark overlay */
+  display: none; /* hidden by default */
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
 }
+
+/* Modal Content */
+.usageModal-content {
+  background-color: #fff;
+  width: 80%;
+  height: 90%;
+  border-radius: 8px;
+  overflow-y: auto;
+  padding: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-left: 10%;
+}
+
+/* Close Button */
+.close {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  transition: color 0.2s ease-in-out;
+}
+
+.close:hover {
+  color: #e00;
+}
+
 /* Responsive tweaks */
 @media (max-width: 768px) {
   h2, h3 {
     font-size: 1.2rem;
     text-align: center;
   }
+ .modal-content {
+    width: 95%;
+    height: 90%;
+    padding: 15px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
 
+  .close {
+    top: 10px;
+    right: 15px;
+    font-size: 20px;
+  }
   table th, table td {
     font-size: 0.85rem;
     padding: 0.5rem;

@@ -3,16 +3,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     const addPlanButton = document.getElementById('addPlanButton');
     const addPlanForm = document.getElementById('addPlanForm');
-    const closePlanFormButton = document.getElementById('closePlanForm');
+    const closePlanFormButton = document.getElementById('closeAddPlanForm'); // fixed ID
     const planForm = document.getElementById('planForm');
     let editingPlanId = null;
 
-    // Show the add plan form
     addPlanButton.addEventListener('click', () => {
         addPlanForm.style.display = 'block';
     });
 
-    // Close the add plan form
     closePlanFormButton.addEventListener('click', () => {
         addPlanForm.style.display = 'none';
     });

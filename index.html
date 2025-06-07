@@ -12,17 +12,17 @@
     <link rel="icon" type="image/png" sizes="32x32" href="isp-billing\favicon-32x32.png">
 </head>
 <body>
-       <!-- Hamburger Menu (visible on mobile only) -->
-<div class="hamburger" onclick="toggleSidebar()">
-    ☰
-</div>
-<div><button id="desktopSidebarToggle" class="sidebar-toggle">☰ MENU</button>
-</div>
+  <!-- Hamburger Menu -->
+<div class="hamburger" onclick="toggleSidebar()">☰</div>
+
+<!-- Desktop Sidebar Toggle -->
+<div><button id="desktopSidebarToggle" class="sidebar-toggle">☰ MENU</button></div>
+
 <!-- Sidebar -->
-<div id="sidebar" class="sidebar">
+<nav id="sidebar" class="sidebar">
     <div class="sidebar-header">
         <h2>ISP Billing</h2>
-        <span class="close-btn" onclick="toggleSidebar()"></span>
+        <span class="close-btn" onclick="toggleSidebar()">X</span>
     </div>
     <ul>
         <li><a href="Dashpanel.html">Dashboard</a></li>
@@ -34,9 +34,9 @@
         <li><a href="Payment.html">Payment Link</a></li>
         <li><button id="connectBtn" class="sidebar-btn">Connect To Mikrotik</button></li>
         <li><button id="usageBtn" class="sidebar-btn">Usage Logs</button></li>
-        <li><a href="logout.php"><button type="button">Logout</button></a></li>
+        <li><a href="logout.php">Logout</a></li>
     </ul>
-</div>
+</nav>
 
 
     <div class="main-content">
@@ -83,23 +83,22 @@
 
 
     </div>
-    <div id="pppoeModal" class="modal">
+    <!-- PPPoE Modal -->
+<div id="pppoeModal" class="modal-overlay">
   <div class="modal-content">
-    <span class="close">&times;</span>
+    <span id="pppoeClose" class="close">X</span>
+
     <h2>Manage PPPoE Users</h2>
 
     <!-- Add User Form -->
-    <!-- PPPoE Add User Form -->
-<form id="addUserForm">
-    <input type="text" id="pppoeUsername" placeholder="Username" required>
-    <input type="password" id="pppoePassword" placeholder="Password" required>
-    <select id="profile" required>
-    <option value="">Loading profiles...</option>
-</select>
-
-    <button type="submit">Add User</button>
-</form>
-
+    <form id="addUserForm">
+      <input type="text" id="pppoeUsername" placeholder="Username" required>
+      <input type="password" id="pppoePassword" placeholder="Password" required>
+      <select id="profile" required>
+        <option value="">Loading profiles...</option>
+      </select>
+      <button type="submit">Add User</button>
+    </form>
 
     <!-- Update User Password -->
     <form id="updateUserForm">
@@ -116,190 +115,191 @@
   </div>
 </div>
 
-   <!-- Add Plan Form -->
-    <div class="modal-overlay" id="Modal">
-  <div class="modal-content">
-        <button id="addPlanButton">Click to Add</button>
-        <div id="addPlanForm" style="display: none;">
-            <button id="closePlanForm">X</button>
-            <h2>Add Plan</h2>
-            <form id="planForm">
-                <input type="text" id="planName" placeholder="Plan Name" required>
-                <input type="text" id="planDescription" placeholder="Description" required>
-                <input type="number" id="planPrice" placeholder="Price" required>
-                <input type="text" id="planDuration" placeholder="Duration (e.g., monthly)" required>
-                
-                <button type="submit">Save</button>
-            </form>
-        </div>
-    </div>
 
-    <div class="table-container">
-        <!-- Plans Table -->
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th>Price</th>
-                    <th>Duration</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="plansTable"></tbody>
-        </table>
-    </div>
-</div>
-<!-- Add Customer Modal -->
-<div class="modal-overlay" id="Modal">
+  <!-- Plan Modal -->
+<div class="modal-overlay" id="planModal">
   <div class="modal-content">
-   
+    <!-- This closes the entire modal -->
+    <span id="planClose" class="close">X</span>
+
+    <button id="addPlanButton">Click to Add</button>
+
+    <!-- Internal form toggle section -->
+    <div id="addPlanForm" style="display: none;">
+      <button id="closeAddPlanForm">X</button>
+      <h2>Add Plan</h2>
+      <form id="planForm">
+        <input type="text" id="planName" placeholder="Plan Name" required>
+        <input type="text" id="planDescription" placeholder="Description" required>
+        <input type="number" id="planPrice" placeholder="Price" required>
+        <input type="text" id="planDuration" placeholder="Duration (e.g., monthly)" required>
+        <button type="submit">Save</button>
+      </form>
+    </div>
+  
+
+   <div class="table-container">
+    <!-- Plans Table -->
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Price</th>
+          <th>Duration</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="plansTable"></tbody>
+    </table>
+   </div>
+  </div>
+</div>
+
+<!-- Add Customer Modal -->
+<div class="modal-overlay" id="customerModal">
+  <div class="modal-content">
+    <!-- Modal close button -->
+    <span id="customerClose" class="close">X</span>
+
     <h2>Add Clients</h2>
-     <!-- Add Customer Section -->
+
+    <!-- Add Customer Section -->
     <div class="container">
-        <button id="addCustomerButton">Click to Add</button>
-        <div id="formOverlay" style="display: none;"></div> <!-- Overlay for popup form -->
-        
-        <!-- Add Customer Form -->
-        <div id="addCustomerForm" style="display: none;">
-            <button id="closeForm">X</button>
-            <form id="customerForm">
-                <input type="text" id="name" placeholder="Name" required>
-                <input type="email" id="email" placeholder="Email" required>
-                <input type="text" id="phone" placeholder="Phone" required>
-                <input type="text" id="address" placeholder="Address">
-                
-                <!-- Auto-generated Account Number -->
-                <input type="text" id="accountNumber" placeholder="Account Number" readonly>
-                
-                <!-- Plan Dropdown -->
-                <label>Select Plan:</label>
-                <select id="plan" required>
-                    <option value="">-- Select Plan --</option>
-                </select>
-                
-                <input type="text" id="routerIp" placeholder="Router IP (Optional)">
-                <button type="submit">Save</button>
-            </form>
-        </div>
+      <button id="addCustomerButton">Click to Add</button>
+      <div id="formOverlay" style="display: none;"></div>
+
+      <!-- Add Customer Form -->
+      <div id="addCustomerForm" style="display: none;">
+        <button id="closeAddCustomerForm">X</button>
+        <form id="customerForm">
+          <input type="text" id="name" placeholder="Name" required>
+          <input type="email" id="email" placeholder="Email" required>
+          <input type="text" id="phone" placeholder="Phone" required>
+          <input type="text" id="address" placeholder="Address">
+          <input type="text" id="accountNumber" placeholder="Account Number" readonly>
+
+          <!-- Plan Dropdown -->
+          <label>Select Plan:</label>
+          <select id="plan" required>
+            <option value="">-- Select Plan --</option>
+          </select>
+
+          <input type="text" id="routerIp" placeholder="Router IP (Optional)">
+          <button type="submit">Save</button>
+        </form>
+      </div>
     </div>
 
     <!-- Customers Table -->
-    <div class="table-container">    
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Address</th>
-                    <th>Account Number</th>
-                    <th>Plan</th>
-                    <th>Router IP</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="customersTable"></tbody>
-        </table>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Account Number</th>
+            <th>Plan</th>
+            <th>Router IP</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="customersTable"></tbody>
+      </table>
     </div>
   </div>
-    <!-- Connect to mikrotik modal -->
 </div>
-   <div class="modal-overlay" id="Modal">
+
+    <!-- Connect to mikrotik modal -->
+<!-- Connect to Mikrotik Modal -->
+<div class="modal-overlay" id="connectModal">
   <div class="modal-content">
-            
-            <h2>Connect To Mikrotik</h2>
-  <form id="connectForm" autocomplete="on">
-    <label for="ip">Router IP:</label>
-    <input type="text" id="ip" required />
+    <span id="connectClose" class="close">X</span>
 
-    <label for="username">Username:</label>
-    <input type="text" id="username" required />
+    <h2>Connect To Mikrotik</h2>
+    <form id="connectForm" autocomplete="on">
+      <label for="ip">Router IP:</label>
+      <input type="text" id="ip" required />
 
-    <label for="password">Password:</label>
-    <input type="password" id="password" required />
+      <label for="username">Username:</label>
+      <input type="text" id="username" required />
 
-    <button type="submit" id="submitBtn">Connect</button>
-  </form>
+      <label for="password">Password:</label>
+      <input type="password" id="password" required />
 
-  <div id="loading"></div>
-  <div id="response"></div>
-<div class="modal-overlay" id="Modal">
-  <div class="modal-content">
-            <span class="close" id="usageClose">&times;</span>
-            <h2>Logs</h2>
-            <!-- Graphs Section -->
-            <section class="dashboard-section">
-                  <h2>PPPoE Usage Trends</h2>
-                  <canvas id="usageTrendsChart" height="100"></canvas>
-            </section>
+      <button type="submit" id="submitBtn">Connect</button>
+    </form>
 
-            <section class="dashboard-section">
-              <h2>Active PPPoE Users (Daily)</h2>
-              <canvas id="activeUsersChart" height="100"></canvas>
-            </section>
+    <div id="loading"></div>
+    <div id="response"></div>
+  </div> <!-- Close modal-content -->
+</div> <!-- Close modal-overlay -->
 
-        <!-- Reports Section -->
-            <section class="dashboard-section">
-              <h2>Reports</h2>
-              <div class="reports-buttons">
-                <button id="downloadUsageReport">Download Usage Report</button>
-                <button id="downloadInvoiceReport">Download Invoice Report</button>
-              </div>
-            </section>
-            <section id="graphSection">
-              <h2>Usage Analytics</h2>
+<div class="modal-overlay" id="usageModal">
+  <div class="usageModal-content">
+    <span class="close" id="usageClose">&times;</span>
+    <h2>Usage Logs & Reports</h2>
 
-                  <div class="chart-card">
-                    <h3>Daily Active Users</h3>
-                        <canvas id="activeUsersChart"></canvas>
-                  </div>
+    <!-- Graphs Section -->
+    <section class="dashboard-section">
+      <h3>PPPoE Usage Trends</h3>
+      <canvas id="usageTrendsChart" height="100"></canvas>
+    </section>
 
-                  <div class="chart-card">
-                        <h3>Daily Usage Trends</h3>
-                            <canvas id="usageTrendsChart"></canvas>
-                  </div>
-            </section>
-            <section id="reportsSection">
-              <h2>Reports</h2>
+    <section class="dashboard-section">
+      <h3>Active PPPoE Users (Daily)</h3>
+      <canvas id="activeUsersChart" height="100"></canvas>
+    </section>
 
-                  <div class="report-card">
-                    <h3>Invoices</h3>
-                    <table id="invoiceTable">
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Customer</th>
-                          <th>Amount</th>
-                          <th>Date</th>
-                          <th>Download</th>
-                        </tr>
-                         </thead>
-                          <tbody></tbody>
-                        </table>
-                  </div>
+    <!-- Reports Section -->
+    <section class="dashboard-section">
+      <h3>Reports</h3>
+      <div class="reports-buttons">
+        <button id="downloadUsageReport">Download Usage Report</button>
+        <button id="downloadInvoiceReport">Download Invoice Report</button>
+      </div>
+    </section>
 
-                  <div class="report-card">
-                <h3>Usage Logs</h3>
-                    <table id="usageLogsTable">
-              <thead>
-                    <tr>
-                          <th>#</th>
-                          <th>User</th>
-                          <th>Date</th>
-                          <th>Bytes In</th>
-                          <th>Bytes Out</th>
-                    </tr>
-              </thead>
-              <tbody></tbody>
-                </table>
-                  </div>
-                </section>
+    <!-- Usage Logs Table -->
+    <section class="dashboard-section" id="usageLogsSection">
+      <h3>Usage Logs</h3>
+      <table id="usageLogsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>User</th>
+            <th>Date</th>
+            <th>Bytes In</th>
+            <th>Bytes Out</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
+    <!-- Invoice Table -->
+    <section class="dashboard-section" id="invoiceSection">
+      <h3>Invoices</h3>
+      <table id="invoiceTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Download</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+</div>
 
-        </div>
   
   <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -406,6 +406,6 @@ document.getElementById('downloadInvoiceReport')?.addEventListener('click', () =
     <script src="js/Customer.js"></script>
     <script src="js/Plans.js"></script>
     <script src="js/Script.js"></script>
-    <script src="js/connect.js"></script>
+    
 </body>
 </html>

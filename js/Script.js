@@ -15,6 +15,10 @@ function bindModal(buttonId, modalId, closeSelector) {
   const modal = document.getElementById(modalId);
   const close = document.querySelector(closeSelector);
 
+  if (!btn) console.warn(`${buttonId} not found`);
+  if (!modal) console.warn(`${modalId} not found`);
+  if (!close) console.warn(`${closeSelector} not found`);
+
   if (!btn || !modal || !close) return;
 
   btn.addEventListener("click", () => {
@@ -33,18 +37,14 @@ function bindModal(buttonId, modalId, closeSelector) {
 }
 
 // ====== Modal Bindings ======
-bindModal("pppoeBtn", "modal-overlay", ".close.pppoe");
-bindModal("planBtn", "modal-overlay", "#closePlanForm");
-bindModal("customerBtn", "modal-overlay", "#closeCustomerForm");
-bindModal("connectBtn", "modal-overlay", "#connectClose");
-bindModal("usageBtn", "modal-overlay", "#usageClose");
-
-      console.log("Clicked usageBtn");
-document.getElementById("usageBtn").addEventListener("click", () => {
-  console.log("Opening usageModal");
-  const modal = document.getElementById("usageModal");
-  modal.style.display = "block";
+window.addEventListener("DOMContentLoaded", () => {
+  bindModal("pppoeBtn", "pppoeModal", "#pppoeClose");
+  bindModal("planBtn", "planModal", "#planClose");
+  bindModal("customerBtn", "customerModal", "#customerClose");
+  bindModal("connectBtn", "connectModal", "#connectClose");
+  bindModal("usageBtn", "usageModal", "#usageClose");
 });
+
 // ====== Auth: Login Handler ======
 document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
