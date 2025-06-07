@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hotspot Portal</title>
+  <link rel="stylesheet" href="css/portal.css">
+</head>
+<body>
+  <div class="portal-container">
+    <header>
+      <h1>Welcome to XYZ WiFi</h1>
+      <p>Choose a plan and get connected instantly</p>
+    </header>
+
+    <section id="plans" class="plans-section">
+      <h2>Available Hotspot Plans</h2>
+      <div id="plansList" class="plans-list">
+        <!-- Dynamic plan cards will be injected here -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Checkout Modal -->
+  <div id="checkoutModal" class="modal hidden">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <h2>Complete Your Purchase</h2>
+      <div id="selectedPlanDetails"></div>
+      <input type="text" id="customerPhone" placeholder="Enter your phone number" required />
+      <button onclick="payAndConnect()">Pay & Connect</button>
+    </div>
+  </div>
+
+  <script src="js/hotspot-portal.js"></script>
+</body>
+</html>
