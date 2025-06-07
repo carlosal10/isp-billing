@@ -1,4 +1,4 @@
-const MikroTikAPI = require('mikrotik-api'); // or your preferred lib
+const { RouterOSAPI } = require('routeros-client'); // or your preferred lib
 const { getRouterConfig } = require('../utils/routerConfig'); // e.g., from DB
 
 // Fetch Hotspot Servers
