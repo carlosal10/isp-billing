@@ -3,7 +3,7 @@ const HotspotPlan = require('../models/HotspotPlan');
 const RegisteredHotspotUser = require('../models/RegisteredHotspotUser');
 const { connectToMikroTik } = require('../routes/mikrotikConnect');
 const HotspotAccess = require('../models/HotspotAccess');
-const { getMAC } = require('../routes/getMac');
+const { getMAC } = require('../utils/getMac');
 const { addHotspotUser } = require('../routes/mikrotikConnect');
 
 // POST: User chooses plan
