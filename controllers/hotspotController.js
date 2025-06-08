@@ -6,8 +6,7 @@ const HotspotAccess = require('../models/HotspotAccess');
 const { getMAC } = require('../utils/getMac');
 const { addHotspotUser } = require('../routes/mikrotikConnect');
 
-// POST: User chooses plan
-router.post('/connect', async (req, res) => {
+exports.connectHotspotUser = async (req, res) => {
   const { planId, phone } = req.body;
   if (!planId || !phone) return res.status(400).json({ error: 'Plan and phone required' });
 
@@ -16,11 +15,18 @@ router.post('/connect', async (req, res) => {
     const plan = await HotspotPlan.findById(planId);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-    // Generate user credentials
+    const existing = await RegisteredHotspotUser.findOne({
+      mac,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'This device already has an active plan.' });
+    }
+
     const username = `HS${Date.now().toString().slice(-6)}`;
     const password = Math.random().toString(36).substring(2, 8);
 
-    // Add to MikroTik
     await addHotspotUser({
       server: plan.mikrotikServer,
       profile: plan.mikrotikProfile,
@@ -28,18 +34,7 @@ router.post('/connect', async (req, res) => {
       password,
       macAddress: mac,
     });
-    
-    const existing = await RegisteredHotspotUser.findOne({
-  mac,
-  expiresAt: { $gt: new Date() }
-  });
 
-  if (existing) {
-  return res.status(409).json({ error: 'This device already has an active plan.' });
-  }
-
-
-    // Save to DB
     const access = new HotspotAccess({
       phone,
       macAddress: mac,
@@ -57,7 +52,7 @@ router.post('/connect', async (req, res) => {
     console.error('Connection error:', err);
     res.status(500).json({ error: 'Failed to activate access' });
   }
-});
+};
 
 
 exports.getAvailableHotspotPlans = async (req, res) => {

@@ -11,6 +11,7 @@ const {
   prepareCheckout,
   confirmPaymentAndGrantAccess,
   getReceipt
+   connectHotspotUser 
 } = require('../controllers/hotspotController'); // ✅ Hotspot flow handlers
 
 router.get('/servers', getHotspotServers);
@@ -19,5 +20,8 @@ router.get('/available-plans', getAvailableHotspotPlans);
 router.post('/prepare-checkout', prepareCheckout);
 router.post('/confirm-access', confirmPaymentAndGrantAccess);
 router.get('/receipt/:txnId', getReceipt);
+// POST: User chooses plan
+router.post('/connect', connectHotspotUser);
+
 
 module.exports = router;
