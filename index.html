@@ -368,6 +368,50 @@
 
     </div>
 </div>
+
+<!-- M-Pesa Settings Modal -->
+<div id="mpesa-settings-modal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeMpesaModal()" id="closempesa-settings-modal">&times;</span>
+    <h2>M-Pesa Payment Settings</h2>
+
+    <form id="mpesa-settings-form">
+      <div class="form-group">
+        <label for="businessName">Business Name</label>
+        <input type="text" id="businessName" name="businessName" placeholder="e.g. XYZ Networks" required>
+      </div>
+
+      <hr>
+      <h3>Paybill Settings</h3>
+
+      <div class="form-group">
+        <label for="paybillShortcode">Paybill Short Code</label>
+        <input type="text" id="paybillShortcode" name="paybillShortcode" placeholder="e.g. 123456" required>
+      </div>
+
+      <div class="form-group">
+        <label for="paybillPasskey">Paybill Passkey</label>
+        <input type="text" id="paybillPasskey" name="paybillPasskey" placeholder="Safaricom provided passkey" required>
+      </div>
+
+      <hr>
+      <h3>Buy Goods Settings</h3>
+
+      <div class="form-group">
+        <label for="buyGoodsTill">Till Number</label>
+        <input type="text" id="buyGoodsTill" name="buyGoodsTill" placeholder="e.g. 987654" required>
+      </div>
+
+      <div class="form-group">
+        <label for="buyGoodsPasskey">Buy Goods Passkey</label>
+        <input type="text" id="buyGoodsPasskey" name="buyGoodsPasskey" placeholder="Safaricom provided passkey" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </form>
+  </div>
+</div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const form = document.getElementById('connectForm');
@@ -474,6 +518,7 @@ document.getElementById('downloadInvoiceReport')?.addEventListener('click', () =
     <script src="js/Plans.js"></script>
     <script src="js/Script.js"></script>
     <script src="js/hotspotPlan.js"></script>
+     <script src="js/payment.js"></script>
     
 </body>
 </html>

@@ -1,6 +1,10 @@
+// routes/mikrotik/connect.js
 const express = require('express');
-const { RouterOSAPI } = require('routeros-client');
 const router = express.Router();
+const {
+  connectToMikrotik,
+  disconnectMikrotik
+} = require('../../mikrotikConnectionManager');
 
 router.post('/', async (req, res) => {
   const { ip, username, password } = req.body;
@@ -9,42 +13,30 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ success: false, message: 'All fields are required' });
   }
 
-  const mikrotikClient = new RouterOSAPI({
-    host: ip,
-    user: username,
-    password: password,
-    port: 8728,
-    timeout: 30000
-  });
-
   try {
-    await mikrotikClient.connect();
-    const identity = await mikrotikClient.write('/system/identity/print');
-    mikrotikClient.close();
+    const client = await connectToMikrotik({ host: ip, user: username, password });
 
-    if (!identity || identity.length === 0 || !identity[0].name) {
-      return res.status(500).json({ success: false, message: 'Connected but failed to read identity' });
-    }
+    const identity = await client.write('/system/identity/print');
+    const routerName = identity[0]?.name || 'Unknown';
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: `Connected to ${identity[0].name}`,
+      message: `Connected to ${routerName}`,
       router: identity
     });
 
- } catch (error) {
-    console.error('💥 Connect Error (full):', error);
+  } catch (error) {
+    console.error('❌ Connection error:', error.message);
 
     let errorType = 'Unknown error';
+    const msg = error.message.toLowerCase();
 
-    if (error.message.includes('timeout') || error.errno === -110) {
+    if (msg.includes('timeout') || error.code === 'ETIMEDOUT') {
       errorType = 'Connection timed out. Router may be unreachable or blocked.';
-    } else if (error.message.includes('ECONNREFUSED')) {
+    } else if (msg.includes('refused')) {
       errorType = 'Connection refused. Router API port may be closed or filtered.';
-    } else if (error.message.toLowerCase().includes('login failure')) {
+    } else if (msg.includes('login failure')) {
       errorType = 'Invalid username or password.';
-    } else if (error.code === 'ETIMEDOUT') {
-      errorType = 'Timeout error. Router might be offline or unreachable.';
     }
 
     return res.status(500).json({

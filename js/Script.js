@@ -44,6 +44,7 @@ window.addEventListener("DOMContentLoaded", () => {
   bindModal("connectBtn", "connectModal", "#connectClose");
   bindModal("usageBtn", "usageModal", "#usageClose");
   bindModal("hotspotBtn", "hotspotModal", "#hotspotClose");
+  bindModal("paymentBtn", "mpesa-settings-modal", "#closempesa-settings-modal");
 });
 
 // ====== Auth: Login Handler ======

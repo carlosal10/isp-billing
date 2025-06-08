@@ -1,61 +1,49 @@
-document.getElementById("paymentForm").addEventListener("submit", async function (e) {
+  const mpesaSettingsModal = document.getElementById('mpesa-settings-modal');
+  const mpesaSettingsForm = document.getElementById('mpesa-settings-form');
+
+  // Sidebar button trigger
+  document.getElementById('mpesa-settings-btn').addEventListener('click', () => {
+    mpesaSettingsModal.style.display = 'block';
+  });
+
+  function closeMpesaModal() {
+    mpesaSettingsModal.style.display = 'none';
+  }
+
+  mpesaSettingsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const accountNumber = document.getElementById("accountNumber").value;
-    const phoneNumber = document.getElementById("phoneNumber").value;
-    const amount = parseFloat(document.getElementById("amount").value);
-
-    if (!accountNumber || !phoneNumber || !amount) {
-        alert("Please fill in all fields.");
-        return;
-    }
+    const data = {
+      businessName: mpesaSettingsForm.businessName.value.trim(),
+      paybillShortcode: mpesaSettingsForm.paybillShortcode.value.trim(),
+      paybillPasskey: mpesaSettingsForm.paybillPasskey.value.trim(),
+      buyGoodsTill: mpesaSettingsForm.buyGoodsTill.value.trim(),
+      buyGoodsPasskey: mpesaSettingsForm.buyGoodsPasskey.value.trim(),
+    };
 
     try {
-        // Fetch customer data using the account number
-        const response = await fetch(`https://isp-billing-uq58.onrender.com/api/customers/${accountNumber}`);
+      const res = await fetch('/api/mpesa/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
 
-        const customer = await response.json();
-
-        if (!customer) {
-            alert("Customer not found!");
-            return;
-        }
-
-        // Validate the amount against the customer's assigned plan price
-        const planPrice = customer.plan?.price || 0;
-
-        if (amount < planPrice) {
-            alert(`Amount should be at least the price of the assigned plan: ${planPrice}`);
-            return;
-        }
-
-        // If the amount is valid, proceed with the payment
-        const paymentData = {
-            accountNumber: accountNumber,
-            phoneNumber: phoneNumber,
-            amount: amount,
-        };
-
-        // Send payment data to backend
-        const paymentResponse = await fetch('https://isp-billing-uq58.onrender.com/api/payProcess/stkpush', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(paymentData),
-        });
-
-        const paymentResult = await paymentResponse.json();
-
-        if (paymentResponse.ok) {
-            alert("Payment initiated successfully!");
-            console.log(paymentResult);
-        } else {
-            alert("Payment initiation failed.");
-            console.error(paymentResult);
-        }
+      const result = await res.json();
+      if (result.success) {
+        alert('M-Pesa settings saved successfully!');
+        closeMpesaModal();
+      } else {
+        alert('Failed to save settings: ' + result.message);
+      }
     } catch (err) {
-        console.error("Error during payment:", err);
-        alert("An error occurred. Please try again.");
+      console.error('Error saving M-Pesa settings:', err);
+      alert('An error occurred while saving settings.');
     }
-});
+  });
+
+  // Close modal on outside click
+  window.onclick = function (event) {
+    if (event.target == mpesaSettingsModal) {
+      mpesaSettingsModal.style.display = 'none';
+    }
+  };
