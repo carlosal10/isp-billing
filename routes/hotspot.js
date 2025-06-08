@@ -11,7 +11,6 @@ const {
   prepareCheckout,
   confirmPaymentAndGrantAccess,
   getReceipt
-   connectHotspotUser 
 } = require('../controllers/hotspotController'); // ✅ Hotspot flow handlers
 
 router.get('/servers', getHotspotServers);
