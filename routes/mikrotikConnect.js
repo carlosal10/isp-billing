@@ -4,7 +4,7 @@ const router = express.Router();
 const {
   connectToMikrotik,
   disconnectMikrotik
-} = require('../../mikrotikConnectionManager');
+} = require('../utils/mikrotikConnectionManager');
 
 router.post('/', async (req, res) => {
   const { ip, username, password } = req.body;
