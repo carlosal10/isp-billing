@@ -4,14 +4,15 @@ const router = express.Router();
 const {
   getHotspotServers,
   getHotspotProfiles
-} = require('../controllers/mikrotikController'); // ✅ MikroTik stuff
+} = require('../controllers/mikrotikController');
 
 const {
   getAvailableHotspotPlans,
   prepareCheckout,
   confirmPaymentAndGrantAccess,
-  getReceipt
-} = require('../controllers/hotspotController'); // ✅ Hotspot flow handlers
+  getReceipt,
+  connectHotspotUser 
+} = require('../controllers/hotspotController');
 
 router.get('/servers', getHotspotServers);
 router.get('/profiles', getHotspotProfiles);
@@ -19,8 +20,6 @@ router.get('/available-plans', getAvailableHotspotPlans);
 router.post('/prepare-checkout', prepareCheckout);
 router.post('/confirm-access', confirmPaymentAndGrantAccess);
 router.get('/receipt/:txnId', getReceipt);
-// POST: User chooses plan
-router.post('/connect', connectHotspotUser);
-
+router.post('/connect', connectHotspotUser); 
 
 module.exports = router;
