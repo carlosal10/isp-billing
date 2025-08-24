@@ -8,7 +8,7 @@ import "./PlanModal.css"; // ✅ custom styles
 export default function PlanModal({ isOpen, onClose }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
-  const API_URL = "https://isp-billing-uq58.onrender.com/plans";
+  const API_URL = "https://isp-billing-uq58.onrender.com/api/plans";
 
   // Fetch plans when modal opens
   useEffect(() => {
