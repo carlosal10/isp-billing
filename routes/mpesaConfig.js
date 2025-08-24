@@ -1,32 +1,41 @@
-// routes/mpesaConfig.js
 const express = require('express');
 const router = express.Router();
-const MpesaConfig = require('../models/MpesaConfig');
+const PaymentConfig = require('../models/PaymentConfig');
 
+// Save or update payment integration settings
 router.post('/save', async (req, res) => {
-  const { ispId, payMethod, shortCode, passkey, consumerKey, consumerSecret } = req.body;
+  const { ispId, provider, settings } = req.body;
+
+  if (!ispId || !provider || !settings) {
+    return res.status(400).json({ error: 'ISP ID, provider, and settings are required.' });
+  }
 
   try {
-    const existing = await MpesaConfig.findOne({ ispId });
+    const existing = await PaymentConfig.findOne({ ispId, provider });
     if (existing) {
-      Object.assign(existing, { payMethod, shortCode, passkey, consumerKey, consumerSecret });
+      Object.assign(existing, settings);
       await existing.save();
-      return res.json({ message: 'M-Pesa settings updated successfully.' });
+      return res.json({ message: `${provider} settings updated successfully.` });
     }
 
-    await MpesaConfig.create({ ispId, payMethod, shortCode, passkey, consumerKey, consumerSecret });
-    res.json({ message: 'M-Pesa settings saved successfully.' });
+    await PaymentConfig.create({ ispId, provider, ...settings });
+    res.json({ message: `${provider} settings saved successfully.` });
   } catch (err) {
-    console.error('M-Pesa config error:', err);
-    res.status(500).json({ error: 'Failed to save settings.' });
+    console.error(`${provider} config error:`, err);
+    res.status(500).json({ error: `Failed to save ${provider} settings.` });
   }
 });
 
-router.get('/:ispId', async (req, res) => {
+// Load settings for a specific provider
+router.get('/:ispId/:provider', async (req, res) => {
   try {
-    const config = await MpesaConfig.findOne({ ispId: req.params.ispId });
+    const config = await PaymentConfig.findOne({
+      ispId: req.params.ispId,
+      provider: req.params.provider,
+    });
     res.json(config || {});
-  } catch {
+  } catch (err) {
+    console.error('Failed to load payment settings:', err);
     res.status(500).json({ error: 'Failed to load settings.' });
   }
 });

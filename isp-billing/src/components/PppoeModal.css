@@ -1,0 +1,145 @@
+/* PPPoE Modal Styling */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #ffffff;
+  padding: 2rem;
+  width: 100%;
+  max-width: 550px;
+  border-radius: 16px;
+  position: relative;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Close button */
+.close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  cursor: pointer;
+  font-size: 20px;
+  color: #333;
+  transition: color 0.2s ease-in-out;
+}
+.close:hover {
+  color: #d9534f;
+}
+
+/* Title */
+.modal-content h2 {
+  font-size: 1.4rem;
+  margin-bottom: 1.5rem;
+  color: #222;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Forms inside modal */
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 12px;
+}
+
+.modal-content input,
+.modal-content select {
+  margin-bottom: 12px;
+  padding: 0.8rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border 0.2s ease-in-out;
+}
+
+.modal-content input:focus,
+.modal-content select:focus {
+  border-color: #007bff;
+}
+
+/* Buttons */
+.modal-content button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0.8rem 1rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.25s ease-in-out, transform 0.15s;
+}
+
+.modal-content button:hover {
+  transform: translateY(-2px);
+}
+
+/* Specific button styles */
+.modal-content button[type="submit"] {
+  background: #007bff;
+  color: #fff;
+}
+
+.modal-content .remove-btn {
+  background: #d9534f;
+  color: #fff;
+}
+
+.modal-content .remove-btn:hover {
+  background: #c9302c;
+}
+
+/* Inline icons */
+.inline-icon {
+  font-size: 1.1rem;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive (Mobile first) */
+@media (max-width: 600px) {
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    padding: 1.2rem;
+    border-radius: 12px;
+  }
+
+  .modal-content h2 {
+    font-size: 1.2rem;
+  }
+
+  .modal-content input,
+  .modal-content select,
+  .modal-content button {
+    font-size: 0.9rem;
+    padding: 0.7rem;
+  }
+}

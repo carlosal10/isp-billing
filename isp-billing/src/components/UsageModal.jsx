@@ -1,44 +1,66 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Line, Bar } from "react-chartjs-2";
 import { FaDownload, FaTimes } from "react-icons/fa";
+import axios from "axios";
+import 'chart.js/auto';
+import "./UsageModal.css"; // ✅ custom styles
 
 const UsageModal = ({ isOpen, onClose }) => {
-  // Mock chart data
+  const [usageTrends, setUsageTrends] = useState([]);
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [usageLogs, setUsageLogs] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+    }
+  }, [isOpen]);
+
+  const fetchData = async () => {
+    try {
+      const [trendsRes, activeRes, logsRes, invoicesRes] = await Promise.all([
+        axios.get("https://isp-billing-uq58.onrender.com/pppoe/stats/usage-trends"),
+        axios.get("https://isp-billing-uq58.onrender.com/pppoe/stats/active-daily"),
+        axios.get("https://isp-billing-uq58.onrender.com/pppoe/logs"),
+        axios.get("https://isp-billing-uq58.onrender.com/pppoe/invoices"),
+      ]);
+
+      setUsageTrends(trendsRes.data);
+      setActiveUsers(activeRes.data);
+      setUsageLogs(logsRes.data);
+      setInvoices(invoicesRes.data);
+    } catch (err) {
+      console.error("Failed to fetch data", err);
+    }
+  };
+
+  // Prepare chart data
   const usageTrendsData = {
-    labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    labels: usageTrends.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
       {
         label: "Bandwidth Usage (GB)",
-        data: [10, 15, 8, 12, 20, 18, 25],
+        data: usageTrends.map(d => d.usagePerUser),
+        borderColor: "rgba(75,192,192,1)",
         borderWidth: 2,
       },
     ],
   };
 
   const activeUsersData = {
-    labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    labels: activeUsers.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
       {
         label: "Active Users",
-        data: [30, 40, 35, 50, 45, 60, 70],
+        data: activeUsers.map(d => d.activeUsersCount),
         backgroundColor: "rgba(54,162,235,0.5)",
       },
     ],
   };
-
-  // Mock logs
-  const usageLogs = [
-    { id: 1, user: "John Doe", date: "2025-08-21", in: "2GB", out: "1GB" },
-    { id: 2, user: "Jane Doe", date: "2025-08-22", in: "3GB", out: "2GB" },
-  ];
-
-  const invoices = [
-    { id: 1, customer: "John Doe", amount: "KES 1000", date: "2025-08-20" },
-    { id: 2, customer: "Jane Doe", amount: "KES 2000", date: "2025-08-21" },
-  ];
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
@@ -64,18 +86,8 @@ const UsageModal = ({ isOpen, onClose }) => {
         </CardContent>
       </Card>
 
-      {/* Reports */}
-      <Card className="mb-4">
-        <CardContent>
-          <h3 className="text-lg font-semibold mb-2">Reports</h3>
-          <Button className="flex items-center gap-2">
-            <FaDownload /> Download Usage Report
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* Usage Logs */}
-      <Card className="mb-4">
+      <Card className="mb-4 overflow-x-auto">
         <CardContent>
           <h3 className="text-lg font-semibold mb-2">Usage Logs</h3>
           <table className="w-full text-left border">
@@ -89,11 +101,11 @@ const UsageModal = ({ isOpen, onClose }) => {
               </tr>
             </thead>
             <tbody>
-              {usageLogs.map((log) => (
-                <tr key={log.id} className="border-t">
-                  <td className="p-2">{log.id}</td>
+              {usageLogs.map((log, idx) => (
+                <tr key={log._id || idx} className="border-t">
+                  <td className="p-2">{idx + 1}</td>
                   <td className="p-2">{log.user}</td>
-                  <td className="p-2">{log.date}</td>
+                  <td className="p-2">{new Date(log.date).toLocaleDateString()}</td>
                   <td className="p-2">{log.in}</td>
                   <td className="p-2">{log.out}</td>
                 </tr>
@@ -104,7 +116,7 @@ const UsageModal = ({ isOpen, onClose }) => {
       </Card>
 
       {/* Invoices */}
-      <Card className="mb-4">
+      <Card className="mb-4 overflow-x-auto">
         <CardContent>
           <h3 className="text-lg font-semibold mb-2">Invoices</h3>
           <table className="w-full text-left border">
@@ -118,12 +130,12 @@ const UsageModal = ({ isOpen, onClose }) => {
               </tr>
             </thead>
             <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-t">
-                  <td className="p-2">{invoice.id}</td>
-                  <td className="p-2">{invoice.customer}</td>
-                  <td className="p-2">{invoice.amount}</td>
-                  <td className="p-2">{invoice.date}</td>
+              {invoices.map((inv, idx) => (
+                <tr key={inv._id || idx} className="border-t">
+                  <td className="p-2">{idx + 1}</td>
+                  <td className="p-2">{inv.customer}</td>
+                  <td className="p-2">{inv.amount}</td>
+                  <td className="p-2">{new Date(inv.date).toLocaleDateString()}</td>
                   <td className="p-2">
                     <Button size="sm" className="flex items-center gap-2">
                       <FaDownload /> PDF
@@ -133,9 +145,6 @@ const UsageModal = ({ isOpen, onClose }) => {
               ))}
             </tbody>
           </table>
-          <Button className="mt-3 flex items-center gap-2">
-            <FaDownload /> Download Invoice Report
-          </Button>
         </CardContent>
       </Card>
     </Modal>

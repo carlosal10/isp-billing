@@ -1,0 +1,38 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* Card styling */
+.stats .card {
+  background: #ffffff;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #1f2937; /* Tailwind gray-800 */
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  text-align: center;
+}
+
+/* Hover interaction */
+.stats .card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+  .stats {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .stats .card {
+    font-size: 0.95rem;
+    padding: 1rem;
+  }
+}

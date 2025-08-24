@@ -1,0 +1,110 @@
+/* Sidebar container */
+.sidebar {
+  position: fixed;
+  left: -250px; /* hidden by default */
+  top: 0;
+  width: 250px;
+  height: 100vh;
+  background-color: #1f2937; /* gray-800 */
+  color: #f9fafb; /* gray-100 */
+  display: flex;
+  flex-direction: column;
+  transition: left 0.3s ease;
+  z-index: 40;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Show sidebar */
+.sidebar.show {
+  left: 0;
+}
+
+/* Sidebar header */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #111827; /* darker gray */
+  border-bottom: 1px solid #374151; /* gray-700 */
+}
+
+.sidebar-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.sidebar-header .close-btn {
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: color 0.2s ease-in-out;
+}
+
+.sidebar-header .close-btn:hover {
+  color: #ef4444; /* red-500 */
+}
+
+/* Sidebar links and buttons */
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar ul li {
+  width: 100%;
+}
+
+.sidebar ul li a,
+.sidebar ul li button {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  color: #f9fafb;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.sidebar ul li a:hover,
+.sidebar ul li button:hover {
+  background-color: #374151; /* gray-700 */
+  color: #10b981; /* green-500 */
+}
+
+.sidebar ul li a:active,
+.sidebar ul li button:active {
+  background-color: #4b5563; /* gray-600 */
+}
+
+/* Scrollbar for overflow */
+.sidebar ul::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar ul::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* gray-600 */
+  border-radius: 3px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .sidebar-header h2 {
+    font-size: 1rem;
+  }
+
+  .sidebar ul li a,
+  .sidebar ul li button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+}

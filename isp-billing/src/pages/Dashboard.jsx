@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Chart } from "react-chartjs-2";
 import "chart.js/auto";
+import "./Dashboard.css";
 
 import Sidebar from "../components/Sidebar";
 import StatsCards from "../components/StatsCards";
@@ -30,7 +31,7 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    fetch("/api/stats")
+    fetch("https://isp-billing-uq58.onrender.com/api/stats")
       .then((res) => res.json())
       .then((data) => setStats(data))
       .catch(() => {});
@@ -53,9 +54,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       {/* Hamburger menu */}
-      <div className="hamburger" onClick={toggleSidebar}>
-        ☰
-      </div>
+      <div className="hamburger" onClick={toggleSidebar}>☰</div>
 
       {/* Sidebar */}
       <Sidebar
@@ -112,14 +111,8 @@ export default function Dashboard() {
         <div className="pppoe-usage-stats">
           <h2>Usage Summary</h2>
           <div className="usage-box">
-            <div>
-              Total Bytes In:{" "}
-              {pppoeUsers.reduce((a, u) => a + u.bytesIn, 0)}
-            </div>
-            <div>
-              Total Bytes Out:{" "}
-              {pppoeUsers.reduce((a, u) => a + u.bytesOut, 0)}
-            </div>
+            <div>Total Bytes In: {pppoeUsers.reduce((a, u) => a + u.bytesIn, 0)}</div>
+            <div>Total Bytes Out: {pppoeUsers.reduce((a, u) => a + u.bytesOut, 0)}</div>
           </div>
         </div>
 
@@ -147,7 +140,7 @@ export default function Dashboard() {
         onClose={() => setActiveModal(null)}
       />
       <PaymentIntegrationModal
-        open={activeModal === "payments"}
+        open={activeModal === "paymentIntegration"}
         onClose={() => setActiveModal(null)}
       />
       <ConnectMikrotikModal
@@ -158,10 +151,10 @@ export default function Dashboard() {
         open={activeModal === "usage"}
         onClose={() => setActiveModal(null)}
       />
-        <PaymentsModal
-            open={activeModal === "payment"}
-            onClose={() => setActiveModal(null)}
-        />
+      <PaymentsModal
+        open={activeModal === "paymentRecords"}
+        onClose={() => setActiveModal(null)}
+      />
     </div>
   );
 }

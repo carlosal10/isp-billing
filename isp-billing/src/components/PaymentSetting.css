@@ -1,0 +1,137 @@
+/* Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+}
+
+/* Modal container */
+.modal-content {
+  background-color: #fff;
+  border-radius: 1rem;
+  width: 95%;
+  max-width: 700px;
+  padding: 1.5rem;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Close button */
+.modal-content .close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  cursor: pointer;
+  color: #4b5563; /* gray-600 */
+  transition: color 0.2s ease-in-out;
+}
+
+.modal-content .close:hover {
+  color: #ef4444; /* red-500 */
+}
+
+/* Tabs */
+.modal-content .tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 2px solid #e5e7eb; /* gray-200 */
+  margin-bottom: 1rem;
+}
+
+.modal-content .tabs button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-weight: 500;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.modal-content .tabs button.active {
+  border-bottom-width: 2px;
+  font-weight: 600;
+}
+
+/* M-Pesa */
+.modal-content .tabs button.mpesa.active {
+  color: #16a34a; /* green-600 */
+  border-color: #16a34a;
+}
+
+/* Stripe */
+.modal-content .tabs button.stripe.active {
+  color: #4f46e5; /* indigo-600 */
+  border-color: #4f46e5;
+}
+
+/* PayPal */
+.modal-content .tabs button.paypal.active {
+  color: #2563eb; /* blue-600 */
+  border-color: #2563eb;
+}
+
+/* Forms */
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-content input,
+.modal-content select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db; /* gray-300 */
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.modal-content input:focus,
+.modal-content select:focus {
+  outline: none;
+  border-color: #4f46e5; /* indigo-600 focus */
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Submit button */
+.modal-content button[type="submit"] {
+  background-color: #16a34a; /* green-600 */
+  color: #fff;
+  font-weight: 600;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.modal-content button[type="submit"]:hover {
+  background-color: #15803d; /* green-700 */
+}
+
+.modal-content button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .modal-content {
+    padding: 1rem;
+  }
+
+  .modal-content h2 {
+    font-size: 1.5rem;
+  }
+
+  .modal-content .tabs {
+    gap: 0.5rem;
+  }
+}

@@ -1,0 +1,77 @@
+/* Modal Container */
+.usage-modal {
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+/* Card tweaks */
+.usage-modal .card {
+  border-radius: 1rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  background: #fff;
+}
+
+/* Tables */
+.usage-modal table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.usage-modal thead {
+  background: #f9fafb;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.usage-modal th,
+.usage-modal td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Buttons inside tables */
+.usage-modal button {
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  transition: background 0.2s;
+}
+
+.usage-modal button:hover {
+  background: #2563eb; /* Tailwind's blue-600 */
+  color: #fff;
+}
+
+/* Charts */
+.usage-modal canvas {
+  max-height: 250px;
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+  .usage-modal {
+    padding: 0.5rem;
+  }
+
+  .usage-modal h2 {
+    font-size: 1.1rem;
+  }
+
+  .usage-modal table {
+    font-size: 0.8rem;
+  }
+
+  .usage-modal th,
+  .usage-modal td {
+    padding: 0.5rem;
+  }
+
+  /* Make tables horizontally scrollable on mobile */
+  .usage-modal .card-content {
+    overflow-x: auto;
+  }
+}
