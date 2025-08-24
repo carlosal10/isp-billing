@@ -3,6 +3,7 @@ import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
+import "./CustomersModal.css"; // ✅ custom styles
 
 export default function CustomersModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
