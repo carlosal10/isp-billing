@@ -63,18 +63,21 @@
 .modal-content .tabs button.mpesa.active {
   color: #16a34a; /* green-600 */
   border-color: #16a34a;
+  gap: 1rem;
 }
 
 /* Stripe */
 .modal-content .tabs button.stripe.active {
   color: #4f46e5; /* indigo-600 */
   border-color: #4f46e5;
+  gap: 1rem;
 }
 
 /* PayPal */
 .modal-content .tabs button.paypal.active {
   color: #2563eb; /* blue-600 */
   border-color: #2563eb;
+  gap: 1rem;
 }
 
 /* Forms */

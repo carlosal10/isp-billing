@@ -3,7 +3,7 @@ import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
-import './PppoeModal.css'; // ✅ custom styles
+import './PppoeModal.css';
 
 const API_BASE = "https://isp-billing-uq58.onrender.com/api/pppoe";
 
@@ -20,18 +20,28 @@ export default function PppoeModal({ isOpen, onClose }) {
 
   const [removeUser, setRemoveUser] = useState("");
 
+  // Load profiles from backend
   useEffect(() => {
     if (isOpen) {
-      // Later you can add /api/mikrotik/profiles if you expose it in backend
-      // For now just simulate
-      setProfiles(["default", "premium", "unlimited"]);
-      setLoadingProfiles(false);
+      fetch(`${API_BASE}/profiles`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.profiles) {
+            setProfiles(data.profiles);
+            setProfile(data.profiles[0]?.name || "");
+          }
+          setLoadingProfiles(false);
+        })
+        .catch(err => {
+          console.error("Error fetching profiles:", err);
+          setLoadingProfiles(false);
+        });
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // ✅ Add PPPoE user
+  // Add PPPoE user
   const handleAddUser = async (e) => {
     e.preventDefault();
     try {
@@ -47,7 +57,7 @@ export default function PppoeModal({ isOpen, onClose }) {
     }
   };
 
-  // ✅ Update PPPoE user password
+  // Update PPPoE user password
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     try {
@@ -63,7 +73,7 @@ export default function PppoeModal({ isOpen, onClose }) {
     }
   };
 
-  // ✅ Remove PPPoE user
+  // Remove PPPoE user
   const handleRemoveUser = async (e) => {
     e.preventDefault();
     try {
@@ -111,8 +121,8 @@ export default function PppoeModal({ isOpen, onClose }) {
               <option>Loading profiles...</option>
             ) : (
               profiles.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+                <option key={p.id} value={p.name}>
+                  {p.name} - {p.price} KES ({p.duration})
                 </option>
               ))
             )}

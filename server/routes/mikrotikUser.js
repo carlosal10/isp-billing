@@ -1,6 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const mikrotikClient = require('./mikrotikConnect');
+// Import Plan model
+const Plan = require('../models/plan');
+
+// GET /api/pppoe/profiles -> return plans as selectable profiles
+router.get('/profiles', async (req, res) => {
+  try {
+    const plans = await Plan.find({});
+    if (!plans || plans.length === 0) {
+      return res.status(404).json({ message: 'No plans found' });
+    }
+
+    // Map plans to { name, price, duration } format
+    const profiles = plans.map(plan => ({
+      id: plan._id,
+      name: plan.name,
+      price: plan.price,
+      duration: plan.duration
+    }));
+
+    res.status(200).json({ message: 'Profiles loaded', profiles });
+  } catch (error) {
+    console.error('Error fetching profiles:', error);
+    res.status(500).json({ message: 'Failed to fetch profiles' });
+  }
+});
+
 
 // Create a new PPPoE user
 router.post('/', async (req, res) => {
