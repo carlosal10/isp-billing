@@ -53,7 +53,9 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       {/* Hamburger menu */}
-      <div className="hamburger" onClick={toggleSidebar}>☰</div>
+      <div className="hamburger" onClick={toggleSidebar}>
+        ☰
+      </div>
 
       {/* Sidebar */}
       <Sidebar
@@ -110,8 +112,12 @@ export default function Dashboard() {
         <div className="pppoe-usage-stats">
           <h2>Usage Summary</h2>
           <div className="usage-box">
-            <div>Total Bytes In: {pppoeUsers.reduce((a, u) => a + u.bytesIn, 0)}</div>
-            <div>Total Bytes Out: {pppoeUsers.reduce((a, u) => a + u.bytesOut, 0)}</div>
+            <div>
+              Total Bytes In: {pppoeUsers.reduce((a, u) => a + u.bytesIn, 0)}
+            </div>
+            <div>
+              Total Bytes Out: {pppoeUsers.reduce((a, u) => a + u.bytesOut, 0)}
+            </div>
           </div>
         </div>
 
@@ -123,35 +129,35 @@ export default function Dashboard() {
 
       {/* Modals */}
       <ClientsModal
-        open={activeModal === MODALS.CLIENTS}
+        isOpen={activeModal === MODALS.CLIENTS}
         onClose={() => setActiveModal(null)}
       />
       <PlansModal
-        open={activeModal === MODALS.PLANS}
+        isOpen={activeModal === MODALS.PLANS}
         onClose={() => setActiveModal(null)}
       />
       <PppoeSetupModal
-        open={activeModal === MODALS.PPPOE}
+        isOpen={activeModal === MODALS.PPPOE}
         onClose={() => setActiveModal(null)}
       />
       <HotspotSetupModal
-        open={activeModal === MODALS.HOTSPOT}
+        isOpen={activeModal === MODALS.HOTSPOT}
         onClose={() => setActiveModal(null)}
       />
       <PaymentIntegrationModal
-        open={activeModal === MODALS.PAYMENT_INTEGRATION}
+        isOpen={activeModal === MODALS.PAYMENT_INTEGRATION}
         onClose={() => setActiveModal(null)}
       />
       <ConnectMikrotikModal
-        open={activeModal === MODALS.MIKROTIK}
+        isOpen={activeModal === MODALS.MIKROTIK}
         onClose={() => setActiveModal(null)}
       />
       <UsageLogsModal
-        open={activeModal === MODALS.USAGE}
+        isOpen={activeModal === MODALS.USAGE}
         onClose={() => setActiveModal(null)}
       />
       <PaymentsModal
-        open={activeModal === MODALS.PAYMENTS}
+        isOpen={activeModal === MODALS.PAYMENTS}
         onClose={() => setActiveModal(null)}
       />
     </div>

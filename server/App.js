@@ -11,6 +11,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
+    origin:'*',
     origin: process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com", // frontend URL
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,

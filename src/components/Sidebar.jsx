@@ -10,7 +10,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
         <span className="close-btn" onClick={toggleSidebar}>X</span>
       </div>
       <ul>
-        <li><Link to="/dashboard">Dashboard</Link></li>
+        <li><Link to="/">Dashboard</Link></li>
         <li><button onClick={() => onOpenModal(MODALS.CLIENTS)}>Clients</button></li>
         <li><button onClick={() => onOpenModal(MODALS.PLANS)}>Subscription Plans</button></li>
         <li><button onClick={() => onOpenModal(MODALS.PPPOE)}>PPPoE Setup</button></li>
