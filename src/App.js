@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
@@ -15,54 +14,62 @@ import ConnectMikrotikModal from "./components/ConnectMikrotik";
 import MessagingModal from "./components/MessagingModal";
 import PaymentsModal from "./components/PaymentsModal";
 
+import MODALS from "./constants/modals";
 import "./App.css";
 
 function App() {
-  // modal states
-  const [showClients, setShowClients] = useState(false);
-  const [showPlans, setShowPlans] = useState(false);
-  const [showPPPoE, setShowPPPoE] = useState(false);
-  const [showHotspot, setShowHotspot] = useState(false);
-  const [showPayments, setShowPayments] = useState(false);
-  const [showMikrotik, setShowMikrotik] = useState(false);
-  const [showMessaging, setShowMessaging] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
+  const [activeModal, setActiveModal] = useState(null);
+
+  const openModal = (modal) => setActiveModal(modal);
+  const closeModal = () => setActiveModal(null);
 
   return (
     <Router>
       <div className="app-container">
         {/* Sidebar */}
-        <Sidebar
-          open={true}
-          toggleSidebar={() => {}}
-          onOpenClients={() => setShowClients(true)}
-          onOpenPlans={() => setShowPlans(true)}
-          onOpenPPPoE={() => setShowPPPoE(true)}
-          onOpenHotspot={() => setShowHotspot(true)}
-          onOpenPayments={() => setShowPayments(true)}
-          onOpenMikrotik={() => setShowMikrotik(true)}
-          onOpenMessaging={() => setShowMessaging(true)}
-          onOpenPayment={() => setShowPayment(true)}
-        />
+        <Sidebar open={true} toggleSidebar={() => {}} onOpenModal={openModal} />
 
         {/* Routes */}
         <div className="content-area">
           <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            {/* Future: invoices, payments pages can be separate */}
           </Routes>
         </div>
 
         {/* Modals */}
-        <ClientsModal isOpen={showClients} onClose={() => setShowClients(false)} />
-        <SubscriptionPlansModal isOpen={showPlans} onClose={() => setShowPlans(false)} />
-        <PPPoESetupModal isOpen={showPPPoE} onClose={() => setShowPPPoE(false)} />
-        <HotspotSetupModal isOpen={showHotspot} onClose={() => setShowHotspot(false)} />
-        <PaymentIntegrationsModal isOpen={showPayments} onClose={() => setShowPayments(false)} />
-        <ConnectMikrotikModal isOpen={showMikrotik} onClose={() => setShowMikrotik(false)} />
-        <MessagingModal isOpen={showMessaging} onClose={() => setShowMessaging(false)} />
-        <PaymentsModal isOpen={showPayment} onClose={() => setShowPayment(false)} />
+        <ClientsModal
+          isOpen={activeModal === MODALS.CLIENTS}
+          onClose={closeModal}
+        />
+        <SubscriptionPlansModal
+          isOpen={activeModal === MODALS.PLANS}
+          onClose={closeModal}
+        />
+        <PPPoESetupModal
+          isOpen={activeModal === MODALS.PPPOE}
+          onClose={closeModal}
+        />
+        <HotspotSetupModal
+          isOpen={activeModal === MODALS.HOTSPOT}
+          onClose={closeModal}
+        />
+        <PaymentIntegrationsModal
+          isOpen={activeModal === MODALS.PAYMENTS}
+          onClose={closeModal}
+        />
+        <ConnectMikrotikModal
+          isOpen={activeModal === MODALS.MIKROTIK}
+          onClose={closeModal}
+        />
+        <MessagingModal
+          isOpen={activeModal === MODALS.MESSAGING}
+          onClose={closeModal}
+        />
+        <PaymentsModal
+          isOpen={activeModal === MODALS.PAYMENT}
+          onClose={closeModal}
+        />
       </div>
     </Router>
   );

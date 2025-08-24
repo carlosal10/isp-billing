@@ -60,7 +60,7 @@ app.use("/api/plans", planRoutes);
 app.use("/api/invoices", invoiceRoutes); // lowercase for consistency
 app.use("/api/usageLogs", usageLogsRoutes);
 app.use("/api/auth", adminAuthRoutes);
-app.use("/api", statsRoutes);
+app.use("/api/stats", statsRoutes);
 app.use("/api/mikrotik/users", mikrotikUserRoutes);
 app.use("/api/connect", mikrotikConnect);
 app.use("/api/hotspot-plans", hotspotPlansRouter);

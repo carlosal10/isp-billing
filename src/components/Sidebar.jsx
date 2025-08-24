@@ -1,4 +1,5 @@
 import './Sidebar.css';
+import MODALS from "../constants/modals";
 
 export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
   return (
@@ -9,15 +10,14 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
       </div>
       <ul>
         <li><a href="/dashboard">Dashboard</a></li>
-        <li><button onClick={() => onOpenModal("clients")}>Clients</button></li>
-        <li><button onClick={() => onOpenModal("plans")}>Subscription Plans</button></li>
-        <li><button onClick={() => onOpenModal("pppoe")}>PPPoE Setup</button></li>
-        <li><button onClick={() => onOpenModal("hotspot")}>Hotspot Setup</button></li>
-        <li><a href="/invoices">Invoices</a></li>
-        <li><a href="/payments">Payments</a></li>
-        <li><button onClick={() => onOpenModal("paymentIntegration")}>Link Payment Account</button></li>
-        <li><button onClick={() => onOpenModal("mikrotik")}>Connect To Mikrotik</button></li>
-        <li><button onClick={() => onOpenModal("usage")}>Usage Logs</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.CLIENTS)}>Clients</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.PLANS)}>Subscription Plans</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.PPPOE)}>PPPoE Setup</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.HOTSPOT)}>Hotspot Setup</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.PAYMENTS)}>Payments</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.PAYMENT_INTEGRATION)}>Link Payment Account</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.MIKROTIK)}>Connect To Mikrotik</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.USAGE)}>Usage Logs</button></li>
         <li><a href="/logout">Logout</a></li>
       </ul>
     </nav>

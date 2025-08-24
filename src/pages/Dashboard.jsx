@@ -5,6 +5,7 @@ import "./Dashboard.css";
 
 import Sidebar from "../components/Sidebar";
 import StatsCards from "../components/StatsCards";
+import MODALS from "../constants/modals";
 
 // import all modals
 import ClientsModal from "../components/CustomersModal";
@@ -20,8 +21,6 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pppoeUsers, setPppoeUsers] = useState([]);
   const [showExpired, setShowExpired] = useState(false);
-
-  // central modal state
   const [activeModal, setActiveModal] = useState(null);
 
   const [stats, setStats] = useState({
@@ -124,35 +123,35 @@ export default function Dashboard() {
 
       {/* Modals */}
       <ClientsModal
-        open={activeModal === "clients"}
+        open={activeModal === MODALS.CLIENTS}
         onClose={() => setActiveModal(null)}
       />
       <PlansModal
-        open={activeModal === "plans"}
+        open={activeModal === MODALS.PLANS}
         onClose={() => setActiveModal(null)}
       />
       <PppoeSetupModal
-        open={activeModal === "pppoe"}
+        open={activeModal === MODALS.PPPOE}
         onClose={() => setActiveModal(null)}
       />
       <HotspotSetupModal
-        open={activeModal === "hotspot"}
+        open={activeModal === MODALS.HOTSPOT}
         onClose={() => setActiveModal(null)}
       />
       <PaymentIntegrationModal
-        open={activeModal === "paymentIntegration"}
+        open={activeModal === MODALS.PAYMENT_INTEGRATION}
         onClose={() => setActiveModal(null)}
       />
       <ConnectMikrotikModal
-        open={activeModal === "mikrotik"}
+        open={activeModal === MODALS.MIKROTIK}
         onClose={() => setActiveModal(null)}
       />
       <UsageLogsModal
-        open={activeModal === "usage"}
+        open={activeModal === MODALS.USAGE}
         onClose={() => setActiveModal(null)}
       />
       <PaymentsModal
-        open={activeModal === "paymentRecords"}
+        open={activeModal === MODALS.PAYMENTS}
         onClose={() => setActiveModal(null)}
       />
     </div>

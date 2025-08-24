@@ -5,7 +5,7 @@ const Plan = require('../models/plan');         // Assuming you have a Plan mode
 const Invoice = require('../models/Invoice');   // Assuming you have an Invoice model
 
 // Route to fetch dashboard stats
-router.get('/stats', async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         // Fetch total customers
         const totalCustomers = await Customer.countDocuments();
