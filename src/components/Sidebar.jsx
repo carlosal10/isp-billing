@@ -1,5 +1,6 @@
 import './Sidebar.css';
 import MODALS from "../constants/modals";
+import { Link } from "react-router-dom";
 
 export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
   return (
@@ -9,7 +10,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
         <span className="close-btn" onClick={toggleSidebar}>X</span>
       </div>
       <ul>
-        <li><a href="/dashboard">Dashboard</a></li>
+        <li><Link to="/dashboard">Dashboard</Link></li>
         <li><button onClick={() => onOpenModal(MODALS.CLIENTS)}>Clients</button></li>
         <li><button onClick={() => onOpenModal(MODALS.PLANS)}>Subscription Plans</button></li>
         <li><button onClick={() => onOpenModal(MODALS.PPPOE)}>PPPoE Setup</button></li>
