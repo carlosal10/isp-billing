@@ -1,0 +1,163 @@
+/* Modal Overlay */
+.mikrotik-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  padding: 1rem;
+}
+
+/* Modal Box */
+.mikrotik-modal {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  animation: fadeInUp 0.35s ease;
+}
+
+/* Title */
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: #1f2937;
+  text-align: center;
+}
+
+/* Close Button */
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #ef4444;
+}
+
+/* Form Layout */
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-form label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-form input {
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+.modal-form input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
+
+/* Submit Button */
+.submit-btn {
+  margin-top: 0.5rem;
+  background: #2563eb;
+  color: white;
+  padding: 0.6rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.submit-btn:hover {
+  background: #1d4ed8;
+}
+
+.submit-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Response Message */
+.response-msg {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  color: #16a34a;
+}
+
+.response-msg.error {
+  color: #dc2626;
+}
+
+/* Animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =======================
+   RESPONSIVE STYLES
+   ======================= */
+
+/* Tablets */
+@media (max-width: 768px) {
+  .mikrotik-modal {
+    max-width: 90%;
+    padding: 1.5rem;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+  }
+
+  .submit-btn {
+    padding: 0.5rem;
+  }
+}
+
+/* Phones */
+@media (max-width: 480px) {
+  .mikrotik-modal {
+    max-width: 100%;
+    border-radius: 12px;
+    padding: 1rem;
+  }
+
+  .modal-form input {
+    padding: 0.45rem;
+    font-size: 0.85rem;
+  }
+
+  .submit-btn {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+}
