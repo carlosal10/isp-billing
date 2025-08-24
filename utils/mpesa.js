@@ -1,5 +1,5 @@
 const axios = require('axios');
-const MpesaConfig = require('../models/MpesaConfig');
+const MpesaConfig = require('../models/PaymentConfig');
 
 async function getAccessToken(config) {
   const { consumerKey, consumerSecret } = config;
