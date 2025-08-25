@@ -26,7 +26,7 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
 
     try {
       const res = await fetch(
-        "https://isp-billing-uq58.onrender.com/api/mikrotik/connect",
+        "https://isp-billing-uq58.onrender.com/api/connect",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

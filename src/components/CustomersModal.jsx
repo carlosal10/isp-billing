@@ -215,7 +215,7 @@ export default function CustomersModal({ isOpen, onClose }) {
               }
             }}
           >
-            <option value="">Select Customer</option>
+            <option value="">Select  Customer</option>
             {customers.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name}
