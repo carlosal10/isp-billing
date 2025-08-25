@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   connectToMikrotik,
   disconnectMikrotik
-} = require('../../utils/mikrotikConnectionManager'); // ✅ fix path
+} = require('../utils/mikrotikConnectionManager'); // ✅ fix path
 
 router.post('/', async (req, res) => {
   const { host, user, password } = req.body;
