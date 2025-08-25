@@ -12,8 +12,8 @@ const customerSchema = new mongoose.Schema({
   plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan' },
 
   // Network setup
-  networkType: { type: String, enum: ['pppoe', 'static'], required: true },
-  pppoeProfile: { type: mongoose.Schema.Types.ObjectId, ref: 'PPPoEProfile', default: null },
+  connectionType: { type: String, enum: ['pppoe', 'static'], required: true },
+  pppoeConfig: { type: mongoose.Schema.Types.ObjectId, ref: 'PPPoEProfile', default: null },
   staticConfig: {
     ip: { type: String },
     gateway: { type: String },

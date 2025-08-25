@@ -63,7 +63,10 @@ export default function CustomersModal({ isOpen, onClose }) {
     } finally {
       setLoading(false);
     }
+    
   };
+
+  
 
   return (
     <div className="modal-overlay">
