@@ -5,7 +5,7 @@ const Plan = require('../models/plan.js');
 const PPPoEProfile = require('../models/pppoeUsers.js');
 
 // Fetch PPPoE profiles
-router.get('/pppoe/profiles', async (req, res) => {
+router.get('/profiles', async (req, res) => {
   try {
     const profiles = await PPPoEProfile.find();
     res.json(profiles);
@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get by Mongo ID
-router.get('/id/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id).populate('plan', 'name price duration');
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
@@ -42,7 +42,7 @@ router.get('/id/:id', async (req, res) => {
 });
 
 // Get by Account Number
-router.get('/account/:accountNumber', async (req, res) => {
+router.get('/:accountNumber', async (req, res) => {
   try {
     const customer = await Customer.findOne({ accountNumber: req.params.accountNumber }).populate('plan');
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
