@@ -5,7 +5,7 @@ const Plan = require('../models/plan.js');
 const PPPoEProfile = require('../models/pppoeUsers.js');
 
 // Fetch PPPoE profiles
-router.get('/profiles', async (req, res) => {
+router.get('/pppoe/profiles', async (req, res) => {
   try {
     const profiles = await PPPoEProfile.find();
     res.json(profiles);
