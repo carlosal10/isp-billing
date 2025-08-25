@@ -1,27 +1,26 @@
-// routes/mikrotik/connect.js
 const express = require('express');
 const router = express.Router();
 const {
   connectToMikrotik,
   disconnectMikrotik
-} = require('../utils/mikrotikConnectionManager');
+} = require('../../utils/mikrotikConnectionManager'); // ✅ fix path
 
 router.post('/', async (req, res) => {
-  const { ip, username, password } = req.body;
+  const { host, user, password } = req.body;
 
-  if (!ip || !username || !password) {
+  if (!host || !user || !password) {
     return res.status(400).json({ success: false, message: 'All fields are required' });
   }
 
   try {
-    const client = await connectToMikrotik({ host: ip, user: username, password });
+    const client = await connectToMikrotik({ host, user, password });
 
     const identity = await client.write('/system/identity/print');
     const routerName = identity[0]?.name || 'Unknown';
 
     return res.status(200).json({
       success: true,
-      message: `Connected to ${routerName}`,
+      message: `✅ Connected to MikroTik: ${routerName}`,
       router: identity
     });
 

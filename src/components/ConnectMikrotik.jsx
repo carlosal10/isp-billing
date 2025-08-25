@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import "./ConnectMikrotikModal.css"; // ✅ custom styles
+import "./ConnectMikrotikModal.css";
 
 export default function ConnectMikrotikModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
-    ip: "",
-    username: "",
+    host: "",
+    user: "",
     password: "",
   });
 
@@ -30,18 +30,14 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            host: formData.ip,
-            user: formData.username,
-            password: formData.password,
-          }),
+          body: JSON.stringify(formData), // ✅ same keys as backend
         }
       );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Connection failed");
+      if (!res.ok) throw new Error(data.error || data.message || "Connection failed");
 
-      setResponse("✅ Connected successfully to MikroTik Router!");
+      setResponse(data.message); // ✅ show actual router name from backend
     } catch (err) {
       setResponse("❌ " + err.message);
     } finally {
@@ -52,21 +48,19 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
   return (
     <div className="mikrotik-overlay">
       <div className="mikrotik-modal">
-        {/* Close Button */}
         <button onClick={onClose} className="close-btn">
           <FaTimes size={20} />
         </button>
 
-        <h2 className="modal-title">Connect To Mikrotik</h2>
+        <h2 className="modal-title">Connect To MikroTik</h2>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="modal-form">
           <label>
             Router IP:
             <input
               type="text"
-              id="ip"
-              value={formData.ip}
+              id="host"
+              value={formData.host}
               onChange={handleChange}
               required
             />
@@ -76,8 +70,8 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
             Username:
             <input
               type="text"
-              id="username"
-              value={formData.username}
+              id="user"
+              value={formData.user}
               onChange={handleChange}
               required
             />

@@ -63,14 +63,14 @@ app.use("/api/usageLogs", usageLogsRoutes);
 app.use("/api/auth", adminAuthRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/pppoe", mikrotikUserRoutes);
-app.use("/api/connect", mikrotikConnect);
+app.use("/api/mikrotik/connect", mikrotikConnect);
 app.use("/api/hotspot-plans", hotspotPlansRouter);
 app.use("/api/hotspot", hotspotRoutes);
 app.use("/api/mpesa-config", mpesaConfigRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/payment", callbackRoutes);
 
-console.log("🔗 /api/connect route registered");
+console.log("🔗 /api/mikrotik/connect route registered");
 
 // ----------------- 404 Handler -----------------
 app.use((req, res) => {
