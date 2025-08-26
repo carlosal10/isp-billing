@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+
 const customerSchema = new mongoose.Schema({
   name: String,
   email: String,
@@ -13,11 +14,19 @@ const customerSchema = new mongoose.Schema({
 
   // Network setup
   connectionType: { type: String, enum: ['pppoe', 'static'], required: true },
-  pppoeConfig: { type: mongoose.Schema.Types.ObjectId, ref: 'PPPoEProfile', default: null },
+
+  // PPPoE config as an object instead of ObjectId reference
+  pppoeConfig: {
+    profile: { type: String },
+    localAddress: { type: String },
+    rateLimit: { type: String },
+  },
+
   staticConfig: {
     ip: { type: String },
     gateway: { type: String },
     dns: { type: String }
   }
 });
+
 module.exports = mongoose.model('Customer', customerSchema);
