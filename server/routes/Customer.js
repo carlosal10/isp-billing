@@ -3,7 +3,7 @@ const router = express.Router();
 const Customer = require('../models/customers.js');
 const Plan = require('../models/plan.js');
 const PPPoEProfile = require('../models/pppoeUsers.js');
-const { sendCommand } = require('../utils/mikrotik.js'); // example
+const { sendCommand } = require('../utils/mikrotikConnectionManager'); // example
 
 // Generate random account number
 function generateAccountNumber() {
