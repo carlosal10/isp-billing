@@ -33,7 +33,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const result = await call('/ppp/secret/add', {
+    const result = await sendCommand('/ppp/secret/add', {
       name: username,
       password,
       service: 'pppoe',
@@ -48,10 +48,10 @@ router.post('/', async (req, res) => {
 // Remove user
 router.delete('/remove/:username', async (req, res) => {
   try {
-    const users = await call('/ppp/secret/print', { name: req.params.username });
+    const users = await sendCommand('/ppp/secret/print', { name: req.params.username });
     if (!users.length) return res.status(404).json({ message: 'User not found' });
 
-    const result = await call('/ppp/secret/remove', { '.id': users[0]['.id'] });
+    const result = await sendCommand('/ppp/secret/remove', { '.id': users[0]['.id'] });
     res.json({ message: 'User removed', result });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -65,10 +65,10 @@ router.put('/update/:username', async (req, res) => {
   }
 
   try {
-    const users = await call('/ppp/secret/print', { name: req.params.username });
+    const users = await sendCommand('/ppp/secret/print', { name: req.params.username });
     if (!users.length) return res.status(404).json({ message: 'User not found' });
 
-    const result = await call('/ppp/secret/set', { '.id': users[0]['.id'], password: req.body.password });
+    const result = await sendCommand('/ppp/secret/set', { '.id': users[0]['.id'], password: req.body.password });
     res.json({ message: 'Password updated', result });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -78,7 +78,7 @@ router.put('/update/:username', async (req, res) => {
 // List users
 router.get('/list', async (req, res) => {
   try {
-    const result = await call('/ppp/secret/print');
+    const result = await sendCommand('/ppp/secret/print');
     res.json({ message: 'PPPoE users fetched', users: result });
   } catch (err) {
     res.status(500).json({ message: err.message });
