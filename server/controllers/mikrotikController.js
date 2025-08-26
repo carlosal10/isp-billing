@@ -1,44 +1,47 @@
 // mikrotikController.js
-const { RouterOSAPI } = require('node-routeros');
-const { getRouterConfig } = require('../routes/mikrotikConnect.js'); // loads router creds
+const { call } = require('../utils/mikrotikConnectionManager');
 
-// Generic function to connect and fetch data
-async function connectAndFetch(path, params = {}) {
-  const config = await getRouterConfig();
-  const api = new RouterOSAPI({
-    host: config.host,
-    user: config.user,
-    password: config.password,
-    port: config.port
-  });
-
-  try {
-    await api.connect();
-    const response = await api.call(path, params);
-    await api.close();
-    return response;
-  } catch (err) {
-    console.error('MikroTik API Error:', err.message);
-    throw new Error('Failed to connect to MikroTik');
-  }
-}
+// ---------------- HOTSPOT CONTROLLERS ---------------- //
 
 // GET /api/hotspot/servers
 exports.getHotspotServers = async (req, res) => {
   try {
-    const servers = await connectAndFetch('/ip/hotspot/print');
-    res.json(servers);
+    const servers = await call('/ip/hotspot/print');
+    if (!servers || servers.length === 0) {
+      return res.status(404).json({ message: 'No hotspot servers found' });
+    }
+    res.json({ message: 'Hotspot servers fetched', servers });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Error fetching hotspot servers:', err.message);
+    res.status(500).json({ message: 'Failed to fetch hotspot servers' });
   }
 };
 
 // GET /api/hotspot/profiles
 exports.getHotspotProfiles = async (req, res) => {
   try {
-    const profiles = await connectAndFetch('/ip/hotspot/user/profile/print');
-    res.json(profiles);
+    const profiles = await call('/ip/hotspot/user/profile/print');
+    if (!profiles || profiles.length === 0) {
+      return res.status(404).json({ message: 'No hotspot profiles found' });
+    }
+    res.json({ message: 'Hotspot profiles fetched', profiles });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Error fetching hotspot profiles:', err.message);
+    res.status(500).json({ message: 'Failed to fetch hotspot profiles' });
   }
 };
+
+// GET /api/hotspot/users
+exports.getHotspotUsers = async (req, res) => {
+  try {
+    const users = await call('/ip/hotspot/user/print');
+    res.json({ message: 'Hotspot users fetched', users });
+  } catch (err) {
+    console.error('Error fetching hotspot users:', err.message);
+    res.status(500).json({ message: 'Failed to fetch hotspot users' });
+  }
+};
+
+// ---------------- FUTURE EXTENSIONS ---------------- //
+// Example: add/remove hotspot user, enable/disable server, etc.
+

@@ -4,26 +4,37 @@ const { RouterOSAPI } = require('routeros-client');
 let mikrotikClient = null;
 let isConnected = false;
 let config = null;
+let lastStatus = 'disconnected';
+let retryDelay = 2000; // initial retry 2s
 
 /**
  * Connect to MikroTik
  */
-async function connectToMikrotik({ host, user, password, port = 8728 }) {
+async function connectToMikrotik(cfg) {
   if (mikrotikClient && isConnected) return mikrotikClient;
 
-  mikrotikClient = new RouterOSAPI({ host, user, password, port, timeout: 30000 });
+  config = cfg || config;
+  if (!config) throw new Error('MikroTik config not provided');
+
+  mikrotikClient = new RouterOSAPI({
+    host: config.host,
+    user: config.user,
+    password: config.password,
+    port: config.port || 8728,
+    timeout: 30000,
+  });
 
   try {
     await mikrotikClient.connect();
     isConnected = true;
-    config = { host, user, password, port };
-    console.log(`✅ Connected to MikroTik at ${host}`);
+    retryDelay = 2000; // reset backoff
+    console.log(`✅ Connected to MikroTik at ${config.host}`);
     return mikrotikClient;
   } catch (err) {
     isConnected = false;
     mikrotikClient = null;
     console.error('❌ MikroTik connection failed:', err.message);
-    throw err;
+    throw new Error('MikroTikConnectionError: ' + err.message);
   }
 }
 
@@ -38,11 +49,20 @@ function getClient() {
 }
 
 /**
- * Try reconnecting if connection is lost
+ * Try reconnecting with backoff
  */
 async function reconnectIfNeeded() {
   if (!config) throw new Error('No MikroTik config found to reconnect.');
-  if (!isConnected) return connectToMikrotik(config);
+  if (!isConnected) {
+    try {
+      await connectToMikrotik(config);
+    } catch (err) {
+      console.warn(`⚠️ Reconnect failed, retrying in ${retryDelay / 1000}s`);
+      setTimeout(reconnectIfNeeded, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 60000); // cap at 60s
+      throw err;
+    }
+  }
   return mikrotikClient;
 }
 
@@ -52,11 +72,10 @@ async function reconnectIfNeeded() {
 async function sendCommand(command, params = []) {
   try {
     const client = await reconnectIfNeeded();
-    const result = await client.write(command, params);
-    return result;
+    return await client.write(command, params);
   } catch (err) {
     console.error(`❌ Failed to execute ${command}:`, err.message);
-    throw err;
+    throw new Error('MikroTikCommandError: ' + err.message);
   }
 }
 
@@ -73,23 +92,33 @@ function disconnectMikrotik() {
 }
 
 /**
- * Watchdog: keep connection alive with a heartbeat ping
+ * Watchdog: keep connection alive
  */
 setInterval(async () => {
   if (isConnected) {
     try {
       await sendCommand('/system/identity/print');
-      console.log('💓 MikroTik heartbeat OK');
-    } catch (err) {
-      console.log('⚠️ Lost connection, attempting to reconnect...');
+      if (lastStatus !== 'ok') {
+        console.log('💓 MikroTik connection restored');
+        lastStatus = 'ok';
+      }
+    } catch {
+      if (lastStatus !== 'lost') {
+        console.log('⚠️ Lost connection, attempting to reconnect...');
+        lastStatus = 'lost';
+      }
       try {
         await reconnectIfNeeded();
-      } catch (reErr) {
-        console.error('❌ Reconnect failed:', reErr.message);
-      }
+      } catch {}
     }
   }
-}, 30000); // every 30s
+}, 30000);
+
+/**
+ * Graceful shutdown
+ */
+process.on('SIGINT', disconnectMikrotik);
+process.on('SIGTERM', disconnectMikrotik);
 
 module.exports = {
   connectToMikrotik,
