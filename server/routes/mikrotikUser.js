@@ -28,23 +28,27 @@ router.get('/profiles', async (req, res) => {
 // Add user
 router.post('/', async (req, res) => {
   const { username, password, profile } = req.body;
+
   if (!username || !password || !profile) {
     return res.status(400).json({ message: 'All fields required' });
   }
 
   try {
-    const result = await sendCommand('/ppp/secret/add', {
-      name: username,
-      password,
-      service: 'pppoe',
-      profile,
-    });
+    const args = [
+      `=name=${username}`,
+      `=password=${password}`,
+      `=service=pppoe`,
+      `=profile=${profile}`,
+    ];
+
+    const result = await sendCommand('/ppp/secret/add', args);
+
     res.status(201).json({ message: 'User added successfully', result });
   } catch (err) {
+    console.error("Error adding PPPoE user:", err);
     res.status(500).json({ message: err.message });
   }
 });
-
 // Remove user
 router.delete('/remove/:username', async (req, res) => {
   try {
