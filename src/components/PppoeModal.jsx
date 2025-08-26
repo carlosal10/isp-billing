@@ -149,7 +149,7 @@ export default function PppoeModal({ isOpen, onClose }) {
             ) : (
               profiles.map((p) => (
                 <option key={p.id} value={p.name}>
-                  {p.name} - {p.price} KES ({p.duration})
+                  {p.name}
                 </option>
               ))
             )}
