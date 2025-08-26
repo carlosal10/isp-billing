@@ -130,12 +130,13 @@ export default function CustomersModal({ isOpen, onClose }) {
             >
               <option value="">Select PPPoE Profile</option>
               {pppoeProfiles.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.name} ({p.speed} Mbps)
+                <option key={p.id} value={p.name}>
+                  {p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}
                 </option>
               ))}
             </select>
           )}
+
 
           {networkType === "static" && (
             <div className="static-config">
