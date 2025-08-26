@@ -31,14 +31,15 @@ export default function CustomersModal({ isOpen, onClose }) {
   }, []);
 
   // Load PPPoE profiles dynamically
-  useEffect(() => {
-    if (networkType === "pppoe") {
-      fetch("https://isp-billing-uq58.onrender.com/api/customers/pppoe/profiles")
-        .then(res => res.json())
-        .then(data => setPppoeProfiles(data))
-        .catch(() => setMessage("❌ Failed to load PPPoE profiles"));
-    }
-  }, [networkType]);
+useEffect(() => {
+  if (networkType === "pppoe") {
+    fetch("https://isp-billing-uq58.onrender.com/api/customers/pppoe/profiles")
+      .then(res => res.json())
+      .then(data => setPppoeProfiles(data.profiles || []))
+      .catch(() => setMessage("❌ Failed to load PPPoE profiles"));
+  }
+}, [networkType]);
+
 
   if (!isOpen) return null;
 
