@@ -136,25 +136,25 @@ export default function PppoeModal({ isOpen, onClose }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <select
-            required
-            value={profile}
-            onChange={(e) => setProfile(e.target.value)}
-            disabled={loadingProfiles}
-          >
-            {loadingProfiles ? (
-              <option>Loading profiles...</option>
-            ) : profiles.length === 0 ? (
-              <option>No profiles available</option>
-            ) : (
-              profiles.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name}
-                </option>
-              ))
-            )}
-          </select>
-          <button type="submit" disabled={loading}>
+         <select
+          required
+          value={profile}
+          onChange={(e) => setProfile(e.target.value)}
+          disabled={loadingProfiles}
+        >
+          {loadingProfiles ? (
+            <option>Loading profiles...</option>
+          ) : profiles.length === 0 ? (
+            <option>No profiles available</option>
+          ) : (
+            profiles.map((p) => (
+              <option key={p.id} value={p.name}>
+                {p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}
+              </option>
+            ))
+          )}
+        </select>
+ <button type="submit" disabled={loading}>
             <MdAdd className="inline-icon" /> {loading ? "Adding..." : "Add User"}
           </button>
         </form>

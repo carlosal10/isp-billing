@@ -4,24 +4,26 @@ const Plan = require('../models/plan');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 
 
-// GET profiles from DB
+// ✅ Get profiles directly from MikroTik
 router.get('/profiles', async (req, res) => {
   try {
-    const plans = await Plan.find({});
-    if (!plans.length) {
-      return res.status(404).json({ message: 'No plans found' });
+    const profiles = await sendCommand('/ppp/profile/print');
+
+    if (!profiles.length) {
+      return res.status(404).json({ message: 'No profiles found on MikroTik' });
     }
 
-    const profiles = plans.map(plan => ({
-      id: plan._id,
-      name: plan.name,
-      price: plan.price,
-      duration: plan.duration,
+    const formatted = profiles.map((p, index) => ({
+      id: p['.id'] || index, // fallback to index if no .id
+      name: p.name,
+      localAddress: p['local-address'] || null,
+      rateLimit: p['rate-limit'] || null,
     }));
 
-    res.json({ message: 'Profiles loaded', profiles });
+    res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
   } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch profiles' });
+    console.error("Error fetching MikroTik profiles:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
