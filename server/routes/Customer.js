@@ -5,7 +5,7 @@ const Plan = require('../models/plan.js');
 const PPPoEProfile = require('../models/pppoeUsers.js');
 
 // ✅ Get profiles directly from MikroTik
-router.get('/pppoe/profiles', async (req, res) => {
+router.get('/profiles', async (req, res) => {
   try {
     const profiles = await sendCommand('/ppp/profile/print');
 
