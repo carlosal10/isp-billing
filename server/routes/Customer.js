@@ -4,13 +4,26 @@ const Customer = require('../models/customers.js');
 const Plan = require('../models/plan.js');
 const PPPoEProfile = require('../models/pppoeUsers.js');
 
-// Fetch PPPoE profiles
+// ✅ Get profiles directly from MikroTik
 router.get('/pppoe/profiles', async (req, res) => {
   try {
-    const profiles = await PPPoEProfile.find();
-    res.json(profiles);
+    const profiles = await sendCommand('/ppp/profile/print');
+
+    if (!profiles.length) {
+      return res.status(404).json({ message: 'No profiles found on MikroTik' });
+    }
+
+    const formatted = profiles.map((p, index) => ({
+      id: p['.id'] || index, // fallback to index if no .id
+      name: p.name,
+      localAddress: p['local-address'] || null,
+      rateLimit: p['rate-limit'] || null,
+    }));
+
+    res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
   } catch (err) {
-    res.status(500).json({ message: "Failed to load PPPoE profiles", error: err.message });
+    console.error("Error fetching MikroTik profiles:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
