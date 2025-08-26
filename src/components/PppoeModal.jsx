@@ -3,7 +3,7 @@ import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
-import './PppoeModal.css';
+import "./PppoeModal.css";
 
 const API_BASE = "https://isp-billing-uq58.onrender.com/api/pppoe";
 
@@ -20,70 +20,94 @@ export default function PppoeModal({ isOpen, onClose }) {
 
   const [removeUser, setRemoveUser] = useState("");
 
+  const [loading, setLoading] = useState(false);
+
   // Load profiles from backend
   useEffect(() => {
     if (isOpen) {
+      setLoadingProfiles(true);
       fetch(`${API_BASE}/profiles`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.profiles) {
-            setProfiles(data.profiles);
-            setProfile(data.profiles[0]?.name || "");
-          }
-          setLoadingProfiles(false);
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || "Failed to fetch profiles");
+          setProfiles(data.profiles || []);
+          setProfile(data.profiles?.[0]?.name || "");
         })
-        .catch(err => {
+        .catch((err) => {
           console.error("Error fetching profiles:", err);
-          setLoadingProfiles(false);
-        });
+          setProfiles([]);
+        })
+        .finally(() => setLoadingProfiles(false));
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  // Helper: fetch with error handling
+  const apiRequest = async (url, options) => {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || "Request failed");
+    return data;
+  };
+
   // Add PPPoE user
   const handleAddUser = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch(API_BASE, {
+      const data = await apiRequest(API_BASE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, profile }),
       });
-      const data = await res.json();
       alert(data.message);
+      setUsername("");
+      setPassword("");
     } catch (err) {
+      alert("Error: " + err.message);
       console.error("Add user error:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Update PPPoE user password
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/update/${updateUser}`, {
+      const data = await apiRequest(`${API_BASE}/update/${updateUser}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: newPassword }),
       });
-      const data = await res.json();
       alert(data.message);
+      setUpdateUser("");
+      setNewPassword("");
     } catch (err) {
+      alert("Error: " + err.message);
       console.error("Update user error:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Remove PPPoE user
   const handleRemoveUser = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/remove/${removeUser}`, {
+      const data = await apiRequest(`${API_BASE}/remove/${removeUser}`, {
         method: "DELETE",
       });
-      const data = await res.json();
       alert(data.message);
+      setRemoveUser("");
     } catch (err) {
+      alert("Error: " + err.message);
       console.error("Remove user error:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -116,9 +140,12 @@ export default function PppoeModal({ isOpen, onClose }) {
             required
             value={profile}
             onChange={(e) => setProfile(e.target.value)}
+            disabled={loadingProfiles}
           >
             {loadingProfiles ? (
               <option>Loading profiles...</option>
+            ) : profiles.length === 0 ? (
+              <option>No profiles available</option>
             ) : (
               profiles.map((p) => (
                 <option key={p.id} value={p.name}>
@@ -127,8 +154,8 @@ export default function PppoeModal({ isOpen, onClose }) {
               ))
             )}
           </select>
-          <button type="submit">
-            <MdAdd className="inline-icon" /> Add User
+          <button type="submit" disabled={loading}>
+            <MdAdd className="inline-icon" /> {loading ? "Adding..." : "Add User"}
           </button>
         </form>
 
@@ -148,8 +175,9 @@ export default function PppoeModal({ isOpen, onClose }) {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
           />
-          <button type="submit">
-            <AiOutlineEdit className="inline-icon" /> Update Password
+          <button type="submit" disabled={loading}>
+            <AiOutlineEdit className="inline-icon" />{" "}
+            {loading ? "Updating..." : "Update Password"}
           </button>
         </form>
 
@@ -162,8 +190,9 @@ export default function PppoeModal({ isOpen, onClose }) {
             value={removeUser}
             onChange={(e) => setRemoveUser(e.target.value)}
           />
-          <button type="submit" className="remove-btn">
-            <RiDeleteBinLine className="inline-icon" /> Remove User
+          <button type="submit" className="remove-btn" disabled={loading}>
+            <RiDeleteBinLine className="inline-icon" />{" "}
+            {loading ? "Removing..." : "Remove User"}
           </button>
         </form>
       </div>
