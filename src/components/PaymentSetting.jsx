@@ -40,7 +40,6 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     },
   });
 
-  // ✅ Field Configurations
   const fields = {
     mpesa: [
       "businessName",
@@ -53,9 +52,14 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     paypal: ["clientId", "clientSecret"],
   };
 
-  // ✅ Fetch existing settings
+  // ✅ Fetch settings if ISP ID exists
   useEffect(() => {
     if (!isOpen) return;
+
+    if (!ispId) {
+      console.warn("No ISP ID provided, skipping fetch.");
+      return;
+    }
 
     const fetchSettings = async () => {
       setLoading(true);
@@ -88,11 +92,14 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     }));
   };
 
-  // ✅ Save settings
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (!ispId) {
+      alert("ISP ID missing. Cannot save settings until multi-user setup is complete.");
+      return;
+    }
 
+    setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/save`, {
         method: "POST",
@@ -105,7 +112,6 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       });
 
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Failed to save settings");
 
       alert(data.message || "Settings saved successfully");
@@ -131,7 +137,14 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           <FaTimes size={20} />
         </button>
 
-        <h2 className="text-2xl font-bold mb-4">Payment Integrations</h2>
+        <h2 className="text-2xl font-bold mb-2">Payment Integrations</h2>
+
+        {/* ⚠ Show warning if ISP ID is missing */}
+        {!ispId && (
+          <p className="text-red-600 text-sm mb-3">
+            ⚠ ISP ID not available. Payment settings cannot be loaded until multi-user setup is complete.
+          </p>
+        )}
 
         {/* Tabs */}
         <div className="flex space-x-4 border-b mb-4">
@@ -156,12 +169,10 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
         {loading && <p className="text-sm text-gray-500 mb-3">Loading...</p>}
 
-        {/* Forms */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold capitalize">
-              {activeTab} Settings
-            </h3>
+            <h3 className="text-lg font-semibold capitalize">{activeTab} Settings</h3>
             {fields[activeTab].map((field) => (
               <TextInput
                 key={field}
@@ -175,7 +186,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           <button
             type="submit"
             className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-            disabled={loading}
+            disabled={loading || !ispId}
           >
             {loading ? "Saving..." : "Save Settings"}
           </button>

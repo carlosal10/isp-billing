@@ -80,7 +80,7 @@ app.use("/api/hotspot-plans", hotspotPlansRoutes);
 app.use("/api/hotspot", hotspotRoutes);
 
 // Payments & M-Pesa
-app.use("/api/payment", paymentRoutes);                       // main payments
+app.use("/api/payments", paymentRoutes);                       // main payments
 app.use("/api/payment/callback", paymentCallbackRoutes);     // STK push callback
 app.use("/api/payment-config", paymentConfigRoutes);
 app.use("/api/mpesa-settings", mpesaSettingsRoutes);
