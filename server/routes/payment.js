@@ -175,5 +175,14 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
 
     res.json({ received: true });
 });
+// Get all payments
+router.get("/", async (req, res) => {
+  try {
+    const payments = await Payment.find();
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch payments" });
+  }
+});
 
 module.exports = router;
