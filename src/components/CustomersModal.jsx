@@ -15,6 +15,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [selectedProfile, setSelectedProfile] = useState(customer?.pppoeConfig?.profile || "");
   const [staticConfig, setStaticConfig] = useState(customer?.staticConfig || { ip: "", gateway: "", dns: "" });
 
+  // Ensure a profile is always selected if PPPoE
   useEffect(() => {
     if (networkType === "pppoe" && pppoeProfiles.length && !selectedProfile) {
       setSelectedProfile(pppoeProfiles[0].name);
@@ -33,8 +34,10 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       ...(networkType === "pppoe" ? { pppoeConfig: { profile: selectedProfile } } : { staticConfig }),
     };
     onSubmit(body);
+
     if (type === "Add") {
-      setName(""); setEmail(""); setPhone(""); setAddress(""); setPlan(""); setNetworkType("pppoe"); setSelectedProfile(""); setStaticConfig({ ip: "", gateway: "", dns: "" });
+      setName(""); setEmail(""); setPhone(""); setAddress("");
+      setPlan(""); setNetworkType("pppoe"); setSelectedProfile(""); setStaticConfig({ ip: "", gateway: "", dns: "" });
     }
   };
 
@@ -63,7 +66,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
             <select value={selectedProfile} onChange={(e) => setSelectedProfile(e.target.value)} required>
               <option value="">Select PPPoE Profile</option>
               {pppoeProfiles.map((p) => (
-                <option key={p.id} value={p.name}>{p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}</option>
+                <option key={p.id} value={p.name}>
+                  {p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}
+                </option>
               ))}
             </select>
           )}
@@ -94,9 +99,33 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("Add");
 
-  const loadCustomers = () => fetch("https://isp-billing-uq58.onrender.com/api/customers").then(res => res.json()).then(setCustomers).catch(() => setMessage("❌ Failed to load customers"));
-  const loadPlans = () => fetch("https://isp-billing-uq58.onrender.com/api/plans").then(res => res.json()).then(setPlans).catch(() => setMessage("❌ Failed to load plans"));
-  const loadProfiles = () => fetch("https://isp-billing-uq58.onrender.com/api/customers/profiles").then(res => res.json()).then(data => setPppoeProfiles(Array.isArray(data.profiles) ? data.profiles : [])).catch(() => setMessage("❌ Failed to load PPPoE profiles"));
+  const loadCustomers = async () => {
+    try {
+      const res = await fetch("https://isp-billing-uq58.onrender.com/api/customers");
+      setCustomers(await res.json());
+    } catch {
+      setMessage("❌ Failed to load customers");
+    }
+  };
+
+  const loadPlans = async () => {
+    try {
+      const res = await fetch("https://isp-billing-uq58.onrender.com/api/plans");
+      setPlans(await res.json());
+    } catch {
+      setMessage("❌ Failed to load plans");
+    }
+  };
+
+  const loadProfiles = async () => {
+    try {
+      const res = await fetch("https://isp-billing-uq58.onrender.com/api/customers/profiles");
+      const data = await res.json();
+      setPppoeProfiles(Array.isArray(data.profiles) ? data.profiles : []);
+    } catch {
+      setMessage("❌ Failed to load PPPoE profiles");
+    }
+  };
 
   useEffect(() => { loadCustomers(); loadPlans(); loadProfiles(); }, []);
 
@@ -107,8 +136,11 @@ export default function CustomersModal({ isOpen, onClose }) {
       const data = await res.json();
       setMessage(data.message || successMsg || "✅ Success");
       await loadCustomers();
-    } catch { setMessage("❌ Error connecting to server"); } 
-    finally { setLoading(false); }
+    } catch {
+      setMessage("❌ Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -120,7 +152,6 @@ export default function CustomersModal({ isOpen, onClose }) {
         <h2>Manage Customers</h2>
         {message && <p className="status-msg">{message}</p>}
 
-        {/* Tabs */}
         <div className="tabs">
           {["Add","Update","Remove"].map(tab => (
             <button key={tab} className={`tab-btn ${activeTab===tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>{tab}</button>
@@ -128,25 +159,47 @@ export default function CustomersModal({ isOpen, onClose }) {
         </div>
 
         <div className="tab-content">
-          {activeTab === "Add" && <CustomerForm type="Add" plans={plans} pppoeProfiles={pppoeProfiles} onSubmit={(body) => sendRequest("https://isp-billing-uq58.onrender.com/api/customers", "POST", body, "✅ Customer added")} loading={loading} />}
-          
+          {activeTab === "Add" && (
+            <CustomerForm
+              type="Add"
+              plans={plans}
+              pppoeProfiles={pppoeProfiles}
+              onSubmit={(body) => sendRequest("https://isp-billing-uq58.onrender.com/api/customers", "POST", body, "✅ Customer added")}
+              loading={loading}
+            />
+          )}
+
           {activeTab === "Update" && (
             <>
               <select onChange={(e) => setSelectedCustomer(customers.find(c => c._id === e.target.value))}>
                 <option value="">Select Customer</option>
                 {customers.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
               </select>
-              {selectedCustomer && <CustomerForm type="Update" customer={selectedCustomer} plans={plans} pppoeProfiles={pppoeProfiles} onSubmit={(body) => sendRequest(`https://isp-billing-uq58.onrender.com/api/customers/${selectedCustomer._id}`, "PUT", body, "✅ Customer updated")} loading={loading} />}
+              {selectedCustomer && (
+                <CustomerForm
+                  type="Update"
+                  customer={selectedCustomer}
+                  plans={plans}
+                  pppoeProfiles={pppoeProfiles}
+                  onSubmit={(body) => sendRequest(`https://isp-billing-uq58.onrender.com/api/customers/${selectedCustomer._id}`, "PUT", body, "✅ Customer updated")}
+                  loading={loading}
+                />
+              )}
             </>
           )}
 
           {activeTab === "Remove" && (
-            <form onSubmit={(e) => { e.preventDefault(); selectedCustomer && sendRequest(`https://isp-billing-uq58.onrender.com/api/customers/${selectedCustomer._id}`, "DELETE", null, "✅ Customer removed"); }}>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              selectedCustomer && sendRequest(`https://isp-billing-uq58.onrender.com/api/customers/${selectedCustomer._id}`, "DELETE", null, "✅ Customer removed");
+            }}>
               <select onChange={(e) => setSelectedCustomer(customers.find(c => c._id === e.target.value))}>
                 <option value="">Select Customer</option>
                 {customers.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
               </select>
-              <button type="submit" disabled={loading || !selectedCustomer}><RiDeleteBinLine className="inline-icon" /> Remove Customer</button>
+              <button type="submit" disabled={loading || !selectedCustomer}>
+                <RiDeleteBinLine className="inline-icon" /> Remove Customer
+              </button>
             </form>
           )}
         </div>

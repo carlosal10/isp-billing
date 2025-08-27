@@ -70,12 +70,15 @@ router.get('/by-account/:accountNumber', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { name, email, phone, address, routerIp, plan: planId, connectionType, pppoeConfig, staticConfig } = req.body;
+
+    // 1️⃣ Generate account number first
     const accountNumber = generateAccountNumber();
 
-    // Fetch plan for rateLimit
+    // 2️⃣ Fetch plan for rateLimit
     const plan = await Plan.findById(planId);
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
+    // 3️⃣ Build customer object
     const customerData = {
       name,
       email,
@@ -92,13 +95,10 @@ router.post('/', async (req, res) => {
       staticConfig: connectionType === 'static' ? staticConfig : undefined,
     };
 
-    const customer = new Customer(customerData);
-    const newCustomer = await customer.save();
-
-    // Apply PPPoE secret on MikroTik if needed
+    // 4️⃣ Apply PPPoE secret if PPPoE connection
     if (connectionType === 'pppoe') {
       await sendCommand('/ppp/secret/add', {
-        name: accountNumber,
+        name: accountNumber, // must exist
         password: 'defaultpass',
         profile: pppoeConfig.profile,
         service: 'pppoe',
@@ -106,7 +106,11 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Apply bandwidth queue
+    // 5️⃣ Save customer in MongoDB
+    const customer = new Customer(customerData);
+    const newCustomer = await customer.save();
+
+    // 6️⃣ Apply bandwidth queue
     await applyCustomerQueue(newCustomer, plan);
 
     res.status(201).json({ message: 'Customer created', customer: newCustomer });
@@ -115,7 +119,6 @@ router.post('/', async (req, res) => {
     res.status(400).json({ message: 'Failed to create customer: ' + err.message });
   }
 });
-
 // ----------------- Update Customer -----------------
 router.put('/:id', async (req, res) => {
   try {
