@@ -8,17 +8,22 @@ import "./PlanModal.css";
 export default function PlanModal({ isOpen, onClose }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState(""); // for update
-  const [selectedDeleteId, setSelectedDeleteId] = useState(""); // for delete
-  const [formData, setFormData] = useState({ name: "", price: "", duration: "" });
+  const [activeTab, setActiveTab] = useState("Add");
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [selectedDeleteId, setSelectedDeleteId] = useState("");
+  const [formData, setFormData] = useState({
+    name: "",
+    price: "",
+    duration: "",
+    speed: "",
+    rateLimit: "",
+    dataCap: ""
+  });
 
   const API_URL = "https://isp-billing-uq58.onrender.com/api/plans";
 
-  // Fetch plans when modal opens
   useEffect(() => {
-    if (isOpen) {
-      fetchPlans();
-    }
+    if (isOpen) fetchPlans();
   }, [isOpen]);
 
   const fetchPlans = async () => {
@@ -26,30 +31,33 @@ export default function PlanModal({ isOpen, onClose }) {
       setLoading(true);
       const res = await fetch(API_URL);
       const data = await res.json();
-      setPlans(Array.isArray(data) ? data : []); // ✅ ensure array
-      setLoading(false);
+      setPlans(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error fetching plans:", err);
+    } finally {
       setLoading(false);
     }
   };
 
-  // Add Plan
+  // ----------------- Handlers -----------------
   const handleAddPlan = async (e) => {
     e.preventDefault();
     const form = e.target;
     const body = {
       name: form.planName.value,
-      description: "Internet Plan",
+      description: form.planDescription.value || "Internet Plan",
       price: form.planPrice.value,
-      duration: form.planDuration.value || "30 days",
+      duration: form.planDuration.value,
+      speed: form.planSpeed.value,
+      rateLimit: form.planRateLimit.value,
+      dataCap: form.planDataCap.value || null
     };
 
     try {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         fetchPlans();
@@ -60,41 +68,49 @@ export default function PlanModal({ isOpen, onClose }) {
     }
   };
 
-  // Update Plan
+  const handleSelectPlan = (id) => {
+    setSelectedPlanId(id);
+    const plan = plans.find((p) => p._id === id);
+    if (plan) {
+      setFormData({
+        name: plan.name,
+        price: parseFloat(plan.price),
+        duration: plan.duration,
+        speed: plan.speed || "",
+        rateLimit: plan.rateLimit || "",
+        dataCap: plan.dataCap || ""
+      });
+    }
+  };
+
   const handleUpdatePlan = async (e) => {
     e.preventDefault();
     if (!selectedPlanId) return;
 
-    const body = {
-      name: formData.name,
-      price: formData.price,
-      duration: formData.duration,
-    };
-
+    const body = { ...formData };
     try {
       const res = await fetch(`${API_URL}/${selectedPlanId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         fetchPlans();
         setSelectedPlanId("");
-        setFormData({ name: "", price: "", duration: "" });
+        setFormData({ name: "", price: "", duration: "", speed: "", rateLimit: "", dataCap: "" });
       }
     } catch (err) {
       console.error("Error updating plan:", err);
     }
   };
 
-  // Delete Plan
   const handleDeletePlan = async (e) => {
     e.preventDefault();
     if (!selectedDeleteId) return;
 
     try {
       const res = await fetch(`${API_URL}/${selectedDeleteId}`, {
-        method: "DELETE",
+        method: "DELETE"
       });
       if (res.ok) {
         fetchPlans();
@@ -105,109 +121,121 @@ export default function PlanModal({ isOpen, onClose }) {
     }
   };
 
-  // When selecting a plan for update, prefill inputs
-  const handleSelectPlan = (id) => {
-    setSelectedPlanId(id);
-    const plan = plans.find((p) => p._id === id);
-    if (plan) {
-      setFormData({
-        name: plan.name,
-        price: plan.price,
-        duration: plan.duration,
-      });
-    }
-  };
-
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <span className="close" onClick={onClose}>
-          <FaTimes />
-        </span>
-
+      <div className="modal-content plan-modal">
+        <span className="close" onClick={onClose}><FaTimes /></span>
         <h2>Manage Plans</h2>
 
-        {/* Add Plan */}
-        <form id="addPlanForm" onSubmit={handleAddPlan}>
-          <input type="text" name="planName" placeholder="Plan Name" required />
-          <input type="number" name="planPrice" placeholder="Price (KES)" required />
-          <input type="text" name="planDuration" placeholder="Duration (e.g. 30 days)" required />
-          <button type="submit">
-            <MdAdd className="inline-icon" /> Add Plan
-          </button>
-        </form>
+        {/* Tabs */}
+        <div className="tabs">
+          {["Add", "Update", "Remove"].map(tab => (
+            <button
+              key={tab}
+              className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-        {/* Update Plan */}
-        <form id="updatePlanForm" onSubmit={handleUpdatePlan}>
-          <select
-            value={selectedPlanId}
-            onChange={(e) => handleSelectPlan(e.target.value)}
-            required
-          >
-            <option value="">-- Select a Plan to Update --</option>
-            {plans.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name} ({p.price} KES)
-              </option>
-            ))}
-          </select>
+        <div className="tab-content">
+          {/* Add Plan */}
+          {activeTab === "Add" && (
+            <form onSubmit={handleAddPlan}>
+              <input type="text" name="planName" placeholder="Plan Name" required />
+              <input type="number" name="planPrice" placeholder="Price (KES)" required />
+              <input type="text" name="planDuration" placeholder="Duration (e.g. 30 days)" required />
+              <input type="number" name="planSpeed" placeholder="Speed (Mbps)" required />
+              <input type="text" name="planRateLimit" placeholder="Rate Limit (e.g., 10M/10M)" required />
+              <input type="number" name="planDataCap" placeholder="Data Cap (GB, optional)" />
+              <button type="submit"><MdAdd className="inline-icon" /> Add Plan</button>
+            </form>
+          )}
 
-          {selectedPlanId && (
+          {/* Update Plan */}
+          {activeTab === "Update" && (
             <>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="New Name"
-              />
-              <input
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                placeholder="New Price"
-              />
-              <input
-                type="text"
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                placeholder="New Duration"
-              />
-              <button type="submit">
-                <AiOutlineEdit className="inline-icon" /> Update Plan
-              </button>
+              <select value={selectedPlanId} onChange={(e) => handleSelectPlan(e.target.value)} required>
+                <option value="">-- Select Plan to Update --</option>
+                {plans.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.price} KES)
+                  </option>
+                ))}
+              </select>
+              {selectedPlanId && (
+                <form onSubmit={handleUpdatePlan}>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Name"
+                  />
+                  <input
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    placeholder="Price"
+                  />
+                  <input
+                    type="text"
+                    value={formData.duration}
+                    onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                    placeholder="Duration"
+                  />
+                  <input
+                    type="number"
+                    value={formData.speed}
+                    onChange={(e) => setFormData({ ...formData, speed: e.target.value })}
+                    placeholder="Speed (Mbps)"
+                  />
+                  <input
+                    type="text"
+                    value={formData.rateLimit}
+                    onChange={(e) => setFormData({ ...formData, rateLimit: e.target.value })}
+                    placeholder="Rate Limit"
+                  />
+                  <input
+                    type="number"
+                    value={formData.dataCap}
+                    onChange={(e) => setFormData({ ...formData, dataCap: e.target.value })}
+                    placeholder="Data Cap (GB)"
+                  />
+                  <button type="submit"><AiOutlineEdit className="inline-icon" /> Update Plan</button>
+                </form>
+              )}
             </>
           )}
-        </form>
 
-        {/* Remove Plan */}
-        <form id="removePlanForm" onSubmit={handleDeletePlan}>
-          <select
-            value={selectedDeleteId}
-            onChange={(e) => setSelectedDeleteId(e.target.value)}
-            required
-          >
-            <option value="">-- Select a Plan to Remove --</option>
-            {plans.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name} ({p.price} KES)
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="remove-btn">
-            <RiDeleteBinLine className="inline-icon" /> Remove Plan
-          </button>
-        </form>
+          {/* Remove Plan */}
+          {activeTab === "Remove" && (
+            <form onSubmit={handleDeletePlan}>
+              <select value={selectedDeleteId} onChange={(e) => setSelectedDeleteId(e.target.value)} required>
+                <option value="">-- Select Plan to Remove --</option>
+                {plans.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.price} KES)
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="remove-btn"><RiDeleteBinLine className="inline-icon" /> Remove Plan</button>
+            </form>
+          )}
+        </div>
 
+        {/* Display all plans */}
         <h3>Available Plans</h3>
         {loading ? (
           <p>Loading plans...</p>
         ) : (
           <ul className="plan-list">
-            {plans.map((plan) => (
+            {plans.map(plan => (
               <li key={plan._id}>
-                <strong>{plan.name}</strong> - {plan.price} ({plan.duration})
+                <strong>{plan.name}</strong> - {plan.price} | {plan.duration} | {plan.speed} Mbps | {plan.rateLimit} | {plan.dataCap ? `${plan.dataCap}GB` : "No cap"}
               </li>
             ))}
           </ul>

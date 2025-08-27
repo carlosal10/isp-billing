@@ -1,20 +1,59 @@
 import { useState, useEffect } from "react";
 import { FaTimes, FaStripe, FaPaypal, FaMoneyBillWave } from "react-icons/fa";
-import './PaymentSetting.css'; // ✅ custom styles
+import "./PaymentSetting.css";
 
-const API_BASE = "https://isp-billing-uq58.onrender.com/api/payments"; // backend path
+const API_BASE = "https://isp-billing-uq58.onrender.com/api/payments-config";
+
+// ✅ Reusable Input Component
+function TextInput({ value, onChange, placeholder }) {
+  return (
+    <input
+      type="text"
+      placeholder={placeholder}
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full border rounded-lg px-3 py-2"
+      required
+    />
+  );
+}
 
 export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
   const [activeTab, setActiveTab] = useState("mpesa");
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    mpesa: { businessName: "", paybillShortcode: "", paybillPasskey: "", buyGoodsTill: "", buyGoodsPasskey: "" },
-    stripe: { publishableKey: "", secretKey: "" },
-    paypal: { clientId: "", clientSecret: "" },
+    mpesa: {
+      businessName: "",
+      paybillShortcode: "",
+      paybillPasskey: "",
+      buyGoodsTill: "",
+      buyGoodsPasskey: "",
+    },
+    stripe: {
+      publishableKey: "",
+      secretKey: "",
+    },
+    paypal: {
+      clientId: "",
+      clientSecret: "",
+    },
   });
 
-  // Load existing settings on modal open or tab change
+  // ✅ Field Configurations
+  const fields = {
+    mpesa: [
+      "businessName",
+      "paybillShortcode",
+      "paybillPasskey",
+      "buyGoodsTill",
+      "buyGoodsPasskey",
+    ],
+    stripe: ["publishableKey", "secretKey"],
+    paypal: ["clientId", "clientSecret"],
+  };
+
+  // ✅ Fetch existing settings
   useEffect(() => {
     if (!isOpen) return;
 
@@ -22,10 +61,18 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE}/${ispId}/${activeTab}`);
+        if (!res.ok) throw new Error("Failed to fetch settings");
+
         const data = await res.json();
-        if (data) setFormData((prev) => ({ ...prev, [activeTab]: data }));
+        if (data) {
+          setFormData((prev) => ({
+            ...prev,
+            [activeTab]: { ...prev[activeTab], ...data },
+          }));
+        }
       } catch (err) {
         console.error("Error loading settings:", err);
+        alert("Failed to load settings. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -41,6 +88,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     }));
   };
 
+  // ✅ Save settings
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -57,15 +105,14 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        alert(data.message || "Settings saved successfully");
-        onClose();
-      } else {
-        alert(data.error || "Failed to save settings");
-      }
+
+      if (!res.ok) throw new Error(data.error || "Failed to save settings");
+
+      alert(data.message || "Settings saved successfully");
+      onClose();
     } catch (err) {
       console.error("Error saving settings:", err);
-      alert("Server error while saving settings");
+      alert(err.message || "Server error while saving settings");
     } finally {
       setLoading(false);
     }
@@ -77,7 +124,10 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     <div className="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
       <div className="modal-content bg-white rounded-2xl shadow-lg w-full max-w-2xl p-6 relative">
         {/* Close Button */}
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-600 hover:text-red-500">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-gray-600 hover:text-red-500"
+        >
           <FaTimes size={20} />
         </button>
 
@@ -85,80 +135,42 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
         {/* Tabs */}
         <div className="flex space-x-4 border-b mb-4">
-          <button
-            onClick={() => setActiveTab("mpesa")}
-            className={`flex items-center gap-2 pb-2 ${activeTab === "mpesa" ? "border-b-2 border-green-600 text-green-600 font-semibold" : "text-gray-600"}`}
-          >
-            <FaMoneyBillWave /> M-Pesa
-          </button>
-          <button
-            onClick={() => setActiveTab("stripe")}
-            className={`flex items-center gap-2 pb-2 ${activeTab === "stripe" ? "border-b-2 border-indigo-600 text-indigo-600 font-semibold" : "text-gray-600"}`}
-          >
-            <FaStripe /> Stripe
-          </button>
-          <button
-            onClick={() => setActiveTab("paypal")}
-            className={`flex items-center gap-2 pb-2 ${activeTab === "paypal" ? "border-b-2 border-blue-600 text-blue-600 font-semibold" : "text-gray-600"}`}
-          >
-            <FaPaypal /> PayPal
-          </button>
+          {[
+            { key: "mpesa", label: "M-Pesa", icon: <FaMoneyBillWave /> },
+            { key: "stripe", label: "Stripe", icon: <FaStripe /> },
+            { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
+          ].map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-2 pb-2 ${
+                activeTab === key
+                  ? "border-b-2 border-green-600 text-green-600 font-semibold"
+                  : "text-gray-600"
+              }`}
+            >
+              {icon} {label}
+            </button>
+          ))}
         </div>
 
         {loading && <p className="text-sm text-gray-500 mb-3">Loading...</p>}
 
         {/* Forms */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {activeTab === "mpesa" && (
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold">M-Pesa Settings</h3>
-              {["businessName","paybillShortcode","paybillPasskey","buyGoodsTill","buyGoodsPasskey"].map((field) => (
-                <input
-                  key={field}
-                  type="text"
-                  placeholder={field.replace(/([A-Z])/g, " $1")}
-                  value={formData.mpesa[field]}
-                  onChange={(e) => handleChange("mpesa", field, e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-              ))}
-            </div>
-          )}
-
-          {activeTab === "stripe" && (
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold">Stripe Settings</h3>
-              {["publishableKey","secretKey"].map((field) => (
-                <input
-                  key={field}
-                  type="text"
-                  placeholder={field.replace(/([A-Z])/g, " $1")}
-                  value={formData.stripe[field]}
-                  onChange={(e) => handleChange("stripe", field, e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-              ))}
-            </div>
-          )}
-
-          {activeTab === "paypal" && (
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold">PayPal Settings</h3>
-              {["clientId","clientSecret"].map((field) => (
-                <input
-                  key={field}
-                  type="text"
-                  placeholder={field.replace(/([A-Z])/g, " $1")}
-                  value={formData.paypal[field]}
-                  onChange={(e) => handleChange("paypal", field, e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-              ))}
-            </div>
-          )}
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold capitalize">
+              {activeTab} Settings
+            </h3>
+            {fields[activeTab].map((field) => (
+              <TextInput
+                key={field}
+                placeholder={field.replace(/([A-Z])/g, " $1")}
+                value={formData[activeTab][field]}
+                onChange={(val) => handleChange(activeTab, field, val)}
+              />
+            ))}
+          </div>
 
           <button
             type="submit"

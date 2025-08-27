@@ -3,86 +3,62 @@ const router = express.Router();
 const Invoice = require('../models/Invoice');
 const Customer = require('../models/customers');
 
-// Get all invoices
 router.get('/', async (req, res) => {
-    try {
-        const invoices = await Invoice.find()
-            .populate('customer', 'name email')
-            .populate('plan', 'name price');
-        res.json(invoices);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
+  try {
+    const invoices = await Invoice.find().populate('customer', 'name accountNumber');
+    const result = invoices.map(inv => ({
+      ...inv.toObject(),
+      customerName: inv.customer.name
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch invoices' });
+  }
 });
+router.put('/:id/pay', async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id).populate('customer plan');
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-// Get invoices by customer
-router.get('/customer/:customerId', async (req, res) => {
-    try {
-        const invoices = await Invoice.find({ customer: req.params.customerId })
-            .populate('plan', 'name price');
-        res.json(invoices);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
+    invoice.status = 'Paid';
+    await invoice.save();
+
+    res.json({ message: 'Invoice marked as paid', invoice });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to mark invoice paid' });
+  }
 });
+router.post('/:id/generate', async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id).populate('customer plan');
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-// Get a specific invoice
-router.get('/:id', async (req, res) => {
-    try {
-        const invoice = await Invoice.findById(req.params.id)
-            .populate('customer', 'name email')
-            .populate('plan', 'name price');
-        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-        res.json(invoice);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
+    // Logic to generate PDF or invoice number
+    invoice.generated = true;
+    await invoice.save();
+
+    res.json({ message: 'Invoice generated', invoice });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to generate invoice' });
+  }
 });
+const path = require('path');
 
-// Create a new invoice
-router.post('/', async (req, res) => {
-    const { customer, plan, amountDue, dueDate } = req.body;
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-    try {
-        const invoice = new Invoice({
-            customer,
-            plan,
-            amountDue,
-            dueDate,
-        });
-
-        const newInvoice = await invoice.save();
-        res.status(201).json(newInvoice);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-// Update an invoice
-router.put('/:id', async (req, res) => {
-    try {
-        const invoice = await Invoice.findById(req.params.id);
-        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-
-        Object.assign(invoice, req.body); // Merge updates
-        const updatedInvoice = await invoice.save();
-        res.json(updatedInvoice);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-// Delete an invoice
-router.delete('/:id', async (req, res) => {
-    try {
-        const invoice = await Invoice.findById(req.params.id);
-        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-
-        await invoice.remove();
-        res.json({ message: 'Invoice deleted' });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
+    // Assuming PDFs are saved in /pdfs folder with invoice._id.pdf
+    const pdfPath = path.join(__dirname, '../pdfs', `${invoice._id}.pdf`);
+    res.sendFile(pdfPath);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch invoice PDF' });
+  }
 });
 
 module.exports = router;

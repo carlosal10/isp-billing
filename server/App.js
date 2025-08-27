@@ -4,15 +4,14 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-
+require('./jobs/expireAccess');
 const app = express();
 
 // ----------------- Middleware -----------------
 app.use(express.json());
 app.use(
   cors({
-    origin:'*',
-    origin: process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com", // frontend URL
+    origin: process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
@@ -27,10 +26,7 @@ mongoose
 // ----------------- Authentication Middleware -----------------
 const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Access denied. No token provided" });
-  }
+  if (!token) return res.status(401).json({ message: "Access denied. No token provided" });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -42,35 +38,54 @@ const authenticate = (req, res, next) => {
 };
 
 // ----------------- Routes -----------------
+// Core
 const customerRoutes = require("./routes/Customer");
 const planRoutes = require("./routes/plans");
 const invoiceRoutes = require("./routes/Invoices");
 const usageLogsRoutes = require("./routes/usageLogs");
 const adminAuthRoutes = require("./routes/AdminAuth");
 const statsRoutes = require("./routes/Stats");
-const mikrotikUserRoutes = require("./routes/mikrotikUser");
-const mikrotikConnect = require("./routes/mikrotikConnect");
-const hotspotPlansRouter = require("./routes/hotspotPlans");
-const hotspotRoutes = require("./routes/hotspot");
-const mpesaConfigRoutes = require("./routes/mpesaConfig");
-const paymentRoutes = require("./routes/payment");
-const callbackRoutes = require("./routes/paymentCallback");
 
+// MikroTik
+const mikrotikUserRoutes = require("./routes/mikrotikUser");
+const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
+
+// Hotspot
+const hotspotPlansRoutes = require("./routes/hotspotPlans");
+const hotspotRoutes = require("./routes/hotspot");
+
+// Payments
+const paymentRoutes = require("./routes/payment");             // STK push & manual
+const paymentCallbackRoutes = require("./routes/paymentCallback"); // STK callback
+const paymentConfigRoutes = require("./routes/paymentConfig");
+const mpesaSettingsRoutes = require("./routes/mpesaSettings");
+const stripeWebhook = require('./routes/stripeWebhook');
+
+
+
+// ----------------- Mount APIs -----------------
 app.use("/api/customers", customerRoutes);
 app.use("/api/plans", planRoutes);
-app.use("/api/invoices", invoiceRoutes); // lowercase for consistency
+app.use("/api/invoices", invoiceRoutes);
 app.use("/api/usageLogs", usageLogsRoutes);
 app.use("/api/auth", adminAuthRoutes);
 app.use("/api/stats", statsRoutes);
-app.use("/api/pppoe", mikrotikUserRoutes);
-app.use("/api/connect", mikrotikConnect);
-app.use("/api/hotspot-plans", hotspotPlansRouter);
-app.use("/api/hotspot", hotspotRoutes);
-app.use("/api/mpesa-config", mpesaConfigRoutes);
-app.use("/api/payment", paymentRoutes);
-app.use("/api/payment", callbackRoutes);
 
-console.log("🔗 /api/mikrotik/connect route registered");
+// MikroTik PPPoE & connectivity
+app.use("/api/pppoe", mikrotikUserRoutes);
+app.use("/api/connect", mikrotikConnectRoutes);
+
+// Hotspot plans
+app.use("/api/hotspot-plans", hotspotPlansRoutes);
+app.use("/api/hotspot", hotspotRoutes);
+
+// Payments & M-Pesa
+app.use("/api/payment", paymentRoutes);                       // main payments
+app.use("/api/payment/callback", paymentCallbackRoutes);     // STK push callback
+app.use("/api/payment-config", paymentConfigRoutes);
+app.use("/api/mpesa-settings", mpesaSettingsRoutes);
+app.use('/api/payment/stripe', stripeWebhook);
+
 
 // ----------------- 404 Handler -----------------
 app.use((req, res) => {

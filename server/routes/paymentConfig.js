@@ -1,3 +1,4 @@
+//mpesaConfig.js
 const express = require('express');
 const router = express.Router();
 const PaymentConfig = require('../models/PaymentConfig');
