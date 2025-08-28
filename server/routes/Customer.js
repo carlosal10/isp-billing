@@ -74,11 +74,18 @@ router.post('/', async (req, res) => {
     // 1️⃣ Generate account number first
     const accountNumber = generateAccountNumber();
 
-    // 2️⃣ Fetch plan for rateLimit
+    // 2️⃣ Validate plan
     const plan = await Plan.findById(planId);
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
-    // 3️⃣ Build customer object
+    // 3️⃣ Validate PPPoE profile if needed
+    if (connectionType === 'pppoe') {
+      if (!pppoeConfig || !pppoeConfig.profile) {
+        return res.status(400).json({ message: 'PPPoE profile is required for PPPoE connections' });
+      }
+    }
+
+    // 4️⃣ Prepare customer data
     const customerData = {
       name,
       email,
@@ -90,15 +97,19 @@ router.post('/', async (req, res) => {
       plan: planId,
       connectionType,
       pppoeConfig: connectionType === 'pppoe'
-        ? { profile: pppoeConfig.profile, localAddress: pppoeConfig.localAddress, rateLimit: plan.speed + 'M/0M' }
+        ? { profile: pppoeConfig.profile, localAddress: pppoeConfig.localAddress || null, rateLimit: plan.speed + 'M/0M' }
         : undefined,
       staticConfig: connectionType === 'static' ? staticConfig : undefined,
     };
 
-    // 4️⃣ Apply PPPoE secret if PPPoE connection
+    // 5️⃣ Save customer to DB
+    const customer = new Customer(customerData);
+    const newCustomer = await customer.save();
+
+    // 6️⃣ Apply PPPoE secret on MikroTik
     if (connectionType === 'pppoe') {
       await sendCommand('/ppp/secret/add', {
-        name: accountNumber, // must exist
+        name: accountNumber,         // guaranteed to exist
         password: 'defaultpass',
         profile: pppoeConfig.profile,
         service: 'pppoe',
@@ -106,19 +117,16 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 5️⃣ Save customer in MongoDB
-    const customer = new Customer(customerData);
-    const newCustomer = await customer.save();
-
-    // 6️⃣ Apply bandwidth queue
+    // 7️⃣ Apply bandwidth queue
     await applyCustomerQueue(newCustomer, plan);
 
-    res.status(201).json({ message: 'Customer created', customer: newCustomer });
+    res.status(201).json({ message: 'Customer created successfully', customer: newCustomer });
   } catch (err) {
-    console.error(err);
+    console.error('Create customer failed:', err);
     res.status(400).json({ message: 'Failed to create customer: ' + err.message });
   }
 });
+
 // ----------------- Update Customer -----------------
 router.put('/:id', async (req, res) => {
   try {
