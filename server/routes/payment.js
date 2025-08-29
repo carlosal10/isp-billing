@@ -97,41 +97,57 @@ router.get('/search', async (req, res) => {
 });
 
 // -------------------- Manual Validation --------------------
+// Helper: parse human-friendly durations into days
+function parseDurationToDays(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().toLowerCase();
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+  const m = s.match(/(\d+(\.\d+)?)\s*(day|week|month|year)s?/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const u = m[3];
+    if (u === 'day') return n;
+    if (u === 'week') return n * 7;
+    if (u === 'month') return n * 30;
+    if (u === 'year') return n * 365;
+  }
+  if (s === 'monthly' || s === 'month') return 30;
+  if (s === 'weekly' || s === 'week') return 7;
+  if (s === 'yearly' || s === 'annual' || s === 'year') return 365;
+  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  return Number.isFinite(num) ? num : NaN;
+}
+
 // Flexible:
-//  A) Validate an existing payment: send { paymentId, transactionId, notes?, validatedBy? }
-//  B) Create + validate new manual payment: send { customerId | accountNumber, transactionId, amount?, method?, notes?, validatedBy? }
-//     - plan is taken from customer.plan; amount defaults to plan.price if not provided.
-// -------------------- Manual Validation --------------------
+//  A) Validate existing payment: { paymentId, transactionId, notes?, validatedBy? }
+//  B) Create+validate new payment: { customerId | accountNumber, transactionId, amount?, method?, notes?, validatedBy? }
 router.post('/manual', async (req, res) => {
   const debugId = `manual-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
   try {
     const {
-      paymentId,           // Path A
-      customerId,          // Path B
-      accountNumber,       // Path B (optional)
-      transactionId,       // common
-      amount,              // optional, fallback to plan.price
-      method,              // optional, default 'manual'
-      notes,
-      validatedBy,
+      paymentId, customerId, accountNumber,
+      transactionId, amount, method, notes, validatedBy,
     } = req.body || {};
 
-    if (!transactionId || typeof transactionId !== 'string' || !transactionId.trim()) {
+    if (!transactionId || !String(transactionId).trim()) {
       return res.status(400).json({ error: 'transactionId is required', debugId });
     }
 
-    // ---------- Path A: validate an existing payment ----------
+    // ---------- Path A ----------
     if (paymentId) {
       const payment = await Payment.findById(paymentId).populate('customer plan');
       if (!payment) return res.status(404).json({ error: 'Payment not found', debugId });
       if (!payment.plan) return res.status(400).json({ error: 'Payment has no plan associated', debugId });
 
-      const durationDays = Number(payment.plan.duration);
+      const durationDays =
+        (payment.plan.durationDays ?? parseDurationToDays(payment.plan.duration));
+
       if (!Number.isFinite(durationDays) || durationDays <= 0) {
         return res.status(400).json({ error: 'Invalid plan duration on payment.plan', debugId });
       }
 
-      payment.transactionId = transactionId.trim();
+      payment.transactionId = String(transactionId).trim();
       payment.status = 'Success';
       payment.validatedBy = validatedBy || 'Manual Entry';
       payment.validatedAt = new Date();
@@ -140,38 +156,37 @@ router.post('/manual', async (req, res) => {
 
       await payment.save();
 
-      // Queue apply is best-effort
       try { await applyBandwidth(payment.customer, payment.plan); }
-      catch (e) {
-        console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e);
-      }
+      catch (e) { console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e); }
 
       return res.json({ message: 'Payment validated', payment, debugId });
     }
 
-    // ---------- Path B: create + validate new manual payment ----------
-    // Find customer by customerId or accountNumber
+    // ---------- Path B ----------
     let customer = null;
-    if (customerId) {
-      customer = await Customer.findById(customerId).populate('plan');
-    } else if (accountNumber) {
-      customer = await Customer.findOne({ accountNumber }).populate('plan');
-    } else {
-      return res.status(400).json({ error: 'Provide customerId or accountNumber', debugId });
-    }
+    if (customerId) customer = await Customer.findById(customerId).populate('plan');
+    else if (accountNumber) customer = await Customer.findOne({ accountNumber }).populate('plan');
+    else return res.status(400).json({ error: 'Provide customerId or accountNumber', debugId });
 
     if (!customer) return res.status(404).json({ error: 'Customer not found', debugId });
     if (!customer.plan) return res.status(400).json({ error: 'Customer has no plan assigned', debugId });
 
-    const plan = await Plan.findById(customer.plan._id);
-    if (!plan) return res.status(400).json({ error: 'Invalid plan reference on customer', debugId });
+    // If you already populated a full plan doc above, you can use it directly:
+    // const plan = customer.plan;
+    // If you prefer a fresh fetch, keep this:
+    const plan = await Plan.findById(customer.plan._id) || customer.plan;
 
-    const priceNum = amount !== undefined && amount !== '' ? Number(amount) : Number(plan.price);
+    const priceNum = (amount !== undefined && amount !== '')
+      ? Number(amount)
+      : Number(plan.price);
+
     if (!Number.isFinite(priceNum) || priceNum < 0) {
       return res.status(400).json({ error: 'Invalid amount (must be a number ≥ 0)', debugId });
     }
 
-    const durationDays = Number(plan.duration);
+    const durationDays =
+      (plan.durationDays ?? parseDurationToDays(plan.duration));
+
     if (!Number.isFinite(durationDays) || durationDays <= 0) {
       return res.status(400).json({ error: 'Invalid plan.duration (must be a positive number of days)', debugId });
     }
@@ -184,7 +199,7 @@ router.post('/manual', async (req, res) => {
       amount: priceNum,
       method: method || 'manual',
       status: 'Success',
-      transactionId: transactionId.trim(),
+      transactionId: String(transactionId).trim(),
       validatedBy: validatedBy || 'Manual Entry',
       validatedAt: new Date(),
       expiryDate: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000),
@@ -192,16 +207,9 @@ router.post('/manual', async (req, res) => {
     });
 
     try { await applyBandwidth(customer, plan); }
-    catch (e) {
-      console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e);
-      // still succeed: payment is valid even if queue failed
-    }
+    catch (e) { console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e); }
 
-    return res.json({
-      message: 'Manual payment created and validated',
-      payment,
-      debugId,
-    });
+    return res.json({ message: 'Manual payment created and validated', payment, debugId });
   } catch (err) {
     console.error('[manual validation error]', debugId, err);
     return res.status(500).json({ error: 'Manual validation failed', debugId });
