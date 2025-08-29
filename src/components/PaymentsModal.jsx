@@ -53,7 +53,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     }
     setLoadingSearch(true);
     try {
-      const res = await axios.get(`https://isp-billing-uq58.onrender.com/api/payments/search?query=${query}`);
+      const res = await axios.get(`https://isp-billing-uq58.onrender.com/api/customers/search?query=${query}`);
       setCustomerResults(res.data);
     } catch (err) {
       console.error("Customer search failed:", err);
