@@ -82,12 +82,18 @@ router.post("/", async (req, res) => {
     } = req.body;
 
     // 1️⃣ Generate account number first
-    const accountNumber = generateAccountNumber();
+    const accountNumber = String(generateAccountNumber()).trim();
     console.log("✅ Generated accountNumber:", accountNumber);
+
+    if (!accountNumber) {
+      return res.status(500).json({ message: "Failed to generate account number" });
+    }
 
     // 2️⃣ Validate plan
     const plan = await Plan.findById(planId);
-    if (!plan) return res.status(400).json({ message: "Invalid plan selected" });
+    if (!plan) {
+      return res.status(400).json({ message: "Invalid plan selected" });
+    }
 
     // 3️⃣ Validate PPPoE profile if needed
     if (connectionType === "pppoe") {
@@ -126,14 +132,7 @@ router.post("/", async (req, res) => {
 
     // 6️⃣ Apply PPPoE secret on MikroTik
     if (connectionType === "pppoe") {
-      if (!accountNumber) {
-        console.error("❌ accountNumber is undefined, aborting PPPoE secret creation");
-        return res
-          .status(500)
-          .json({ message: "Failed to create customer: missing account number" });
-      }
-
-      console.log("📡 Sending PPPoE secret:", {
+      console.log("📡 Sending PPPoE secret payload:", {
         name: accountNumber,
         password: "defaultpass",
         profile: pppoeConfig.profile,
@@ -141,24 +140,36 @@ router.post("/", async (req, res) => {
         comment: `Customer: ${name}`,
       });
 
-      await sendCommand("/ppp/secret/add", {
-        name: String(accountNumber), // ensure string
-        password: "defaultpass",
-        profile: pppoeConfig.profile,
-        service: "pppoe",
-        comment: `Customer: ${name}`,
-      });
-
-      console.log("✅ PPPoE secret created successfully for", accountNumber);
+      try {
+        await sendCommand("/ppp/secret/add", {
+          name: accountNumber, // always a string
+          password: "defaultpass",
+          profile: pppoeConfig.profile,
+          service: "pppoe",
+          comment: `Customer: ${name}`,
+        });
+        console.log("✅ PPPoE secret created successfully for", accountNumber);
+      } catch (mikrotikErr) {
+        console.error("❌ Failed to create PPPoE secret on MikroTik:", mikrotikErr.message);
+        // rollback: delete customer from DB if MikroTik fails
+        await Customer.findByIdAndDelete(newCustomer._id);
+        return res.status(500).json({ message: "Failed to create PPPoE secret: " + mikrotikErr.message });
+      }
     }
 
     // 7️⃣ Apply bandwidth queue
-    await applyCustomerQueue(newCustomer, plan);
-    console.log("✅ Queue applied successfully for", accountNumber);
+    try {
+      await applyCustomerQueue(newCustomer, plan);
+      console.log("✅ Queue applied successfully for", accountNumber);
+    } catch (queueErr) {
+      console.error("⚠️ Queue creation failed:", queueErr.message);
+      // don’t rollback DB here, but log the issue
+    }
 
-    res
-      .status(201)
-      .json({ message: "Customer created successfully", customer: newCustomer });
+    res.status(201).json({
+      message: "Customer created successfully",
+      customer: newCustomer,
+    });
   } catch (err) {
     console.error("❌ Create customer failed:", err);
     res.status(400).json({ message: "Failed to create customer: " + err.message });
