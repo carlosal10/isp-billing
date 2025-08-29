@@ -45,7 +45,6 @@ export default function PlanModal({ isOpen, onClose }) {
     const form = e.target;
     const body = {
       name: form.planName.value,
-      description: form.planDescription.value || "Internet Plan",
       price: form.planPrice.value,
       duration: form.planDuration.value,
       speed: form.planSpeed.value,
