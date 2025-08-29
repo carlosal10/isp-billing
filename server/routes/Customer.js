@@ -67,21 +67,34 @@ router.get('/by-account/:accountNumber', async (req, res) => {
 });
 
 // ----------------- Create Customer -----------------
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const { name, email, phone, address, routerIp, plan: planId, connectionType, pppoeConfig, staticConfig } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      address,
+      routerIp,
+      plan: planId,
+      connectionType,
+      pppoeConfig,
+      staticConfig,
+    } = req.body;
 
     // 1️⃣ Generate account number first
     const accountNumber = generateAccountNumber();
+    console.log("✅ Generated accountNumber:", accountNumber);
 
     // 2️⃣ Validate plan
     const plan = await Plan.findById(planId);
-    if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
+    if (!plan) return res.status(400).json({ message: "Invalid plan selected" });
 
     // 3️⃣ Validate PPPoE profile if needed
-    if (connectionType === 'pppoe') {
+    if (connectionType === "pppoe") {
       if (!pppoeConfig || !pppoeConfig.profile) {
-        return res.status(400).json({ message: 'PPPoE profile is required for PPPoE connections' });
+        return res
+          .status(400)
+          .json({ message: "PPPoE profile is required for PPPoE connections" });
       }
     }
 
@@ -92,14 +105,19 @@ router.post('/', async (req, res) => {
       phone,
       address,
       routerIp: routerIp || null,
-      status: 'active',
+      status: "active",
       accountNumber,
       plan: planId,
       connectionType,
-      pppoeConfig: connectionType === 'pppoe'
-        ? { profile: pppoeConfig.profile, localAddress: pppoeConfig.localAddress || null, rateLimit: plan.speed + 'M/0M' }
-        : undefined,
-      staticConfig: connectionType === 'static' ? staticConfig : undefined,
+      pppoeConfig:
+        connectionType === "pppoe"
+          ? {
+              profile: pppoeConfig.profile,
+              localAddress: pppoeConfig.localAddress || null,
+              rateLimit: plan.speed + "M/0M",
+            }
+          : undefined,
+      staticConfig: connectionType === "static" ? staticConfig : undefined,
     };
 
     // 5️⃣ Save customer to DB
@@ -107,23 +125,43 @@ router.post('/', async (req, res) => {
     const newCustomer = await customer.save();
 
     // 6️⃣ Apply PPPoE secret on MikroTik
-    if (connectionType === 'pppoe') {
-      await sendCommand('/ppp/secret/add', {
-        name: accountNumber,         // guaranteed to exist
-        password: 'defaultpass',
+    if (connectionType === "pppoe") {
+      if (!accountNumber) {
+        console.error("❌ accountNumber is undefined, aborting PPPoE secret creation");
+        return res
+          .status(500)
+          .json({ message: "Failed to create customer: missing account number" });
+      }
+
+      console.log("📡 Sending PPPoE secret:", {
+        name: accountNumber,
+        password: "defaultpass",
         profile: pppoeConfig.profile,
-        service: 'pppoe',
+        service: "pppoe",
         comment: `Customer: ${name}`,
       });
+
+      await sendCommand("/ppp/secret/add", {
+        name: String(accountNumber), // ensure string
+        password: "defaultpass",
+        profile: pppoeConfig.profile,
+        service: "pppoe",
+        comment: `Customer: ${name}`,
+      });
+
+      console.log("✅ PPPoE secret created successfully for", accountNumber);
     }
 
     // 7️⃣ Apply bandwidth queue
     await applyCustomerQueue(newCustomer, plan);
+    console.log("✅ Queue applied successfully for", accountNumber);
 
-    res.status(201).json({ message: 'Customer created successfully', customer: newCustomer });
+    res
+      .status(201)
+      .json({ message: "Customer created successfully", customer: newCustomer });
   } catch (err) {
-    console.error('Create customer failed:', err);
-    res.status(400).json({ message: 'Failed to create customer: ' + err.message });
+    console.error("❌ Create customer failed:", err);
+    res.status(400).json({ message: "Failed to create customer: " + err.message });
   }
 });
 
