@@ -70,106 +70,63 @@ router.get('/by-account/:accountNumber', async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
-      name,
-      email,
-      phone,
-      address,
-      routerIp,
-      plan: planId,
-      connectionType,
-      pppoeConfig,
-      staticConfig,
+      name, email, phone, address, routerIp,
+      plan: planId, connectionType, pppoeConfig, staticConfig,
     } = req.body;
 
-    // 1️⃣ Generate account number first
+    // 1) Generate username first (we use accountNumber as PPPoE username)
     const accountNumber = String(generateAccountNumber()).trim();
     console.log("✅ Generated accountNumber:", accountNumber);
 
-    if (!accountNumber) {
-      return res.status(500).json({ message: "Failed to generate account number" });
-    }
-
-    // 2️⃣ Validate plan
+    // 2) Validate plan
     const plan = await Plan.findById(planId);
-    if (!plan) {
-      return res.status(400).json({ message: "Invalid plan selected" });
+    if (!plan) return res.status(400).json({ message: "Invalid plan selected" });
+
+    // 3) Validate PPPoE fields if needed
+    if (connectionType === "pppoe" && (!pppoeConfig || !pppoeConfig.profile)) {
+      return res.status(400).json({ message: "PPPoE profile is required for PPPoE connections" });
     }
 
-    // 3️⃣ Validate PPPoE profile if needed
-    if (connectionType === "pppoe") {
-      if (!pppoeConfig || !pppoeConfig.profile) {
-        return res
-          .status(400)
-          .json({ message: "PPPoE profile is required for PPPoE connections" });
-      }
-    }
-
-    // 4️⃣ Prepare customer data
-    const customerData = {
-      name,
-      email,
-      phone,
-      address,
+    // 4) Prepare & save customer
+    const customer = new Customer({
+      name, email, phone, address,
       routerIp: routerIp || null,
       status: "active",
       accountNumber,
       plan: planId,
       connectionType,
-      pppoeConfig:
-        connectionType === "pppoe"
-          ? {
-              profile: pppoeConfig.profile,
-              localAddress: pppoeConfig.localAddress || null,
-              rateLimit: plan.speed + "M/0M",
-            }
-          : undefined,
+      pppoeConfig: connectionType === "pppoe"
+        ? { profile: pppoeConfig.profile, localAddress: pppoeConfig.localAddress || null, rateLimit: `${plan.speed}M/0M` }
+        : undefined,
       staticConfig: connectionType === "static" ? staticConfig : undefined,
-    };
-
-    // 5️⃣ Save customer to DB
-    const customer = new Customer(customerData);
+    });
     const newCustomer = await customer.save();
 
-    // 6️⃣ Apply PPPoE secret on MikroTik
+    // 5) MikroTik PPPoE secret (ARRAY OF WORDS)
     if (connectionType === "pppoe") {
-      console.log("📡 Sending PPPoE secret payload:", {
-        name: accountNumber,
-        password: "defaultpass",
-        profile: pppoeConfig.profile,
-        service: "pppoe",
-        comment: `Customer: ${name}`,
-      });
-
+      const words = [
+        `=name=${accountNumber}`,
+        `=password=defaultpass`,
+        `=profile=${pppoeConfig.profile}`,
+        `=service=pppoe`,
+        `=comment=Customer: ${name}`,
+      ];
+      console.log("📡 /ppp/secret/add", words);
       try {
-        await sendCommand("/ppp/secret/add", {
-          name: accountNumber, // always a string
-          password: "defaultpass",
-          profile: pppoeConfig.profile,
-          service: "pppoe",
-          comment: `Customer: ${name}`,
-        });
-        console.log("✅ PPPoE secret created successfully for", accountNumber);
-      } catch (mikrotikErr) {
-        console.error("❌ Failed to create PPPoE secret on MikroTik:", mikrotikErr.message);
-        // rollback: delete customer from DB if MikroTik fails
+        await sendCommand("/ppp/secret/add", words);
+        console.log("✅ PPPoE secret created for", accountNumber);
+      } catch (e) {
+        console.error("❌ MikroTik add secret failed:", e?.message || e);
+        // rollback DB if RouterOS failed to create secret
         await Customer.findByIdAndDelete(newCustomer._id);
-        return res.status(500).json({ message: "Failed to create PPPoE secret: " + mikrotikErr.message });
+        return res.status(500).json({ message: "Failed to create PPPoE secret: " + (e?.message || e) });
       }
     }
 
-    // 7️⃣ Apply bandwidth queue
-    try {
-      await applyCustomerQueue(newCustomer, plan);
-      console.log("✅ Queue applied successfully for", accountNumber);
-    } catch (queueErr) {
-      console.error("⚠️ Queue creation failed:", queueErr.message);
-      // don’t rollback DB here, but log the issue
-    }
+    // 6) Bandwidth queue (best-effort)
+    try { await applyCustomerQueue(newCustomer, plan); } catch (e) { console.warn("⚠️ Queue apply failed:", e?.message || e); }
 
-    res.status(201).json({
-      message: "Customer created successfully",
-      customer: newCustomer,
-    });
+    res.status(201).json({ message: "Customer created successfully", customer: newCustomer });
   } catch (err) {
     console.error("❌ Create customer failed:", err);
     res.status(400).json({ message: "Failed to create customer: " + err.message });
@@ -177,51 +134,48 @@ router.post("/", async (req, res) => {
 });
 
 // ----------------- Update Customer -----------------
-router.put('/:id', async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id);
-    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
 
     const { plan: planId, connectionType, pppoeConfig, staticConfig } = req.body;
 
-    // Fetch plan if changed
-    let plan;
-    if (planId && planId !== String(customer.plan)) {
-      plan = await Plan.findById(planId);
-      if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
-      customer.plan = planId;
-    } else {
-      plan = await Plan.findById(customer.plan);
-    }
+    // Plan changes
+    let plan = await Plan.findById(planId || customer.plan);
+    if (!plan) return res.status(400).json({ message: "Invalid plan selected" });
 
-    // Update customer fields
     Object.assign(customer, req.body);
 
-    if (connectionType === 'pppoe') {
+    if (connectionType === "pppoe") {
+      if (!pppoeConfig?.profile) return res.status(400).json({ message: "PPPoE profile required" });
       customer.staticConfig = undefined;
       customer.pppoeConfig = {
         profile: pppoeConfig.profile,
-        localAddress: pppoeConfig.localAddress,
-        rateLimit: plan.speed + 'M/0M',
+        localAddress: pppoeConfig.localAddress || null,
+        rateLimit: `${plan.speed}M/0M`,
       };
-      await sendCommand('/ppp/secret/set', {
-        numbers: customer.accountNumber,
-        profile: pppoeConfig.profile,
-      });
-    } else if (connectionType === 'static') {
+
+      const words = [
+        `=numbers=${customer.accountNumber}`,
+        `=profile=${pppoeConfig.profile}`,
+      ];
+      console.log("📡 /ppp/secret/set", words);
+      try { await sendCommand("/ppp/secret/set", words); }
+      catch (e) { return res.status(500).json({ message: "Failed to update PPPoE secret: " + (e?.message || e) }); }
+
+    } else if (connectionType === "static") {
       customer.pppoeConfig = undefined;
       customer.staticConfig = staticConfig;
     }
 
     const updated = await customer.save();
 
-    // Update bandwidth queue
-    await updateCustomerQueue(customer, plan);
-
-    res.json({ message: 'Customer updated successfully', customer: updated });
+    try { await updateCustomerQueue(customer, plan); } catch (e) { console.warn("⚠️ Queue update failed:", e?.message || e); }
+    res.json({ message: "Customer updated successfully", customer: updated });
   } catch (err) {
     console.error(err);
-    res.status(400).json({ message: 'Failed to update customer: ' + err.message });
+    res.status(400).json({ message: "Failed to update customer: " + err.message });
   }
 });
 
@@ -251,23 +205,23 @@ router.get('/', async (req, res) => {
 
 
 // ----------------- Delete Customer -----------------
-router.delete('/:id', async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const customer = await Customer.findByIdAndDelete(req.params.id);
-    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
 
-    // Remove PPPoE secret if exists
-    if (customer.connectionType === 'pppoe') {
-      await sendCommand('/ppp/secret/remove', { numbers: customer.accountNumber });
+    if (customer.connectionType === "pppoe") {
+      const words = [`=numbers=${customer.accountNumber}`];
+      console.log("📡 /ppp/secret/remove", words);
+      try { await sendCommand("/ppp/secret/remove", words); }
+      catch (e) { console.warn("⚠️ PPPoE secret remove failed:", e?.message || e); }
     }
 
-    // Remove bandwidth queue
-    await removeCustomerQueue(customer);
-
-    res.json({ message: 'Customer deleted successfully' });
+    try { await removeCustomerQueue(customer); } catch (e) { console.warn("⚠️ Queue remove failed:", e?.message || e); }
+    res.json({ message: "Customer deleted successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error deleting customer: ' + err.message });
+    res.status(500).json({ message: "Error deleting customer: " + err.message });
   }
 });
 
