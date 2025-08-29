@@ -1,94 +1,160 @@
+// routes/plans.js
 const express = require('express');
 const router = express.Router();
 const Plan = require('../models/plan');
 
-// Get all plans
-router.get('/', async (req, res) => {
-    try {
-        const plans = await Plan.find();
-        const plansWithCurrency = plans.map(plan => ({
-            ...plan.toObject(),
-            price: `${plan.price} KSH`, // Append KSH
-        }));
-        res.status(200).json(plansWithCurrency);
-    } catch (err) {
-        res.status(500).json({ message: 'Error fetching plans: ' + err.message });
-    }
+// ---- utils ----
+function parseDurationToDays(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().toLowerCase();
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+
+  const m = s.match(/(\d+(\.\d+)?)\s*(day|week|month|year)s?/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const unit = m[3];
+    if (unit === 'day') return n;
+    if (unit === 'week') return n * 7;
+    if (unit === 'month') return n * 30;   // simple approx
+    if (unit === 'year') return n * 365;
+  }
+  if (s === 'monthly' || s === 'month') return 30;
+  if (s === 'weekly' || s === 'week') return 7;
+  if (s === 'yearly' || s === 'annual' || s === 'year') return 365;
+
+  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  return Number.isFinite(num) ? num : NaN;
+}
+
+function formatPlan(p) {
+  return {
+    ...p,
+    priceFormatted: `${p.price} KSH`,
+  };
+}
+
+// ---------- GET all ----------
+router.get('/', async (_req, res) => {
+  try {
+    const plans = await Plan.find().lean();
+    res.status(200).json(plans.map(formatPlan));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching plans: ' + err.message });
+  }
 });
 
-// Get a specific plan
+// ---------- GET by id ----------
 router.get('/:id', async (req, res) => {
-    try {
-        const plan = await Plan.findById(req.params.id);
-        if (!plan) return res.status(404).json({ message: 'Plan not found' });
-        plan.price = `${plan.price} KSH`;
-        res.status(200).json(plan);
-    } catch (err) {
-        res.status(500).json({ message: 'Error fetching plan: ' + err.message });
-    }
+  try {
+    const plan = await Plan.findById(req.params.id).lean();
+    if (!plan) return res.status(404).json({ message: 'Plan not found' });
+    res.status(200).json(formatPlan(plan));
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching plan: ' + err.message });
+  }
 });
 
-// Create a new plan
+// ---------- CREATE ----------
 router.post('/', async (req, res) => {
-    const { name, description, price, duration, speed, rateLimit, dataCap } = req.body;
+  try {
+    let { name, description, price, duration, speed, rateLimit, dataCap } = req.body;
 
-    if (!name || !price || !duration || !speed || !rateLimit) {
-        return res.status(400).json({ message: 'Name, Price, Duration, Speed, and RateLimit are required fields' });
+    if (!name || price == null || duration == null || speed == null || !rateLimit) {
+      return res.status(400).json({ message: 'Name, Price, Duration, Speed, and RateLimit are required fields' });
     }
 
-    const plan = new Plan({
-        name,
-        description: description || 'No description provided',
-        price,
-        duration,
-        speed,
-        rateLimit,
-        dataCap: dataCap || null
+    // Coerce numbers safely
+    const priceNum = Number(price);
+    const speedNum = Number(speed);
+    const durationDays = parseDurationToDays(duration);
+
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ message: 'Invalid price (number >= 0 required)' });
+    }
+    if (!Number.isFinite(speedNum) || speedNum <= 0) {
+      return res.status(400).json({ message: 'Invalid speed (number > 0 required)' });
+    }
+    if (!Number.isFinite(durationDays) || durationDays <= 0) {
+      return res.status(400).json({ message: 'Invalid duration (days > 0 required)' });
+    }
+
+    const newPlan = await Plan.create({
+      name: String(name).trim(),
+      description: description || 'No description provided',
+      price: priceNum,
+      duration: durationDays,
+      speed: speedNum,
+      rateLimit: String(rateLimit).trim(),
+      dataCap: dataCap ?? null,
     });
 
-    try {
-        const newPlan = await plan.save();
-        newPlan.price = `${newPlan.price} KSH`;
-        res.status(201).json(newPlan);
-    } catch (err) {
-        res.status(400).json({ message: 'Error creating plan: ' + err.message });
-    }
+    res.status(201).json(formatPlan(newPlan.toObject()));
+  } catch (err) {
+    res.status(400).json({ message: 'Error creating plan: ' + err.message });
+  }
 });
 
-// Update an existing plan
+// ---------- UPDATE ----------
 router.put('/:id', async (req, res) => {
-    const { name, description, price, duration, speed, rateLimit, dataCap } = req.body;
+  try {
+    const updates = {};
+    const {
+      name, description, price, duration, speed, rateLimit, dataCap
+    } = req.body;
 
-    try {
-        const plan = await Plan.findById(req.params.id);
-        if (!plan) return res.status(404).json({ message: 'Plan not found' });
+    if (name != null) updates.name = String(name).trim();
+    if (description != null) updates.description = description;
 
-        plan.name = name || plan.name;
-        plan.description = description || plan.description;
-        plan.price = price || plan.price;
-        plan.duration = duration || plan.duration;
-        plan.speed = speed || plan.speed;
-        plan.rateLimit = rateLimit || plan.rateLimit;
-        plan.dataCap = dataCap !== undefined ? dataCap : plan.dataCap;
-
-        const updatedPlan = await plan.save();
-        updatedPlan.price = `${updatedPlan.price} KSH`;
-        res.status(200).json(updatedPlan);
-    } catch (err) {
-        res.status(400).json({ message: 'Error updating plan: ' + err.message });
+    if (price != null) {
+      const priceNum = Number(price);
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        return res.status(400).json({ message: 'Invalid price (number >= 0 required)' });
+      }
+      updates.price = priceNum;
     }
+
+    if (duration != null) {
+      const durationDays = parseDurationToDays(duration);
+      if (!Number.isFinite(durationDays) || durationDays <= 0) {
+        return res.status(400).json({ message: 'Invalid duration (days > 0 required)' });
+      }
+      updates.duration = durationDays;
+    }
+
+    if (speed != null) {
+      const speedNum = Number(speed);
+      if (!Number.isFinite(speedNum) || speedNum <= 0) {
+        return res.status(400).json({ message: 'Invalid speed (number > 0 required)' });
+      }
+      updates.speed = speedNum;
+    }
+
+    if (rateLimit != null) updates.rateLimit = String(rateLimit).trim();
+    if (dataCap !== undefined) updates.dataCap = dataCap;
+
+    const updated = await Plan.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).lean();
+
+    if (!updated) return res.status(404).json({ message: 'Plan not found' });
+    res.status(200).json(formatPlan(updated));
+  } catch (err) {
+    res.status(400).json({ message: 'Error updating plan: ' + err.message });
+  }
 });
 
-// Delete a plan
+// ---------- DELETE ----------
 router.delete('/:id', async (req, res) => {
-    try {
-        const plan = await Plan.findById(req.params.id);
-        if (!plan) return res.status(404).json({ message: 'Plan not found' });
-        await plan.remove();
-        res.status(200).json({ message: 'Plan deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ message: 'Error deleting plan: ' + err.message });
-    }
+  try {
+    const deleted = await Plan.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Plan not found' });
+    res.status(200).json({ message: 'Plan deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting plan: ' + err.message });
+  }
 });
 
 module.exports = router;
