@@ -1,104 +1,153 @@
-import React, { useState, useEffect } from "react";
+// src/components/PaymentsModal.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import axios from "axios";
+
+const API_BASE = "https://isp-billing-uq58.onrender.com/api";
 
 export default function PaymentsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices"
   const [payments, setPayments] = useState([]);
   const [invoices, setInvoices] = useState([]);
+
+  // ------- Manual validation state -------
   const [searchTerm, setSearchTerm] = useState("");
   const [customerResults, setCustomerResults] = useState([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [manualPayment, setManualPayment] = useState({
-    customer: null,
+    customerId: null,
     accountNumber: "",
     transactionId: "",
     amount: "",
     method: "",
   });
 
-  // Fetch payments and invoices when modal opens
+  const dropdownRef = useRef(null);
+
+  // fetch on open
   useEffect(() => {
     if (!isOpen) return;
     fetchPayments();
     fetchInvoices();
   }, [isOpen]);
 
-  // ===== Fetch Payments =====
+  // close dropdown on outside click
+  useEffect(() => {
+    function onDocClick(e) {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(e.target)) {
+        setCustomerResults([]);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // ---------- API calls ----------
   const fetchPayments = async () => {
     try {
-      const res = await axios.get("https://isp-billing-uq58.onrender.com/api/payments");
-      setPayments(res.data);
+      const { data } = await axios.get(`${API_BASE}/payments`);
+      setPayments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load payments:", err);
     }
   };
 
-  // ===== Fetch Invoices =====
   const fetchInvoices = async () => {
     try {
-      const res = await axios.get("https://isp-billing-uq58.onrender.com/api/invoices");
-      setInvoices(res.data);
+      const { data } = await axios.get(`${API_BASE}/invoices`);
+      setInvoices(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
     }
   };
 
-  // ===== Search Customers for Manual Validation =====
-  const searchCustomers = async (query) => {
-    if (!query.trim()) {
+  // Search customers for manual validation
+  const searchCustomers = async (q) => {
+    const query = q.trim();
+    if (!query) {
       setCustomerResults([]);
+      setSearchError("");
       return;
     }
     setLoadingSearch(true);
+    setSearchError("");
     try {
-      const res = await axios.get(`https://isp-billing-uq58.onrender.com/api/customers/search?query=${query}`);
-      setCustomerResults(res.data);
+      const { data } = await axios.get(
+        `${API_BASE}/customers/search?query=${encodeURIComponent(query)}`
+      );
+      setCustomerResults(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Customer search failed:", err);
+      setSearchError("Search failed");
+      setCustomerResults([]);
     } finally {
       setLoadingSearch(false);
     }
   };
 
-  // Debounce search input
+  // debounce search
   useEffect(() => {
-    const delay = setTimeout(() => {
-      if (searchTerm.trim()) searchCustomers(searchTerm);
-    }, 500);
-    return () => clearTimeout(delay);
+    const id = setTimeout(() => searchCustomers(searchTerm), 400);
+    return () => clearTimeout(id);
   }, [searchTerm]);
 
-  // ===== Manual Validation Submission =====
   const handleManualValidation = async (e) => {
     e.preventDefault();
-    if (!manualPayment.customer) {
-      alert("Please select a customer before validating.");
+    if (!manualPayment.customerId) {
+      alert("Please select a customer from the search results first.");
       return;
     }
+    if (!manualPayment.transactionId.trim()) {
+      alert("Transaction ID is required.");
+      return;
+    }
+
     try {
-      await axios.post("https://isp-billing-uq58.onrender.com/api/payments/manual", manualPayment);
+      await axios.post(`${API_BASE}/payments/manual`, {
+        customerId: manualPayment.customerId, // required (Path B)
+        accountNumber: manualPayment.accountNumber, // optional but nice to send
+        transactionId: manualPayment.transactionId,
+        amount:
+          manualPayment.amount !== ""
+            ? Number(manualPayment.amount)
+            : undefined, // backend will fallback to plan.price
+        method: manualPayment.method || "manual",
+        validatedBy: "Admin Panel",
+        notes: "Manual validation from PaymentsModal",
+      });
+
       alert("Payment validated successfully!");
+
+      // reset
       setManualPayment({
-        customer: null,
+        customerId: null,
         accountNumber: "",
         transactionId: "",
         amount: "",
         method: "",
       });
       setSearchTerm("");
+      setCustomerResults([]);
+
+      // refresh lists
       fetchPayments();
+      fetchInvoices();
     } catch (err) {
       console.error("Validation failed:", err);
-      alert("Error validating payment");
+      const msg =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Error validating payment";
+      alert(msg);
     }
   };
 
-  // ===== Invoice Actions =====
   const markInvoicePaid = async (id) => {
     try {
-      await axios.put(`https://isp-billing-uq58.onrender.com/api/invoices/${id}/pay`);
+      await axios.put(`${API_BASE}/invoices/${id}/pay`);
       alert("Invoice marked as paid!");
       fetchInvoices();
     } catch (err) {
@@ -109,7 +158,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const generateInvoice = async (id) => {
     try {
-      await axios.post(`https://isp-billing-uq58.onrender.com/api/invoices/${id}/generate`);
+      await axios.post(`${API_BASE}/invoices/${id}/generate`);
       alert("Invoice generated successfully!");
       fetchInvoices();
     } catch (err) {
@@ -120,7 +169,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const viewInvoicePDF = async (id) => {
     try {
-      const res = await axios.get(`https://isp-billing-uq58.onrender.com/api/invoices/${id}/pdf`, {
+      const res = await axios.get(`${API_BASE}/invoices/${id}/pdf`, {
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -131,12 +180,17 @@ export default function PaymentsModal({ isOpen, onClose }) {
     }
   };
 
+  const hasNoSearchResults = useMemo(
+    () => !loadingSearch && searchTerm.trim() && customerResults.length === 0,
+    [loadingSearch, searchTerm, customerResults.length]
+  );
+
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay">
       <div className="modal-content large">
-        <span className="close" onClick={onClose}>
+        <span className="close" onClick={onClose} role="button" aria-label="Close">
           <FaTimes />
         </span>
 
@@ -160,93 +214,130 @@ export default function PaymentsModal({ isOpen, onClose }) {
         {activeTab === "payments" && (
           <>
             <h2>Payments</h2>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Customer</th>
-                  <th>Amount</th>
-                  <th>Method</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p) => (
-                  <tr key={p._id}>
-                    <td>{p._id}</td>
-                    <td>{p.customerName || p.customer?.name}</td>
-                    <td>{p.amount}</td>
-                    <td>{p.method}</td>
-                    <td>{p.status}</td>
-                    <td>{new Date(p.createdAt).toLocaleString()}</td>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Date</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p._id}>
+                      <td>{p._id}</td>
+                      <td>{p.customerName || p.customer?.name || "-"}</td>
+                      <td>{p.amount}</td>
+                      <td>{p.method}</td>
+                      <td>{p.status}</td>
+                      <td>
+                        {p.createdAt
+                          ? new Date(p.createdAt).toLocaleString()
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                  {payments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center" }}>
+                        No payments yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             <h3>Manual Payment Validation</h3>
-            <form onSubmit={handleManualValidation}>
-              <input
-                type="text"
-                placeholder="Search Customer by name or account no."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {loadingSearch && <p>Searching...</p>}
-              {customerResults.length > 0 && (
-                <ul className="search-dropdown">
-                  {customerResults.map((c) => (
-                    <li
-                      key={c._id}
-                      onClick={() => {
-                        setManualPayment({
-                          ...manualPayment,
-                          customer: c._id,
-                          accountNumber: c.accountNumber,
-                        });
-                        setSearchTerm(`${c.name} (${c.accountNumber})`);
-                        setCustomerResults([]);
-                      }}
-                    >
-                      {c.name} — {c.accountNumber}
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <form onSubmit={handleManualValidation} className="stacked-form" ref={dropdownRef}>
+              {/* Customer search & select */}
+              <div className="field">
+                <input
+                  type="text"
+                  placeholder="Search customer by name or account number"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  autoComplete="off"
+                />
+                {loadingSearch && <div className="help-text">Searching…</div>}
+                {searchError && <div className="error-text">{searchError}</div>}
 
-              <input
-                type="text"
-                placeholder="Transaction ID"
-                value={manualPayment.transactionId}
-                onChange={(e) =>
-                  setManualPayment({ ...manualPayment, transactionId: e.target.value })
-                }
-                required
-              />
-              <input
-                type="number"
-                placeholder="Amount (KES)"
-                value={manualPayment.amount}
-                onChange={(e) =>
-                  setManualPayment({ ...manualPayment, amount: e.target.value })
-                }
-                required
-              />
-              <select
-                value={manualPayment.method}
-                onChange={(e) =>
-                  setManualPayment({ ...manualPayment, method: e.target.value })
-                }
-                required
-              >
-                <option value="">Select Method</option>
-                <option value="mpesa">M-Pesa</option>
-                <option value="manual">Manual (Cash/Bank)</option>
-                <option value="stripe">Stripe</option>
-                <option value="PayPal">PayPal</option>
-              </select>
-              <button type="submit">
+                {customerResults.length > 0 && (
+                  <ul className="search-dropdown">
+                    {customerResults.map((c) => (
+                      <li
+                        key={c._id}
+                        onClick={() => {
+                          setManualPayment((prev) => ({
+                            ...prev,
+                            customerId: c._id,
+                            accountNumber: c.accountNumber || "",
+                          }));
+                          setSearchTerm(`${c.name} (${c.accountNumber})`);
+                          setCustomerResults([]);
+                        }}
+                        title={`${c.name} — ${c.accountNumber}`}
+                      >
+                        {c.name} — {c.accountNumber}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {hasNoSearchResults && (
+                  <div className="search-empty">No matching customers</div>
+                )}
+              </div>
+
+              {/* Transaction details */}
+              <div className="field">
+                <input
+                  type="text"
+                  placeholder="Transaction ID"
+                  value={manualPayment.transactionId}
+                  onChange={(e) =>
+                    setManualPayment((p) => ({
+                      ...p,
+                      transactionId: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount (KES) — optional (defaults to plan price)"
+                  value={manualPayment.amount}
+                  onChange={(e) =>
+                    setManualPayment((p) => ({ ...p, amount: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="field">
+                <select
+                  value={manualPayment.method}
+                  onChange={(e) =>
+                    setManualPayment((p) => ({ ...p, method: e.target.value }))
+                  }
+                >
+                  <option value="">Select Method (default: Manual)</option>
+                  <option value="manual">Manual (Cash/Bank)</option>
+                  <option value="mpesa">M-Pesa</option>
+                  <option value="stripe">Stripe</option>
+                  <option value="paypal">PayPal</option>
+                </select>
+              </div>
+
+              <button type="submit" className="primary">
                 <MdAdd className="inline-icon" /> Validate Payment
               </button>
             </form>
@@ -257,34 +348,53 @@ export default function PaymentsModal({ isOpen, onClose }) {
         {activeTab === "invoices" && (
           <>
             <h2>Invoices</h2>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Customer</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Due Date</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr key={inv._id}>
-                    <td>{inv._id}</td>
-                    <td>{inv.customerName || inv.customer?.name}</td>
-                    <td>{inv.amount}</td>
-                    <td>{inv.status}</td>
-                    <td>{new Date(inv.dueDate).toLocaleDateString()}</td>
-                    <td>
-                      <button onClick={() => markInvoicePaid(inv._id)}>Mark Paid</button>
-                      <button onClick={() => generateInvoice(inv._id)}>Generate</button>
-                      <button onClick={() => viewInvoicePDF(inv._id)}>View PDF</button>
-                    </td>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr key={inv._id}>
+                      <td>{inv._id}</td>
+                      <td>{inv.customerName || inv.customer?.name || "-"}</td>
+                      <td>{inv.amount}</td>
+                      <td>{inv.status}</td>
+                      <td>
+                        {inv.dueDate
+                          ? new Date(inv.dueDate).toLocaleDateString()
+                          : "-"}
+                      </td>
+                      <td className="actions">
+                        <button onClick={() => markInvoicePaid(inv._id)}>
+                          Mark Paid
+                        </button>
+                        <button onClick={() => generateInvoice(inv._id)}>
+                          Generate
+                        </button>
+                        <button onClick={() => viewInvoicePDF(inv._id)}>
+                          View PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {invoices.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center" }}>
+                        No invoices yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
