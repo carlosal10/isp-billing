@@ -280,14 +280,31 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
   }
 });
 
-// -------------------- Get all payments --------------------
-router.get('/', async (_req, res) => {
+/// -------------------- Get all payments --------------------
+router.get('/', async (req, res) => {
   try {
-    const payments = await Payment.find().lean();
-    res.json(payments);
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const payments = await Payment.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate('customer', 'name accountNumber') // <-- get the name
+      .populate('plan', 'name price')              // (optional) plan info
+      .lean();
+
+    // add a flat customerName for the frontend fallback
+    const shaped = payments.map(p => ({
+      ...p,
+      customerName: p.customer?.name || null,
+      // keep a safe account number too (frontend can show when name missing)
+      accountNumber: p.accountNumber || p.customer?.accountNumber || null,
+    }));
+
+    res.json(shaped);
   } catch (err) {
+    console.error('payments list error:', err);
     res.status(500).json({ error: 'Failed to fetch payments' });
   }
 });
+
 
 module.exports = router;
