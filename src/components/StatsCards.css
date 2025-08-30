@@ -1,38 +1,38 @@
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0;
+/* Uses CSS variables defined in Dashboard.css (:root colors, radius, shadow) */
+
+.stats-cards{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+  margin:14px 0 8px;
+}
+@media (max-width:1100px){ .stats{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:640px){ .stats{grid-template-columns:1fr} }
+
+.stat-card{
+  background:var(--card);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:16px 18px;
+  transition:border-color .15s ease, transform .06s ease;
+}
+.stat-card:hover{ border-color:#dbe8f7; transform:translateY(-1px) }
+
+.stat-label{
+  font-size:.85rem;
+  color:var(--muted);
+  margin-bottom:6px;
 }
 
-/* Card styling */
-.stats .card {
-  background: #ffffff;
-  border-radius: 1rem;
-  padding: 1.25rem;
-  font-size: 1rem;
-  font-weight: 500;
-  color: #1f2937; /* Tailwind gray-800 */
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  text-align: center;
+.stat-value{
+  font-size:1.8rem;
+  font-weight:800;
+  line-height:1.1;
+  color:var(--green); /* green counters/indicators */
+  letter-spacing:.2px;
 }
 
-/* Hover interaction */
-.stats .card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-}
-
-/* Responsiveness */
-@media (max-width: 768px) {
-  .stats {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-  }
-
-  .stats .card {
-    font-size: 0.95rem;
-    padding: 1rem;
-  }
+/* Optional subtle loading state */
+.stat-value.is-loading{
+  opacity:.4;
 }

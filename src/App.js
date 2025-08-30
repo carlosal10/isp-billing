@@ -1,43 +1,73 @@
-import React, { useState } from "react";
+// src/App.jsx
+import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Sidebar";
 
-// Import Modals
+// Modals (single source of truth here)
 import ClientsModal from "./components/CustomersModal";
 import SubscriptionPlansModal from "./components/PlanModal";
-import PPPoESetupModal from "./components/PppoeModal";
+import PppoeSetupModal from "./components/PppoeModal";
 import HotspotSetupModal from "./components/HotspotModal";
-import PaymentIntegrationsModal from "./components/PaymentSetting";
+import PaymentIntegrationModal from "./components/PaymentSetting";
 import ConnectMikrotikModal from "./components/ConnectMikrotik";
 import MessagingModal from "./components/MessagingModal";
 import PaymentsModal from "./components/PaymentsModal";
 
 import MODALS from "./constants/modals";
-import "./App.css";
+import "./App.css"; // make sure this includes .hamburger, .sidebar-backdrop, .content-area, etc.
 
-function App() {
+export default function App() {
+  // —— Sidebar state: open on desktop, closed on mobile
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(isDesktop);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width:1024px)");
+    const handler = (e) => {
+      setIsDesktop(e.matches);
+      setSidebarOpen(e.matches); // auto-open desktop, auto-close mobile
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const toggleSidebar = () => setSidebarOpen((s) => !s);
+
+  // —— Modals
   const [activeModal, setActiveModal] = useState(null);
-
   const openModal = (modal) => setActiveModal(modal);
   const closeModal = () => setActiveModal(null);
 
   return (
     <Router>
       <div className="app-container">
-        {/* Sidebar */}
-        <Sidebar open={true} toggleSidebar={() => {}} onOpenModal={openModal} />
+        {/* Mobile hamburger (position fixed in CSS) */}
+        <div className="hamburger" onClick={toggleSidebar} role="button" aria-label="Toggle sidebar">
+          ☰
+        </div>
 
-        {/* Routes */}
+        {/* Mobile backdrop when drawer open */}
+        {!isDesktop && sidebarOpen && (
+          <div className="sidebar-backdrop" onClick={toggleSidebar} />
+        )}
+
+        {/* The ONLY Sidebar in the app */}
+        <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} onOpenModal={openModal} />
+
+        {/* Page content */}
         <div className="content-area">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
 
-        {/* Modals */}
+        {/* Global Modals (do NOT mount these inside pages) */}
         <ClientsModal
           isOpen={activeModal === MODALS.CLIENTS}
           onClose={closeModal}
@@ -46,7 +76,7 @@ function App() {
           isOpen={activeModal === MODALS.PLANS}
           onClose={closeModal}
         />
-        <PPPoESetupModal
+        <PppoeSetupModal
           isOpen={activeModal === MODALS.PPPOE}
           onClose={closeModal}
         />
@@ -54,8 +84,9 @@ function App() {
           isOpen={activeModal === MODALS.HOTSPOT}
           onClose={closeModal}
         />
-        <PaymentIntegrationsModal
-          isOpen={activeModal === MODALS.PAYMENTS}
+        {/* Payment settings / linking */}
+        <PaymentIntegrationModal
+          isOpen={activeModal === MODALS.PAYMENT_INTEGRATION}
           onClose={closeModal}
         />
         <ConnectMikrotikModal
@@ -66,13 +97,12 @@ function App() {
           isOpen={activeModal === MODALS.MESSAGING}
           onClose={closeModal}
         />
+        {/* Payments management UI */}
         <PaymentsModal
-          isOpen={activeModal === MODALS.PAYMENT}
+          isOpen={activeModal === MODALS.PAYMENTS}
           onClose={closeModal}
         />
       </div>
     </Router>
   );
 }
-
-export default App;

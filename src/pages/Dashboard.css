@@ -1,132 +1,138 @@
-/* Root dashboard container */
-.dashboard {
-  display: flex;
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f3f4f6; /* gray-100 */
-  min-height: 100vh;
+:root{
+  --sidebar-w: 280px;
+
+  /* Palette */
+  --navy-900:#0A1F44;  /* headings, strong text */
+  --navy-700:#163E72;  /* body text */
+  --navy-500:#2E5E9E;  /* subtle accents/links */
+  --bg:#ffffff;        /* app background */
+  --card:#dfdfdf;      /* surfaces/cards */
+  --card-sub:#fbfcff;  /* lighter surface */
+  --border:#e6eaf2;    /* borders/dividers */
+  --muted:#6b7a99;     /* secondary text */
+
+  --green:#17c964;     /* primary accent */
+  --green-600:#169a52; /* hover/active */
+  --green-50:#eafaf1;  /* soft fill */
+
+  --radius:14px;
+  --radius-lg:10px;
+  --shadow:0 2px 10px rgba(10,31,68,.08);
 }
 
-/* Hamburger menu */
-.hamburger {
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  font-size: 1.5rem;
-  cursor: pointer;
-  z-index: 50;
-  color: #111827; /* gray-900 */
+/* base */
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin-left:13%;
+  background:var(--bg);
+  color:var(--navy-700);
+  font-family:Inter,ui-sans-serif,system-ui;
 }
 
-/* Main content */
-.main-content {
-  flex: 1;
-  margin-left: 250px; /* Sidebar width */
-  padding: 2rem;
-  transition: margin-left 0.3s ease;
+/* layout */
+.dashboard{position:relative;min-height:100vh;background:var(--bg)}
+.main-content{
+  position:relative;
+  padding:24px;
+  margin-left:0; /* your Sidebar handles spacing */
+}
+@media (min-width:1024px){
+  .main-content{padding:28px 32px}
 }
 
-.sidebar:not(.show) ~ .main-content {
-  margin-left: 0;
+/* header */
+.page-header{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin-bottom:18px;
+}
+.page-header h1{
+  margin:0;color:var(--navy-900);font-weight:700;letter-spacing:.2px;
 }
 
-/* Headings */
-.main-content h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 1.5rem;
+/* hamburger (mobile) */
+.hamburger{
+  position:fixed;top:14px;left:14px;z-index:60;
+  width:42px;height:42px;border-radius:12px;
+  background:var(--card);box-shadow:var(--shadow);display:grid;place-items:center;
+  color:var(--navy-700);cursor:pointer;border:1px solid var(--border);
+}
+@media (min-width:1024px){ .hamburger{display:none} }
+
+/* sidebar overlay (mobile) */
+.sidebar-backdrop{
+  position:fixed;inset:0;background:rgba(10,31,68,.35);backdrop-filter:blur(1px);z-index:50;
 }
 
-.main-content h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
+/* status pill */
+.mikrotik-status{
+  display:inline-flex;align-items:center;gap:10px;padding:10px 14px;
+  border-radius:999px;font-size:.9rem;border:1px solid var(--border);
+  background:var(--card);color:var(--navy-700);
+}
+.mikrotik-status .dot{
+  width:9px;height:9px;border-radius:50%;
+  background:#a8b3c5;display:inline-block;
+}
+.mikrotik-status.online{border-color:#cfeedd;background:var(--green-50)}
+.mikrotik-status.online .dot{background:var(--green)}
+.mikrotik-status.offline{border-color:#e7eaf0;background:#fafbff}
+
+/* stat cards container (works even if component injects its own) */
+.stats-cards, .quick-counters{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;margin:14px 0 8px;
+}
+@media (max-width:1100px){ .stats-cards, .quick-counters{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:640px){ .stats-cards, .quick-counters{grid-template-columns:1fr} }
+
+/* quick counters */
+.quick-counters .counter{
+  background:var(--card);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px 18px;
+}
+.counter-title{font-size:.85rem;color:var(--muted);margin-bottom:6px}
+.counter-value{
+  font-size:1.6rem;font-weight:800;color:var(--green);
+}
+.quick-counters .counter:hover{border-color:#dbe8f7}
+
+/* sections as white cards */
+.pppoe-status-section,
+.due-soon-section,
+.expired-section,
+.chart-container{
+  background:var(--card); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow);padding:18px;margin-top:18px;
+}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.section-head h2{margin:0;color:var(--navy-900);font-size:1.05rem}
+
+/* “Include Hotspot” toggle – keep native but branded */
+.toggle input{accent-color:var(--green)}
+.toggle{display:flex;align-items:center;gap:8px;color:var(--navy-700);font-size:.95rem}
+
+/* tables */
+.table-wrapper{overflow:auto;border-radius:12px}
+table{width:100%;border-collapse:separate;border-spacing:0;min-width:820px}
+thead th{
+  text-align:left;padding:12px 14px;background:var(--card-sub);
+  color:var(--navy-700);border-bottom:1px solid var(--border);font-weight:700;
+}
+tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--navy-700)}
+tbody tr:hover{background:#f6fbf8} /* soft green hover */
+tfoot td{
+  padding:12px 14px;background:var(--card-sub);border-top:1px solid var(--border);color:var(--navy-900)
 }
 
-/* PPPoE Table */
-.pppoe-status-section table {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: #fff;
-  border-radius: 0.5rem;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  margin-bottom: 1.5rem;
+/* buttons (global green) */
+button, .btn{
+  background:var(--green);color:#fff;border:none;border-radius:12px;padding:10px 14px;
+  font-weight:600;cursor:pointer;transition:transform .06s ease, background .15s ease;
 }
-
-.pppoe-status-section th,
-.pppoe-status-section td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb; /* gray-200 */
-  text-align: left;
-}
-
-.pppoe-status-section th {
-  background-color: #f9fafb; /* gray-50 */
-  font-weight: 600;
-}
-
-.pppoe-status-section tr:hover {
-  background-color: #f3f4f6; /* gray-100 */
-}
-
-/* Usage Controls */
-.pppoe-usage-controls {
-  margin-bottom: 1.5rem;
-  font-size: 0.95rem;
-  color: #374151; /* gray-700 */
-}
-
-/* Usage Summary Box */
-.pppoe-usage-stats .usage-box {
-  display: flex;
-  gap: 2rem;
-  background-color: #fff;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  margin-bottom: 1.5rem;
-}
-
-/* Chart Container */
-.chart-container {
-  background-color: #fff;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-/* Stats Cards Wrapper */
-.stats {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
-
-/* Individual Card */
-.stats .card {
-  flex: 1 1 200px;
-  background-color: #fff;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  font-weight: 600;
-  text-align: center;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .main-content {
-    margin-left: 0;
-    padding: 1rem;
-  }
-
-  .stats {
-    flex-direction: column;
-  }
-
-  .pppoe-usage-stats .usage-box {
-    flex-direction: column;
-    gap: 1rem;
-  }
+button:hover,.btn:hover{background:var(--green-600)}
+button:active,.btn:active{transform:translateY(1px)}
+@media(max-width:640px){
+  body{
+    margin: 0;  }
 }
