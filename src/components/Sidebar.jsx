@@ -18,6 +18,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
         <li><button onClick={() => onOpenModal(MODALS.PAYMENTS)}>Payments</button></li>
         <li><button onClick={() => onOpenModal(MODALS.PAYMENT_INTEGRATION)}>Link Payment Account</button></li>
         <li><button onClick={() => onOpenModal(MODALS.MIKROTIK)}>Connect To Mikrotik</button></li>
+        <li><button onClick={() => onOpenModal(MODALS.MIKROTIK_TERMINAL)}>Mikrotik Terminal</button></li>
         <li><button onClick={() => onOpenModal(MODALS.USAGE)}>Usage Logs</button></li>
         <li><a href="/logout">Logout</a></li>
       </ul>

@@ -8,6 +8,9 @@ const MODALS = {
   MIKROTIK: "mikrotik",
   USAGE: "usage",
   PAYMENTS: "payments",
+  MESSAGING: "messaging",
+  MIKROTIK_TERMINAL: "mikrotikTerminal",
+  
 };
 
 export default MODALS;

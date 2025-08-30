@@ -1,9 +1,9 @@
 // src/App.jsx
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-
 import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Sidebar";
+import Login from "./pages/Login";
 
 // Modals (single source of truth here)
 import ClientsModal from "./components/CustomersModal";
@@ -14,11 +14,15 @@ import PaymentIntegrationModal from "./components/PaymentSetting";
 import ConnectMikrotikModal from "./components/ConnectMikrotik";
 import MessagingModal from "./components/MessagingModal";
 import PaymentsModal from "./components/PaymentsModal";
+import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 
 import MODALS from "./constants/modals";
-import "./App.css"; // make sure this includes .hamburger, .sidebar-backdrop, .content-area, etc.
+import "./App.css";
+import { useAuth } from "./context/AuthContext";
 
 export default function App() {
+  const { isAuthed, token } = useAuth();
+
   // —— Sidebar state: open on desktop, closed on mobile
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
@@ -42,11 +46,28 @@ export default function App() {
   const openModal = (modal) => setActiveModal(modal);
   const closeModal = () => setActiveModal(null);
 
+  // If not authenticated, show only the login page (no sidebar/modals)
+  if (!isAuthed) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/*" element={<Login />} />
+        </Routes>
+      </Router>
+    );
+  }
+
+  // Authenticated shell: sidebar + routes + global modals
   return (
     <Router>
       <div className="app-container">
-        {/* Mobile hamburger (position fixed in CSS) */}
-        <div className="hamburger" onClick={toggleSidebar} role="button" aria-label="Toggle sidebar">
+        {/* Mobile hamburger */}
+        <div
+          className="hamburger"
+          onClick={toggleSidebar}
+          role="button"
+          aria-label="Toggle sidebar"
+        >
           ☰
         </div>
 
@@ -84,7 +105,6 @@ export default function App() {
           isOpen={activeModal === MODALS.HOTSPOT}
           onClose={closeModal}
         />
-        {/* Payment settings / linking */}
         <PaymentIntegrationModal
           isOpen={activeModal === MODALS.PAYMENT_INTEGRATION}
           onClose={closeModal}
@@ -97,10 +117,14 @@ export default function App() {
           isOpen={activeModal === MODALS.MESSAGING}
           onClose={closeModal}
         />
-        {/* Payments management UI */}
         <PaymentsModal
           isOpen={activeModal === MODALS.PAYMENTS}
           onClose={closeModal}
+        />
+        <MikrotikTerminalModal
+          isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
+          onClose={closeModal}
+          authToken={token}   
         />
       </div>
     </Router>

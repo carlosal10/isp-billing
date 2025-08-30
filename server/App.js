@@ -7,6 +7,14 @@ const jwt = require("jsonwebtoken");
 require('./jobs/expireAccess');
 const app = express();
 
+const http = require('http');
+const { Server } = require('socket.io');
+
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: process.env.CLIENT_URL || '*' } });
+
+
 // ----------------- Middleware -----------------
 app.use(express.json());
 app.use(
@@ -50,6 +58,8 @@ const statsRoutes = require("./routes/Stats");
 const mikrotikUserRoutes = require("./routes/mikrotikUser");
 const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
 const mikrotikRoutes = require('./routes/mikrotik');
+const mikrotikTerminalRoutes = require('./routes/mikrotikTerminal');
+
 
 // Hotspot
 const hotspotPlansRoutes = require("./routes/hotspotPlans");
@@ -76,6 +86,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/pppoe", mikrotikUserRoutes);
 app.use("/api/connect", mikrotikConnectRoutes);
 app.use('/api', mikrotikRoutes);
+app.use('/api/mikrotik/terminal', authenticate, mikrotikTerminalRoutes);
 
 // Hotspot plans
 app.use("/api/hotspot-plans", hotspotPlansRoutes);
@@ -87,6 +98,27 @@ app.use("/api/payment/callback", paymentCallbackRoutes);     // STK push callbac
 app.use("/api/payment-config", paymentConfigRoutes);
 app.use("/api/mpesa-settings", mpesaSettingsRoutes);
 app.use('/api/payment/stripe', stripeWebhook);
+
+io.of('/terminal').on('connection', (socket) => {
+  console.log('🔌 terminal connected');
+
+  socket.on('exec', async ({ command }) => {
+    try {
+      const { path, words } = parseCli(command);      // reuse same function
+      if (!isAllowed(path)) return socket.emit('error', `Not allowed: ${path}`);
+
+      // if you have a low-level streaming API, stream lines back here.
+      // Otherwise call once and emit the full result:
+      const result = await sendCommand(path, words);
+      socket.emit('result', { command, result });
+    } catch (e) {
+      socket.emit('error', e?.message || 'exec failed');
+    }
+  });
+
+  socket.on('disconnect', () => console.log('🔌 terminal disconnected'));
+});
+
 
 
 // ----------------- 404 Handler -----------------
