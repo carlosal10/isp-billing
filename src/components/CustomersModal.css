@@ -1,131 +1,151 @@
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1200;
+/* CustomersModal.css */
+/* Uses global CSS variables from Dashboard.css with safe fallbacks */
+
+.modal-overlay{
+  position:fixed; inset:0; z-index:1200;
+  background:rgba(10,31,68,.45);
+  backdrop-filter:blur(2px);
+  display:grid; place-items:center;
+  padding:24px;
+  animation:fadeIn .12s ease-out;
+}
+@keyframes fadeIn{from{opacity:0} to{opacity:1}}
+
+.modal-content.customers-modal{
+  width:min(720px, 96%);
+  background:var(--card, #fff);
+  color:var(--navy-700, #163E72);
+  border:1px solid var(--border, #e6eaf2);
+  border-radius:var(--radius-lg, 20px);
+  box-shadow:var(--shadow, 0 10px 28px rgba(10,31,68,.08));
+  padding:20px 18px 18px;
+  position:relative;
+  max-height:90vh;
+  overflow:auto;
+  animation:slideUp .14s ease-out;
+}
+@keyframes slideUp{from{transform:translateY(6px);opacity:.85} to{transform:translateY(0);opacity:1}}
+
+.close{
+  position:absolute; top:12px; right:12px;
+  width:38px; height:38px; display:grid; place-items:center;
+  border-radius:12px; border:1px solid var(--border, #e6eaf2);
+  background:var(--card, #fff); color:var(--navy-700, #163E72);
+  cursor:pointer; transition:background .15s, border-color .15s, transform .06s;
+}
+.close:hover{ background:var(--card-sub, #fbfcff); border-color:#dbe8f7 }
+.close:active{ transform:translateY(1px) }
+
+.customers-modal h2{
+  margin:2px 6px 12px;
+  font-size:1.2rem;
+  color:var(--navy-900, #0A1F44);
+  font-weight:800;
+  letter-spacing:.2px;
 }
 
-.modal-content {
-  background: #fff;
-  padding: 2rem;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-  position: relative;
-  overflow-y: auto;
-  max-height: 90vh;
+/* Status message */
+.status-msg{
+  margin:6px 6px 12px;
+  padding:10px 12px;
+  border-radius:12px;
+  background:var(--green-50, #eafaf1);
+  color:var(--navy-700, green);
+  word-break:break-word;
 }
 
-.modal-content h2 {
-  margin-bottom: 1rem;
-  font-size: 1.5rem;
-  text-align: center;
+/* Make global buttons NOT affect tabs */
+.customers-modal button:not(.tab-btn){
+  height:44px; border:none; border-radius:12px;
+  background:var(--green, #949795); color:#fff; font-weight:700; cursor:pointer;
+  transition:background .15s, transform .06s, box-shadow .15s;
+  box-shadow:0 6px 16px rgba(23,201,100,.18);
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
 }
+.customers-modal button:not(.tab-btn):hover{ background:var(--green-600, #878a88) }
+.customers-modal button:not(.tab-btn):active{ transform:translateY(1px) }
+.customers-modal button:not(.tab-btn):disabled{ opacity:.7; cursor:not-allowed; box-shadow:none }
 
-.modal-content form {
-  margin-bottom: 1.2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.modal-content input {
-  padding: 0.7rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 0.95rem;
-}
-
-.modal-content button {
-  padding: 0.8rem;
-  background: #007bff;
-  color: #fff;
-  font-size: 0.95rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.modal-content button:hover {
-  background: #0056b3;
-}
-
-.remove-btn {
-  background: #dc3545 !important;
-}
-
-.remove-btn:hover {
-  background: #b02a37 !important;
-}
-
-.close {
-  position: absolute;
-  top: 12px;
-  right: 15px;
-  cursor: pointer;
-  font-size: 1.2rem;
-}
-
-.inline-icon {
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
-.status-msg {
-  text-align: center;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-  color: green;
-}
 /* Tabs container */
-.tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  background: #969494; /* light gray container for buttons */
-  padding: 0.3rem;
-  border-radius: 5px;
+.tabs{
+  display:flex; gap:6px;
+  background:var(--card-sub, #fbfcff);
+  border-radius:12px; padding:6px; margin:6px 6px 12px;
 }
 
-/* Individual tab buttons */
-.tab-btn {
-  flex: 1;
-  padding: 0.5rem 1rem;
-  background: #fff; /* contrast against container */
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s;
-  text-align: center;
+/* Tab buttons — force visible text/background */
+.tabs .tab-btn{
+  flex:1; text-align:center;
+  padding:10px 12px;
+  border-radius:10px;
+  background:#fff;
+  color:var(--navy-700, #163E72);
+  font-weight:600; cursor:pointer;
+  transition:background .15s, border-color .15s, color .15s, transform .06s;
+}
+.tabs .tab-btn:hover{ border-color:#dbe8f7; background:var(--card-sub, #fbfcff) }
+.tabs .tab-btn.active{
+  background:var(--green, #818181);
+  color:#fff;
+  border-color:var(--green, #5d6b63);
+  box-shadow:0 6px 16px rgba(23,201,100,.18);
 }
 
-.tab-btn.active {
-  background: #007bff;
-  color: #fff;
-  border-color: #007bff;
+/* Tab content area */
+.tab-content{ padding:4px 6px 2px }
+
+/* Forms */
+.customers-modal form{
+  display:flex; flex-direction:column; gap:10px;
+}
+.customers-modal input,
+.customers-modal select{
+  height:44px; padding:10px 12px;
+  border-radius:12px; background:#fff;
+  color:var(--navy-900, #0A1F44);
+  font-size:.95rem; outline:none;
+  transition:border-color .15s, box-shadow .15s, background .15s;
+}
+.customers-modal input::placeholder{ color:#93a1b8 }
+.customers-modal input:focus,
+.customers-modal select:focus{
+  border-color:var(--green, #727272);
+  box-shadow:0 0 0 4px rgba(23,201,100,.14);
+  background:var(--card-sub, #fbfcff);
 }
 
+/* Static config grid */
+.static-config{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+}
+@media (max-width:720px){ .static-config{ grid-template-columns:1fr } }
 
-/* 🔹 Responsive */
-@media (max-width: 600px) {
-  .modal-content {
-    padding: 1rem;
-    width: 95%;
-  }
+/* Buttons */
+.customers-modal button{
+  height:44px; border:none; border-radius:12px;
+  background:var(--green, #17c964); color:#fff; font-weight:700; cursor:pointer;
+  transition:background .15s, transform .06s, box-shadow .15s;
+  box-shadow:0 6px 16px rgba(23,201,100,.18);
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+}
+.customers-modal button:hover{ background:var(--green-600, #169a52) }
+.customers-modal button:active{ transform:translateY(1px) }
+.customers-modal button:disabled{ opacity:.7; cursor:not-allowed; box-shadow:none }
 
-  .modal-content h2 {
-    font-size: 1.2rem;
-  }
+/* Optional danger style (use className="danger" if you want red for destructive) */
+.customers-modal button.danger{
+  background:#dc3545; box-shadow:0 6px 16px rgba(220,53,69,.18);
+}
+.customers-modal button.danger:hover{ background:#b02a37 }
 
-  .modal-content input, 
-  .modal-content button {
-    font-size: 0.85rem;
-    padding: 0.6rem;
-  }
+/* Inline icon spacing */
+.inline-icon{ margin-right:6px; vertical-align:middle }
+
+/* Table-like selects in Update/Remove (wide) */
+.customers-modal select{ width:100% }
+
+/* Small screens */
+@media (max-width:480px){
+  .modal-content.customers-modal{ padding:16px 12px }
+  .customers-modal h2{ font-size:1.05rem }
 }

@@ -1,163 +1,126 @@
-/* Modal Overlay */
-.mikrotik-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-  padding: 1rem;
+/* ConnectMikrotikModal.css */
+
+/* ---- Overlay ---- */
+.mikrotik-overlay{
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(10,31,68,.45); /* navy tint */
+  backdrop-filter: blur(2px);
+  display:grid; place-items:center;
+  padding:24px;
+  animation: overlayIn .12s ease-out;
+}
+@keyframes overlayIn{ from{opacity:0} to{opacity:1} }
+
+/* ---- Modal Card ---- */
+.mikrotik-modal{
+  width:min(520px, 100%);
+  background:var(--card, #fff);
+  color:var(--navy-700, #163E72);
+  border:1px solid var(--border, #e6eaf2);
+  border-radius:var(--radius-lg, 20px);
+  box-shadow:var(--shadow, 0 10px 28px rgba(10,31,68,.08));
+  padding:22px 20px 20px;
+  position:relative;
+  animation: modalIn .14s ease-out;
+}
+@keyframes modalIn{
+  from{transform:translateY(6px); opacity:.85}
+  to{transform:translateY(0); opacity:1}
 }
 
-/* Modal Box */
-.mikrotik-modal {
-  background: #fff;
-  padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-  width: 100%;
-  max-width: 420px;
-  position: relative;
-  animation: fadeInUp 0.35s ease;
+/* ---- Close Button ---- */
+.close-btn{
+  position:absolute; top:12px; right:12px;
+  width:38px; height:38px; display:grid; place-items:center;
+  border-radius:12px; border:1px solid var(--border, #e6eaf2);
+  background:var(--card, #fff); color:var(--navy-700, #163E72);
+  cursor:pointer;
+  transition:background .15s ease, transform .06s ease, border-color .15s ease;
+}
+.close-btn:hover{ background:var(--card-sub, #fbfcff); border-color:#dbe8f7 }
+.close-btn:active{ transform:translateY(1px) }
+
+/* ---- Title ---- */
+.modal-title{
+  margin:2px 6px 14px;
+  font-size:1.15rem;
+  color:var(--navy-900, #0A1F44);
+  font-weight:800;
+  letter-spacing:.2px;
 }
 
-/* Title */
-.modal-title {
-  font-size: 1.25rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
-  color: #1f2937;
-  text-align: center;
+/* ---- Form ---- */
+.modal-form{
+  display:flex; flex-direction:column; gap:14px;
+  padding:6px;
 }
 
-/* Close Button */
-.close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #6b7280;
-  transition: color 0.2s;
+.modal-form label{
+  display:flex; flex-direction:column; gap:8px;
+  font-size:.92rem; color:var(--navy-700, #163E72);
 }
 
-.close-btn:hover {
-  color: #ef4444;
+.modal-form input{
+  appearance:none;
+  height:44px;
+  padding:10px 12px;
+  border:1px solid var(--border, #e6eaf2);
+  border-radius:12px;
+  background:#fff;
+  color:var(--navy-900, #0A1F44);
+  outline:none;
+  transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.modal-form input::placeholder{ color:#93a1b8 }
+.modal-form input:focus{
+  border-color:var(--green, #17c964);
+  box-shadow:0 0 0 4px rgba(23,201,100,.14);
+  background:var(--card-sub, #fbfcff);
 }
 
-/* Form Layout */
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+/* ---- Submit Button ---- */
+.submit-btn{
+  margin-top:6px;
+  height:44px;
+  border:none;
+  border-radius:12px;
+  background:var(--green, #17c964);
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+  transition:background .15s ease, transform .06s ease, box-shadow .15s ease;
+  box-shadow:0 6px 16px rgba(23,201,100,.18);
+}
+.submit-btn:hover{ background:var(--green-600, #169a52) }
+.submit-btn:active{ transform:translateY(1px) }
+.submit-btn:disabled{
+  opacity:.7; cursor:not-allowed; box-shadow:none;
 }
 
-.modal-form label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-  display: flex;
-  flex-direction: column;
+/* ---- Response Message ---- */
+.response-msg{
+  margin:14px 6px 0;
+  padding:12px 14px;
+  border:1px solid var(--border, #e6eaf2);
+  border-radius:12px;
+  background:var(--green-50, #eafaf1); /* positive default */
+  color:var(--navy-700, #163E72);
+  word-break:break-word;
 }
 
-.modal-form input {
-  margin-top: 0.25rem;
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  outline: none;
-  transition: border 0.2s, box-shadow 0.2s;
+/* If you later add classes, these will auto-tone success vs error */
+.response-msg.ok{
+  background:var(--green-50, #eafaf1);
+  border-color:#cfeedd;
+}
+.response-msg.err{
+  background:#fff5f5;
+  border-color:#ffd6d6;
+  color:#8a2a2a;
 }
 
-.modal-form input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
-}
-
-/* Submit Button */
-.submit-btn {
-  margin-top: 0.5rem;
-  background: #2563eb;
-  color: white;
-  padding: 0.6rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-
-.submit-btn:hover {
-  background: #1d4ed8;
-}
-
-.submit-btn:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-/* Response Message */
-.response-msg {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-align: center;
-  color: #16a34a;
-}
-
-.response-msg.error {
-  color: #dc2626;
-}
-
-/* Animation */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(15px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =======================
-   RESPONSIVE STYLES
-   ======================= */
-
-/* Tablets */
-@media (max-width: 768px) {
-  .mikrotik-modal {
-    max-width: 90%;
-    padding: 1.5rem;
-  }
-
-  .modal-title {
-    font-size: 1.1rem;
-  }
-
-  .submit-btn {
-    padding: 0.5rem;
-  }
-}
-
-/* Phones */
-@media (max-width: 480px) {
-  .mikrotik-modal {
-    max-width: 100%;
-    border-radius: 12px;
-    padding: 1rem;
-  }
-
-  .modal-form input {
-    padding: 0.45rem;
-    font-size: 0.85rem;
-  }
-
-  .submit-btn {
-    padding: 0.5rem;
-    font-size: 0.9rem;
-  }
+/* ---- Small screens ---- */
+@media(max-width:420px){
+  .mikrotik-modal{ padding:18px 14px }
+  .modal-title{ margin:2px 2px 12px }
 }

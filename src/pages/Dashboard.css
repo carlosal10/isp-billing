@@ -24,7 +24,7 @@
 *{box-sizing:border-box}
 html,body,#root{height:100%}
 body{
-  margin-left:13%;
+  margin-left:15%;
   background:var(--bg);
   color:var(--navy-700);
   font-family:Inter,ui-sans-serif,system-ui;
@@ -117,12 +117,12 @@ body{
 table{width:100%;border-collapse:separate;border-spacing:0;min-width:820px}
 thead th{
   text-align:left;padding:12px 14px;background:var(--card-sub);
-  color:var(--navy-700);border-bottom:1px solid var(--border);font-weight:700;
+  color:var(--navy-700)var(--border);font-weight:700;
 }
-tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--navy-700)}
+tbody td{padding:12px 14px;color:var(--navy-700)}
 tbody tr:hover{background:#f6fbf8} /* soft green hover */
 tfoot td{
-  padding:12px 14px;background:var(--card-sub);border-top:1px solid var(--border);color:var(--navy-900)
+  padding:12px 14px;background:var(--card-sub);color:var(--navy-900)
 }
 
 /* buttons (global green) */
