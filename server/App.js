@@ -49,6 +49,7 @@ const statsRoutes = require("./routes/Stats");
 // MikroTik
 const mikrotikUserRoutes = require("./routes/mikrotikUser");
 const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
+const mikrotikRoutes = require('./routes/mikrotik');
 
 // Hotspot
 const hotspotPlansRoutes = require("./routes/hotspotPlans");
@@ -74,6 +75,7 @@ app.use("/api/stats", statsRoutes);
 // MikroTik PPPoE & connectivity
 app.use("/api/pppoe", mikrotikUserRoutes);
 app.use("/api/connect", mikrotikConnectRoutes);
+app.use('/api', mikrotikRoutes);
 
 // Hotspot plans
 app.use("/api/hotspot-plans", hotspotPlansRoutes);
