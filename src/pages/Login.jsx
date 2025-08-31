@@ -45,7 +45,7 @@ export default function Login() {
       </button>
       {err && <div className="helper-text" style={{ color: "#ef4444" }}>{err}</div>}
       <div className="helper-text">
-  New here? <a href="/register">Create an account</a>
+  New here? <Link to="/register">Create an account</Link>
 </div>
 
     </form>
