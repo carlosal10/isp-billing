@@ -12,6 +12,7 @@
     "bcrypt": "^6.0.0",
     "chart.js": "^4.5.0",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
     "framer-motion": "^12.23.12",
@@ -29,7 +30,8 @@
     "routeros-client": "^1.1.1",
     "socket.io": "^4.8.1",
     "stripe": "^18.4.0",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "zod": "^4.1.5"
   },
   "scripts": {
     "start": "react-scripts start",

@@ -4,45 +4,71 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-require('./jobs/expireAccess');
+require("./jobs/expireAccess");
+
 const app = express();
 
-const http = require('http');
-const { Server } = require('socket.io');
-
-
+// ---- HTTP + Socket.IO ----
+const http = require("http");
+const { Server } = require("socket.io");
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: process.env.CLIENT_URL || '*' } });
 
+const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com";
+
+const io = new Server(server, {
+  cors: {
+    origin: CLIENT_ORIGIN,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id"],
+    credentials: true,
+  },
+});
 
 // ----------------- Middleware -----------------
-app.use(express.json());
+app.set("trust proxy", 1);
+app.use(express.json({ limit: "1mb" }));
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: CLIENT_ORIGIN,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id"],
     credentials: true,
+    optionsSuccessStatus: 204,
   })
 );
 
-// ----------------- MongoDB Connection -----------------
+// Preflight early// Express 5: "*" is invalid — use a catch-all regex
+// Preflight early (Express 5): use a RegExp catch-all
+app.options(/.*/, (req, res) => res.sendStatus(204));
+
+
+
+// ----------------- MongoDB -----------------
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 })
   .then(() => console.log("✅ Connected to MongoDB Atlas"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ----------------- Authentication Middleware -----------------
+// ----------------- Auth Middlewares -----------------
 const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Access denied. No token provided" });
-
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  const bearer = req.headers.authorization || "";
+  const [, token] = bearer.split(" ");
+  if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    req.user = jwt.verify(token, process.env.JWT_SECRET); // { sub/email/ispId or aud }
     next();
-  } catch (err) {
-    res.status(401).json({ message: "Invalid token" });
+  } catch {
+    res.status(401).json({ ok: false, error: "Invalid or expired token" });
   }
+};
+
+const requireTenant = (req, res, next) => {
+  const tenantId = req.headers["x-isp-id"] || req.user?.ispId;
+  if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
+  req.tenantId = String(tenantId);
+  next();
 };
 
 // ----------------- Routes -----------------
@@ -51,91 +77,116 @@ const customerRoutes = require("./routes/Customer");
 const planRoutes = require("./routes/plans");
 const invoiceRoutes = require("./routes/Invoices");
 const usageLogsRoutes = require("./routes/usageLogs");
-const adminAuthRoutes = require("./routes/AdminAuth");
 const statsRoutes = require("./routes/Stats");
+
+// Auth (HYBRID SPLIT)
+const tenantAuthRoutes = require("./routes/tenantAuth");      // /api/auth/*
+const invitesRoutes = require("./routes/invites");            // /api/invites (tenant-protected)
+const platformAuthRoutes = require("./routes/platformAuth");  // /platform-api/auth/*
 
 // MikroTik
 const mikrotikUserRoutes = require("./routes/mikrotikUser");
 const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
-const mikrotikRoutes = require('./routes/mikrotik');
-const mikrotikTerminalRoutes = require('./routes/mikrotikTerminal');
-
+const mikrotikRoutes = require("./routes/mikrotik");
+const mikrotikTerminalRoutes = require("./routes/mikrotikTerminal");
+const mikrotikAdminRoutes = require("./routes/mikrotikAdmin");
 
 // Hotspot
 const hotspotPlansRoutes = require("./routes/hotspotPlans");
 const hotspotRoutes = require("./routes/hotspot");
 
 // Payments
-const paymentRoutes = require("./routes/payment");             // STK push & manual
-const paymentCallbackRoutes = require("./routes/paymentCallback"); // STK callback
+const paymentRoutes = require("./routes/payment");
+const paymentCallbackRoutes = require("./routes/paymentCallback");
 const paymentConfigRoutes = require("./routes/paymentConfig");
 const mpesaSettingsRoutes = require("./routes/mpesaSettings");
-const stripeWebhook = require('./routes/stripeWebhook');
-
-
+const stripeWebhook = require("./routes/stripeWebhook");
 
 // ----------------- Mount APIs -----------------
-app.use("/api/customers", customerRoutes);
-app.use("/api/plans", planRoutes);
-app.use("/api/invoices", invoiceRoutes);
-app.use("/api/usageLogs", usageLogsRoutes);
-app.use("/api/auth", adminAuthRoutes);
-app.use("/api/stats", statsRoutes);
+app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
+
+// Tenant realm auth
+app.use("/api/auth", tenantAuthRoutes);
+app.use("/api/invites", authenticate, requireTenant, invitesRoutes);
+
+// Platform-admin realm (separate audience & UI)
+app.use("/platform-api/auth", platformAuthRoutes);
+
+// Tenant-protected app APIs
+app.use("/api/customers", authenticate, requireTenant, customerRoutes);
+app.use("/api/plans", authenticate, requireTenant, planRoutes);
+app.use("/api/invoices", authenticate, requireTenant, invoiceRoutes);
+app.use("/api/usageLogs", authenticate, requireTenant, usageLogsRoutes);
+app.use("/api/stats", authenticate, requireTenant, statsRoutes);
 
 // MikroTik PPPoE & connectivity
-app.use("/api/pppoe", mikrotikUserRoutes);
-app.use("/api/connect", mikrotikConnectRoutes);
-app.use('/api', mikrotikRoutes);
-app.use('/api/mikrotik/terminal', authenticate, mikrotikTerminalRoutes);
+app.use("/api/pppoe", authenticate, requireTenant, mikrotikUserRoutes);
+app.use("/api/connect", authenticate, requireTenant, mikrotikConnectRoutes);
+app.use("/api", authenticate, requireTenant, mikrotikRoutes);
 
-// Hotspot plans
-app.use("/api/hotspot-plans", hotspotPlansRoutes);
-app.use("/api/hotspot", hotspotRoutes);
+// Terminal: allow OPTIONS, then auth
+app.use(
+  "/api/mikrotik/terminal",
+  (req, res, next) => (req.method === "OPTIONS" ? res.sendStatus(204) : next()),
+  authenticate,
+  requireTenant,
+  mikrotikTerminalRoutes
+);
+
+// Admin Mikrotik ops (whitelist, connection upsert/test)
+app.use("/api/mikrotik/admin", authenticate, requireTenant, mikrotikAdminRoutes);
+
+// Hotspot
+app.use("/api/hotspot-plans", authenticate, requireTenant, hotspotPlansRoutes);
+app.use("/api/hotspot", authenticate, requireTenant, hotspotRoutes);
 
 // Payments & M-Pesa
-app.use("/api/payments", paymentRoutes);                       // main payments
-app.use("/api/payment/callback", paymentCallbackRoutes);     // STK push callback
-app.use("/api/payment-config", paymentConfigRoutes);
-app.use("/api/mpesa-settings", mpesaSettingsRoutes);
-app.use('/api/payment/stripe', stripeWebhook);
+app.use("/api/payments", authenticate, requireTenant, paymentRoutes);
+app.use("/api/payment/callback", paymentCallbackRoutes);
+app.use("/api/payment-config", authenticate, requireTenant, paymentConfigRoutes);
+app.use("/api/mpesa-settings", authenticate, requireTenant, mpesaSettingsRoutes);
+app.use("/api/payment/stripe", stripeWebhook);
 
-io.of('/terminal').on('connection', (socket) => {
-  console.log('🔌 terminal connected');
+// ----------------- Socket.IO (namespaced terminal) -----------------
+io.of("/terminal").use((socket, next) => {
+  try {
+    const { token, ispId } = socket.handshake.auth || {};
+    if (!token) return next(new Error("Missing token"));
+    const decoded = jwt.verify(token.split(" ")[1] || token, process.env.JWT_SECRET);
+    socket.user = decoded;
+    socket.tenantId = ispId || decoded.ispId;
+    if (!socket.tenantId) return next(new Error("Missing tenant"));
+    next();
+  } catch {
+    next(new Error("Unauthorized"));
+  }
+});
 
-  socket.on('exec', async ({ command }) => {
+io.of("/terminal").on("connection", (socket) => {
+  console.log("🔌 terminal connected", { user: socket.user?.sub, tenant: socket.tenantId });
+  socket.on("exec", async ({ command }) => {
     try {
-      const { path, words } = parseCli(command);      // reuse same function
-      if (!isAllowed(path)) return socket.emit('error', `Not allowed: ${path}`);
-
-      // if you have a low-level streaming API, stream lines back here.
-      // Otherwise call once and emit the full result:
-      const result = await sendCommand(path, words);
-      socket.emit('result', { command, result });
+      const { parseCli, isAllowed, sendCommand } = require("./services/terminal");
+      const { path, words } = parseCli(command);
+      if (!isAllowed(path)) return socket.emit("error", `Not allowed: ${path}`);
+      const result = await sendCommand(socket.tenantId, path, words);
+      socket.emit("result", { command, result });
     } catch (e) {
-      socket.emit('error', e?.message || 'exec failed');
+      socket.emit("error", e?.message || "exec failed");
     }
   });
-
-  socket.on('disconnect', () => console.log('🔌 terminal disconnected'));
+  socket.on("disconnect", () => console.log("🔌 terminal disconnected"));
 });
 
-
-
-// ----------------- 404 Handler -----------------
-app.use((req, res) => {
-  res.status(404).json({ message: `Route not found: ${req.originalUrl}` });
-});
-
-// ----------------- Error Handler -----------------
+// ----------------- 404 & Error -----------------
+app.use((req, res) => res.status(404).json({ ok: false, error: `Route not found: ${req.originalUrl}` }));
 app.use((err, req, res, next) => {
-  console.error("🔥 Error:", err.message);
-  res.status(500).json({ message: "Internal server error" });
+  console.error("🔥 Error:", err);
+  res.status(500).json({ ok: false, error: "Internal server error" });
 });
 
-// ----------------- Start Server -----------------
+// ----------------- Start -----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`🚀 HTTP+WS server on http://localhost:${PORT}`));
 
 module.exports = app;

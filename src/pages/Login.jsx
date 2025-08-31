@@ -7,13 +7,22 @@ export default function Login() {
   const { login } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
   return (
     <form
       onSubmit={async (e) => {
         e.preventDefault();
+        setErr("");
         setLoading(true);
-        try { await login(form); } finally { setLoading(false); }
+        try {
+          await login(form); // sets tokens & user, schedules refresh
+          window.location.replace("/"); // go home
+        } catch (e) {
+          setErr(e?.message || "Login failed");
+        } finally {
+          setLoading(false);
+        }
       }}
       className="space-y-3"
     >
@@ -34,6 +43,11 @@ export default function Login() {
       <button type="submit" disabled={loading}>
         {loading ? "Signing in..." : "Login"}
       </button>
+      {err && <div className="helper-text" style={{ color: "#ef4444" }}>{err}</div>}
+      <div className="helper-text">
+  New here? <a href="/register">Create an account</a>
+</div>
+
     </form>
   );
 }

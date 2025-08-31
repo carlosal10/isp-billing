@@ -1,129 +1,317 @@
-// mikrotikConnectionManager.js
-const { RouterOSAPI } = require('routeros-client');
+// utils/mikrotikConnectionManager.js
+// Multi-tenant, pooled MikroTik connection manager
+// Requires: npm i routeros-client
 
-let mikrotikClient = null;
-let isConnected = false;
-let config = null;
-let lastStatus = 'disconnected';
-let retryDelay = 2000; // initial retry 2s
+const { RouterOSAPI } = require("routeros-client");
+const crypto = require("node:crypto");
 
+// --------- Configurable knobs ---------
+const DEFAULT_TIMEOUT_MS = 12_000;
+const CONNECT_TIMEOUT_MS = 15_000;
+const HEALTH_INTERVAL_MS = 30_000;
+const MAX_BACKOFF_MS = 60_000;
+const BASE_BACKOFF_MS = 2_000;
+const CIRCUIT_OPEN_MS = 20_000; // after repeated failures, pause connects briefly
+const MAX_CONSECUTIVE_FAILS = 3;
+
+// redact these keys in logs
+const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
+
+// --------- Internal state ---------
 /**
- * Connect to MikroTik
+ * pool key = `${tenantId}:${host}:${port}`
+ * client entry = {
+ *   key, tenantId, cfg, client, connected, connecting, lastErr,
+ *   fails, backoff, circuitUntil, lastOkAt
+ * }
  */
-async function connectToMikrotik(cfg) {
-  if (mikrotikClient && isConnected) return mikrotikClient;
+const pool = new Map();
 
-  config = cfg || config;
-  if (!config) throw new Error('MikroTik config not provided');
+// Hook functions you can wire from the app:
+let loadTenantRouterConfig = async (_tenantId) => {
+  throw new Error("loadTenantRouterConfig not set");
+};
+let auditLog = async (_entry) => {}; // no-op by default
 
-  mikrotikClient = new RouterOSAPI({
-    host: config.host,
-    user: config.user,
-    password: config.password,
-    port: config.port || 8728,
-    timeout: 30000,
-  });
+// --------- Public API to set hooks ---------
+function setConfigLoader(fn) {
+  loadTenantRouterConfig = fn;
+}
+function setAuditLogger(fn) {
+  auditLog = fn || (() => {});
+}
 
+// --------- Helpers ---------
+function k(tenantId, host, port) {
+  return `${tenantId}:${host}:${port || 8728}`;
+}
+
+function redact(str) {
+  let s = String(str ?? "");
+  for (const k of SECRET_KEYS) {
+    const unquoted = new RegExp(`(${k}\\s*=\\s*)[^\\s"]+`, "ig");
+    const quoted = new RegExp(`(${k}\\s*=\\s*")[^"]*(")`, "ig");
+    s = s.replace(unquoted, "$1******").replace(quoted, "$1******$2");
+  }
+  return s;
+}
+
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function withTimeout(promise, ms, msg = "Timeout") {
+  let to;
+  const t = new Promise((_, rej) => (to = setTimeout(() => rej(new Error(msg)), ms)));
+  return Promise.race([promise.finally(() => clearTimeout(to)), t]);
+}
+
+// Normalize RouterOS response into a predictable shape
+function normalizeResult(res) {
+  // routeros-client returns array of rows for print, and objects for !done etc.
+  return res;
+}
+
+// --------- Core: get or create pooled client ---------
+async function getClientEntry(tenantId) {
+  const cfg = await loadTenantRouterConfig(tenantId);
+  if (!cfg) throw new Error("Router config not found for tenant");
+
+  const key = k(tenantId, cfg.host, cfg.port || 8728);
+  if (!pool.has(key)) {
+    pool.set(key, {
+      key,
+      tenantId,
+      cfg: {
+        host: cfg.host,
+        user: cfg.user,
+        password: cfg.password,
+        port: cfg.port || 8728,
+        tls: !!cfg.tls,
+        timeout: cfg.timeout || CONNECT_TIMEOUT_MS,
+      },
+      client: null,
+      connected: false,
+      connecting: false,
+      lastErr: null,
+      fails: 0,
+      backoff: BASE_BACKOFF_MS,
+      circuitUntil: 0,
+      lastOkAt: 0,
+    });
+  }
+  return pool.get(key);
+}
+
+// --------- Connect with backoff/circuit breaker ---------
+async function ensureConnected(entry) {
+  const now = Date.now();
+  if (entry.connected && entry.client) return entry.client;
+
+  if (entry.circuitUntil > now) {
+    throw new Error(`Circuit open until ${new Date(entry.circuitUntil).toISOString()}`);
+  }
+
+  if (entry.connecting) {
+    // Wait until current attempt finishes
+    await waitForConnect(entry);
+    if (entry.connected && entry.client) return entry.client;
+    // fallthrough to retry
+  }
+
+  entry.connecting = true;
   try {
-    await mikrotikClient.connect();
-    isConnected = true;
-    retryDelay = 2000; // reset backoff
-    console.log(`✅ Connected to MikroTik at ${config.host}`);
-    return mikrotikClient;
+    const client = new RouterOSAPI({
+      host: entry.cfg.host,
+      user: entry.cfg.user,
+      password: entry.cfg.password,
+      port: entry.cfg.port,
+      timeout: entry.cfg.timeout,
+      tls: entry.cfg.tls,
+    });
+
+    await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
+    entry.client = client;
+    entry.connected = true;
+    entry.fails = 0;
+    entry.backoff = BASE_BACKOFF_MS;
+    entry.lastErr = null;
+    // small ping
+    await withTimeout(client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health check timeout");
+    entry.lastOkAt = Date.now();
+
+    return client;
   } catch (err) {
-    isConnected = false;
-    mikrotikClient = null;
-    console.error('❌ MikroTik connection failed:', err.message);
-    throw new Error('MikroTikConnectionError: ' + err.message);
-  }
-}
-
-/**
- * Get current client instance
- */
-function getClient() {
-  if (!mikrotikClient || !isConnected) {
-    throw new Error('MikroTik is not connected. Call connectToMikrotik() first.');
-  }
-  return mikrotikClient;
-}
-
-/**
- * Try reconnecting with backoff
- */
-async function reconnectIfNeeded() {
-  if (!config) throw new Error('No MikroTik config found to reconnect.');
-  if (!isConnected) {
-    try {
-      await connectToMikrotik(config);
-    } catch (err) {
-      console.warn(`⚠️ Reconnect failed, retrying in ${retryDelay / 1000}s`);
-      setTimeout(reconnectIfNeeded, retryDelay);
-      retryDelay = Math.min(retryDelay * 2, 60000); // cap at 60s
-      throw err;
+    entry.connected = false;
+    entry.client = null;
+    entry.lastErr = err;
+    entry.fails += 1;
+    entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+    if (entry.fails >= MAX_CONSECUTIVE_FAILS) {
+      entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
     }
+    throw new Error(`MikroTikConnectionError: ${err.message}`);
+  } finally {
+    entry.connecting = false;
   }
-  return mikrotikClient;
 }
 
-/**
- * Send command with auto-reconnect support
- */
-async function sendCommand(command, params = []) {
+function waitForConnect(entry) {
+  // Polling wait: simple and dependency-free
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const tick = () => {
+      if (!entry.connecting) return resolve();
+      if (Date.now() - t0 > CONNECT_TIMEOUT_MS + 1000) return resolve(); // give up waiting
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+// --------- Public: sendCommand(path, words, {tenantId, timeoutMs}) ---------
+async function sendCommand(path, words = [], options = {}) {
+  const tenantId = options.tenantId || options.ispId; // support either naming
+  if (!tenantId) throw new Error("Missing tenantId for RouterOS command");
+
+  const entry = await getClientEntry(tenantId);
+
+  // Exponential backoff window if previously failing
+  if (!entry.connected && entry.fails > 0) {
+    await delay(entry.backoff);
+  }
+
+  const cmdId = crypto.randomUUID();
+  const cmd = String(path || "").trim();
+  const args = Array.isArray(words) ? words : [];
+
+  const startedAt = Date.now();
+  let ok = false;
+  let errorMsg = null;
+  let result = null;
+
   try {
-    const client = await reconnectIfNeeded();
-    return await client.write(command, params);
+    const client = await ensureConnected(entry);
+    const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
+
+    // routeros-client: client.write(command, paramsArray)
+    result = await withTimeout(client.write(cmd, args), timeoutMs, "Command timeout");
+    ok = true;
+    entry.lastOkAt = Date.now();
+    entry.fails = 0;
+    entry.backoff = BASE_BACKOFF_MS;
+
+    return normalizeResult(result);
   } catch (err) {
-    console.error(`❌ Failed to execute ${command}:`, err.message);
-    throw new Error('MikroTikCommandError: ' + err.message);
+    ok = false;
+    errorMsg = err?.message || String(err);
+    entry.lastErr = err;
+    entry.connected = false; // ensure next call reconnects
+    entry.fails += 1;
+    entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+    throw new Error(errorMsg);
+  } finally {
+    const ms = Date.now() - startedAt;
+    // Structured audit (non-blocking)
+    Promise.resolve(
+      auditLog({
+        kind: "mikrotik.exec",
+        tenantId,
+        host: entry.cfg.host,
+        port: entry.cfg.port,
+        ok,
+        ms,
+        command: cmd,
+        wordsCount: args.length,
+        error: errorMsg ? String(errorMsg) : undefined,
+        at: new Date().toISOString(),
+      })
+    ).catch(() => {});
+
+    // Console log (redacted)
+    const logLine = ok
+      ? `🛰️ MT ok ${entry.cfg.host} ${cmd} (${ms}ms)`
+      : `❌ MT err ${entry.cfg.host} ${redact(cmd)} (${ms}ms): ${errorMsg}`;
+    console.log(logLine);
   }
 }
 
-/**
- * Disconnect MikroTik
- */
-function disconnectMikrotik() {
-  if (mikrotikClient) {
-    mikrotikClient.close();
-    isConnected = false;
-    mikrotikClient = null;
-    console.log('🔌 Disconnected from MikroTik');
-  }
-}
+// --------- Health watchdog (per pooled client) ---------
+async function healthTick() {
+  const now = Date.now();
+  await Promise.all(
+    Array.from(pool.values()).map(async (entry) => {
+      // Skip if circuit is open; skip if no client yet
+      if (entry.circuitUntil > now) return;
 
-/**
- * Watchdog: keep connection alive
- */
-setInterval(async () => {
-  if (isConnected) {
-    try {
-      await sendCommand('/system/identity/print');
-      if (lastStatus !== 'ok') {
-        console.log('💓 MikroTik connection restored');
-        lastStatus = 'ok';
-      }
-    } catch {
-      if (lastStatus !== 'lost') {
-        console.log('⚠️ Lost connection, attempting to reconnect...');
-        lastStatus = 'lost';
-      }
       try {
-        await reconnectIfNeeded();
+        if (!entry.connected) return; // will reconnect on demand
+        const ms0 = Date.now();
+        const res = await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
+        entry.lastOkAt = Date.now();
+        entry.fails = 0;
+        entry.backoff = BASE_BACKOFF_MS;
+        // brief noisy print only if gets slow
+        const dur = Date.now() - ms0;
+        if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
+      } catch (err) {
+        entry.connected = false;
+        entry.lastErr = err;
+        entry.fails += 1;
+        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+        if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
+        console.warn(`⚠️ MT lost ${entry.cfg.host}: ${err.message}`);
+      }
+    })
+  );
+}
+setInterval(healthTick, HEALTH_INTERVAL_MS).unref();
+
+// --------- Public: status snapshot for dashboards ---------
+function getStatus() {
+  const arr = [];
+  for (const entry of pool.values()) {
+    arr.push({
+      key: entry.key,
+      tenantId: entry.tenantId,
+      host: entry.cfg.host,
+      port: entry.cfg.port,
+      connected: entry.connected,
+      lastOkAt: entry.lastOkAt,
+      fails: entry.fails,
+      backoff: entry.backoff,
+      circuitUntil: entry.circuitUntil,
+      lastErr: entry.lastErr ? String(entry.lastErr.message || entry.lastErr) : null,
+    });
+  }
+  return arr;
+}
+
+// --------- Graceful shutdown ---------
+async function shutdown() {
+  const closers = [];
+  for (const entry of pool.values()) {
+    if (entry.client) {
+      try {
+        closers.push(entry.client.close().catch(() => {}));
       } catch {}
     }
+    entry.connected = false;
+    entry.client = null;
   }
-}, 30000);
+  await Promise.allSettled(closers);
+}
 
-/**
- * Graceful shutdown
- */
-process.on('SIGINT', disconnectMikrotik);
-process.on('SIGTERM', disconnectMikrotik);
+process.on("SIGINT", () => shutdown().finally(() => process.exit(0)));
+process.on("SIGTERM", () => shutdown().finally(() => process.exit(0)));
 
 module.exports = {
-  connectToMikrotik,
-  getClient,
-  reconnectIfNeeded,
-  sendCommand,
-  disconnectMikrotik,
+  // main API
+  sendCommand,          // (path, words[], { tenantId, timeoutMs })
+  getStatus,
+  shutdown,
+
+  // hooks you must set from your app
+  setConfigLoader,      // (tenantId) => { host,user,password,port?,tls?,timeout? }
+  setAuditLogger,       // (entry) => Promise<void>
 };

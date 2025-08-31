@@ -1,6 +1,7 @@
 // src/App.jsx
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+
 import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Sidebar";
 import Login from "./pages/Login";
@@ -19,9 +20,11 @@ import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 import MODALS from "./constants/modals";
 import "./App.css";
 import { useAuth } from "./context/AuthContext";
+import Register from "./pages/Register";
+
 
 export default function App() {
-  const { isAuthed, token } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // —— Sidebar state: open on desktop, closed on mobile
   const [isDesktop, setIsDesktop] = useState(
@@ -33,7 +36,7 @@ export default function App() {
     const mq = window.matchMedia("(min-width:1024px)");
     const handler = (e) => {
       setIsDesktop(e.matches);
-      setSidebarOpen(e.matches); // auto-open desktop, auto-close mobile
+      setSidebarOpen(e.matches); // auto-open on desktop, auto-close on mobile
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
@@ -46,12 +49,14 @@ export default function App() {
   const openModal = (modal) => setActiveModal(modal);
   const closeModal = () => setActiveModal(null);
 
-  // If not authenticated, show only the login page (no sidebar/modals)
-  if (!isAuthed) {
+  // Public shell: only Login
+  if (!isAuthenticated) {
     return (
       <Router>
         <Routes>
+          <Route path="/login" element={<Login />} /> 
           <Route path="/*" element={<Login />} />
+          <Route path="/register" element={<Register />} />
         </Routes>
       </Router>
     );
@@ -88,7 +93,7 @@ export default function App() {
           </Routes>
         </div>
 
-        {/* Global Modals (do NOT mount these inside pages) */}
+        {/* Global Modals (keep them mounted here) */}
         <ClientsModal
           isOpen={activeModal === MODALS.CLIENTS}
           onClose={closeModal}
@@ -121,10 +126,11 @@ export default function App() {
           isOpen={activeModal === MODALS.PAYMENTS}
           onClose={closeModal}
         />
+
+        {/* No authToken prop needed; apiClient injects Authorization */}
         <MikrotikTerminalModal
           isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
           onClose={closeModal}
-          authToken={token}   
         />
       </div>
     </Router>

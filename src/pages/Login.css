@@ -95,3 +95,17 @@ form.space-y-3 .helper-text {
   font-size: 0.8125rem;
   color: var(--muted);
 }
+/* Optional: subtle inline button used for Show/Hide password */
+form.space-y-3 .ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 44px;
+  cursor: pointer;
+}
+form.space-y-3 .ghost:hover {
+  box-shadow: 0 0 0 2px var(--ring);
+  border-color: var(--primary);
+}
