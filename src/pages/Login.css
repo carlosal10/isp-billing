@@ -25,15 +25,15 @@
 
 /* ---------- Layout & spacing (Tailwind-like space-y-3) ---------- */
 form.space-y-3 {
-  display: grid;
-  gap: 0.75rem; /* 12px */
-  max-width: 380px;
-  margin: 0 auto;
+  display: flex; /* 12px */
+  flex-direction: column;
+  width: 1080px;
   padding: 1.25rem; /* 20px */
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background:#94a3b8;
   border-radius: 16px;
   color: var(--text);
+  height: 70vh;
+  margin-top: 10%;
 }
 
 /* ---------- Inputs ---------- */
@@ -43,7 +43,7 @@ form.space-y-3 input {
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface);
+  background: pearl white;
   color: var(--text);
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
@@ -67,6 +67,7 @@ form.space-y-3 input.input-error {
 /* ---------- Button ---------- */
 form.space-y-3 button {
   height: 44px;
+  width: 100px;
   border: none;
   border-radius: 10px;
   background: var(--primary);

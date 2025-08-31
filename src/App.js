@@ -18,7 +18,6 @@ import PaymentsModal from "./components/PaymentsModal";
 import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 
 import MODALS from "./constants/modals";
-import "./App.css";
 import { useAuth } from "./context/AuthContext";
 import Register from "./pages/Register";
 
