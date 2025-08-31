@@ -44,7 +44,7 @@ form.space-y-3 input {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: pearl white;
-  color: var(--text);
+  color: #0b1220;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
