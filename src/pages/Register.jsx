@@ -58,7 +58,7 @@ export default function Register() {
       await login({ email: form.email.trim(), password: form.password });
 
       // Navigate in the simplest, SSR-safe way
-      window.location.replace("/");
+      window.location.replace("/login");
     } catch (e2) {
       setErr(e2?.message || "Registration failed");
     } finally {
