@@ -1,9 +1,13 @@
+// utils/jwt.js
 const jwt = require("jsonwebtoken");
+
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) throw new Error("JWT_SECRET is not set");
 
 function signTenantAccessToken({ user, tenantId }) {
   return jwt.sign(
     { sub: String(user._id), email: user.email, ispId: String(tenantId) },
-    process.env.JWT_SECRET,
+    SECRET,
     { expiresIn: "15m" }
   );
 }
@@ -11,7 +15,7 @@ function signTenantAccessToken({ user, tenantId }) {
 function signPlatformAccessToken({ admin }) {
   return jwt.sign(
     { sub: String(admin._id), email: admin.email, aud: "platform-admin" },
-    process.env.JWT_SECRET,
+    SECRET,
     { expiresIn: "15m" }
   );
 }
