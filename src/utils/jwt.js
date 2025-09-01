@@ -1,21 +1,23 @@
-// src/utils/jwt.js
-export function decodeJwt(token) {
-  try {
-    const [, payload] = token.split(".");
-    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return json || null;
-  } catch {
-    return null;
-  }
+// utils/jwt.js
+const jwt = require("jsonwebtoken");
+
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) throw new Error("JWT_SECRET is not set");
+
+function signTenantAccessToken({ user, tenantId }) {
+  return jwt.sign(
+    { sub: String(user._id), email: user.email, ispId: String(tenantId) },
+    SECRET,
+    { expiresIn: "15m" }
+  );
 }
 
-export function getExpiry(token) {
-  const p = decodeJwt(token);
-  return p?.exp ? p.exp * 1000 : null; // ms
+function signPlatformAccessToken({ admin }) {
+  return jwt.sign(
+    { sub: String(admin._id), email: admin.email, aud: "platform-admin" },
+    SECRET,
+    { expiresIn: "15m" }
+  );
 }
 
-export function isExpired(token, skewMs = 10_000) {
-  const expMs = getExpiry(token);
-  if (!expMs) return false; // no exp -> treat as non-expiring (or handle as expired)
-  return Date.now() + skewMs >= expMs;
-}
+module.exports = { signTenantAccessToken, signPlatformAccessToken };
