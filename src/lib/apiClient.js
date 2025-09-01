@@ -2,8 +2,13 @@
 import axios from "axios";
 import { storage } from "../utils/storage";
 
+const API_BASE =
+  process.env.REACT_APP_API_URL ||
+  import.meta?.env?.VITE_API_URL || // if you switch to Vite later
+  "/api";
+
 export const api = axios.create({
-  baseURL: "https://isp-billing-uq58.onrender.com/api",
+  baseURL: API_BASE,
   timeout: 20000,
   withCredentials: false,
 });
@@ -11,15 +16,15 @@ export const api = axios.create({
 let accessors = {
   getAccessToken: () => storage.getAccess(),
   getIspId: () => storage.getIspId(),
-  tryRefresh: null,  // set by AuthContext
-  forceLogout: null, // set by AuthContext
+  tryRefresh: null,   // set by AuthContext
+  forceLogout: null,  // set by AuthContext
 };
 
 export function setApiAccessors(a) {
   accessors = { ...accessors, ...a };
 }
 
-// Attach auth headers
+// --- Attach auth headers before each request ---
 api.interceptors.request.use((config) => {
   const token = accessors.getAccessToken?.();
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -46,25 +51,21 @@ function processQueue(error, token = null) {
   queue = [];
 }
 
-// Response interceptor: handle 401
+// --- Response interceptor: handle 401 ---
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
     const status = error?.response?.status;
 
-    // If request already retried, or endpoint is auth itself, give up
     if (status !== 401 || original?._retry) {
-      // Bubble up other errors (502 RouterOS etc.)
       return Promise.reject(error);
     }
 
-    // Avoid refresh loops on auth routes
     if (original.url?.includes("/auth/login") || original.url?.includes("/auth/refresh")) {
       return Promise.reject(error);
     }
 
-    // Queue requests while refreshing
     if (isRefreshing) {
       return enqueueRequest((token) => {
         original.headers.Authorization = `Bearer ${token}`;
@@ -73,14 +74,12 @@ api.interceptors.response.use(
       });
     }
 
-    // Start refresh flow
     original._retry = true;
     isRefreshing = true;
     try {
       if (!accessors.tryRefresh) throw new Error("No refresh handler");
       const newToken = await accessors.tryRefresh();
       processQueue(null, newToken);
-      // replay original
       original.headers.Authorization = `Bearer ${newToken}`;
       return api(original);
     } catch (e) {
