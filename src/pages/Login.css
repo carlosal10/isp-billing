@@ -29,7 +29,7 @@ form.space-y-3 {
   flex-direction: column;
   width: 1080px;
   padding: 1.25rem; /* 20px */
-  background:#94a3b8;
+  background:#e2e2e2;
   border-radius: 16px;
   color: var(--text);
   height: 70vh;

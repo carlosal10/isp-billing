@@ -1,17 +1,23 @@
 // src/pages/Login.jsx
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api, API_BASE } from "../lib/apiClient";
 import "./Login.css";
 
 export default function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking…" });
 
+  const from = location.state?.from?.pathname || "/";
+
+  // quick API health check so misconfig shows up immediately
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -20,14 +26,14 @@ export default function Login() {
         if (!mounted) return;
         setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
       } catch (e) {
-        console.error("Health check failed:", e);
-        setApiHealth({
-          ok: false,
-          msg: e?.message || "API unreachable",
-        });
+        setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
+        // also log the shaped debug if present
+        if (e?.__debug) console.error("Health debug:", e.__debug);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function handleSubmit(e) {
@@ -36,17 +42,19 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form);
-      window.location.replace("/");
+      // route back to where they came from (or home)
+      navigate(from, { replace: true });
     } catch (e) {
-      console.error("Login error:", e, e?.__debug);
+      // message is annotated by apiClient interceptor; show verbatim
       setErr(e?.message || "Login failed");
+      if (e?.__debug) console.error("Login debug:", e.__debug);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="login-form space-y-3">
+    <form onSubmit={handleSubmit} className="login-form space-y-3" aria-label="Sign in">
       <div className="helper-text" style={{ color: apiHealth.ok ? "#16a34a" : "#ef4444" }}>
         {apiHealth.msg}
       </div>
@@ -59,6 +67,7 @@ export default function Login() {
         required
         autoComplete="username"
       />
+
       <input
         value={form.password}
         onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -67,6 +76,7 @@ export default function Login() {
         required
         autoComplete="current-password"
       />
+
       <button type="submit" disabled={loading}>
         {loading ? "Signing in..." : "Login"}
       </button>

@@ -3,11 +3,21 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { jwtDecode } from "jwt-decode";
 import { api, setApiAccessors } from "../lib/apiClient";
 
-// Helpers
 const decodeToken = (t) => { try { return jwtDecode(t); } catch { return null; } };
 const msUntil = (exp) => Math.max((exp * 1000) - Date.now(), 0);
 const loadPersisted = () => { try { return JSON.parse(localStorage.getItem("auth") || "null"); } catch { return null; } };
 const persistAuth = (auth) => auth ? localStorage.setItem("auth", JSON.stringify(auth)) : localStorage.removeItem("auth");
+
+// NEW: fallback builder if backend doesn't return user
+const userFromToken = (token) => {
+  const d = decodeToken(token);
+  if (!d) return null;
+  return {
+    id: d.sub || d.userId || d.uid || null,
+    email: d.email || d.upn || null,
+    displayName: d.name || d.preferred_username || null,
+  };
+};
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -22,7 +32,7 @@ export function AuthProvider({ children }) {
   function scheduleRefresh(decoded) {
     clearTimeout(refreshTimerRef.current);
     if (!decoded?.exp) return;
-    const ms = Math.max(msUntil(decoded.exp) - 30_000, 1_000); // refresh ~30s before expiry
+    const ms = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
     refreshTimerRef.current = setTimeout(() => { refresh().catch(() => logout()); }, ms);
   }
   function clearRefreshTimer() {
@@ -34,22 +44,34 @@ export function AuthProvider({ children }) {
     setAccessToken(access || null);
     setRefreshToken(r || null);
     setIspId(isp || null);
-    if (usr !== undefined) setUser(usr);
 
-    // persist for apiClient interceptors (they read from localStorage via accessors)
-    persistAuth(access && r ? { accessToken: access, refreshToken: r, ispId: isp, user: usr ?? user ?? null } : null);
+    // If caller didn't supply a user, derive from token once
+    if (usr !== undefined) {
+      setUser(usr);
+    } else if (access) {
+      setUser((prev) => prev ?? userFromToken(access));
+    } else {
+      setUser(null);
+    }
+
+    persistAuth(access && r ? {
+      accessToken: access,
+      refreshToken: r,
+      ispId: isp,
+      user: usr !== undefined ? usr : (access ? (user ?? userFromToken(access)) : null),
+    } : null);
 
     const decoded = access ? decodeToken(access) : null;
     if (decoded) scheduleRefresh(decoded);
   }
 
-  // --- API calls
   async function login({ email, password, ispId: ispOverride }) {
     const { data } = await api.post("/auth/login", { email, password, ispId: ispOverride });
     if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Login failed");
     const dec = decodeToken(data.accessToken);
     const isp = data.ispId || dec?.ispId || ispOverride;
-    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: data.user || null });
+    const fallbackUser = data.user || userFromToken(data.accessToken);   // <-- key
+    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: fallbackUser });
   }
 
   async function register({ tenantName, displayName, email, password }) {
@@ -57,7 +79,8 @@ export function AuthProvider({ children }) {
     if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Registration failed");
     const dec = decodeToken(data.accessToken);
     const isp = data.ispId || dec?.ispId || null;
-    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: data.user || null });
+    const fallbackUser = data.user || userFromToken(data.accessToken);   // <-- key
+    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: fallbackUser });
   }
 
   async function refresh() {
@@ -67,12 +90,10 @@ export function AuthProvider({ children }) {
     if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Refresh failed");
 
     const saved = loadPersisted() || {};
-    setAuthState({
-      access: data.accessToken,
-      refresh: r,
-      isp: ispId || saved.ispId || decodeToken(data.accessToken)?.ispId || null,
-      usr: saved.user || user || null,
-    });
+    const fallbackUser = saved.user || userFromToken(data.accessToken) || user || null; // <-- key
+    const isp = ispId || saved.ispId || decodeToken(data.accessToken)?.ispId || null;
+
+    setAuthState({ access: data.accessToken, refresh: r, isp, usr: fallbackUser });
     return data.accessToken;
   }
 
@@ -82,15 +103,14 @@ export function AuthProvider({ children }) {
       if (r) await api.post("/auth/logout", { refreshToken: r });
     } catch {}
     clearRefreshTimer();
-    setUser(null);
     setAuthState({ access: null, refresh: null, isp: null, usr: null });
   }
 
-  // Bootstrap + wire apiClient once
   useEffect(() => {
+    // give apiClient the hooks it needs
     setApiAccessors({
-      getAccessToken: () => (loadPersisted()?.accessToken || null),
-      getIspId: () => (loadPersisted()?.ispId || null),
+      getAccessToken: () => loadPersisted()?.accessToken || null,
+      getIspId: () => loadPersisted()?.ispId || null,
       tryRefresh: () => refresh(),
       forceLogout: () => logout(),
     });
@@ -98,17 +118,22 @@ export function AuthProvider({ children }) {
     const saved = loadPersisted();
     if (saved?.accessToken && saved?.refreshToken) {
       const dec = decodeToken(saved.accessToken);
-      setUser(saved.user || null);
       setIspId(saved.ispId || dec?.ispId || null);
       setAccessToken(saved.accessToken);
       setRefreshToken(saved.refreshToken);
+      setUser(saved.user || userFromToken(saved.accessToken)); // <-- key
       scheduleRefresh(dec);
     }
     return () => clearRefreshTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isAuthed = useMemo(() => Boolean(accessToken && user), [accessToken, user]);
+  // IMPORTANT: don't require user to decide "authed"
+  const isAuthed = useMemo(
+    () => Boolean(accessToken || loadPersisted()?.accessToken),
+    [accessToken]
+  );
+
   const value = useMemo(
     () => ({ isAuthed, user, ispId, token: accessToken, login, register, refresh, logout }),
     [isAuthed, user, ispId, accessToken]
