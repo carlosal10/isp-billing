@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
-import { api } from "../lib/apiClient";
+// src/pages/Register.jsx
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import "./Login.css"; // reuse the same styles (form.space-y-3, inputs, helper-text, etc.)
+import "./Login.css"; // reuse same styles
 
 function scorePassword(pw) {
   let s = 0;
@@ -11,11 +12,12 @@ function scorePassword(pw) {
   if (/[a-z]/.test(pw)) s++;
   if (/\d/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  return Math.min(s, 5); // 0..5
+  return Math.min(s, 5);
 }
 
 export default function Register() {
-  const { login } = useAuth();
+  const navigate = useNavigate();
+  const { register } = useAuth();
   const [form, setForm] = useState({
     tenantName: "",
     displayName: "",
@@ -28,6 +30,7 @@ export default function Register() {
   const [showPw, setShowPw] = useState(false);
 
   const pwScore = useMemo(() => scorePassword(form.password), [form.password]);
+
   const canSubmit =
     form.tenantName.trim().length > 0 &&
     form.displayName.trim().length > 0 &&
@@ -38,33 +41,32 @@ export default function Register() {
 
   const onChange = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = async (e) => {
+  async function submit(e) {
     e.preventDefault();
     setErr("");
     if (!canSubmit) return;
+
+    setBusy(true);
     try {
-      setBusy(true);
-      // Create tenant + user
-      const { data } = await api.post("/auth/register", {
+      await register({
         tenantName: form.tenantName.trim(),
         displayName: form.displayName.trim(),
         email: form.email.trim(),
         password: form.password,
       });
-
-      if (!data?.ok) throw new Error(data?.error || "Registration failed");
-
-      // Hydrate auth using normal login flow (ensures refresh timers/interceptors are set)
-      await login({ email: form.email.trim(), password: form.password });
-
-      // Navigate in the simplest, SSR-safe way
-      window.location.replace("/login");
+      // on success, you're authenticated → go home
+      navigate("/", { replace: true });
     } catch (e2) {
-      setErr(e2?.message || "Registration failed");
+      const msg =
+        e2?.response?.data?.error ||
+        e2?.response?.data?.message ||
+        e2?.message ||
+        "Registration failed";
+      setErr(msg);
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
     <form onSubmit={submit} className="space-y-3" aria-label="Create account">
@@ -75,6 +77,7 @@ export default function Register() {
         value={form.tenantName}
         onChange={onChange("tenantName")}
         required
+        autoComplete="organization"
       />
 
       <input
@@ -82,6 +85,7 @@ export default function Register() {
         value={form.displayName}
         onChange={onChange("displayName")}
         required
+        autoComplete="name"
       />
 
       <input
@@ -90,6 +94,7 @@ export default function Register() {
         value={form.email}
         onChange={onChange("email")}
         required
+        autoComplete="email"
       />
 
       <div style={{ display: "grid", gap: "0.5rem" }}>
@@ -100,6 +105,7 @@ export default function Register() {
             value={form.password}
             onChange={onChange("password")}
             required
+            autoComplete="new-password"
             style={{ flex: 1 }}
           />
           <button
@@ -112,7 +118,6 @@ export default function Register() {
           </button>
         </div>
 
-        {/* Strength meter (simple, no external libs) */}
         <div aria-label="password strength" className="helper-text">
           Strength:
           <span style={{ marginLeft: 8 }}>
@@ -125,11 +130,12 @@ export default function Register() {
         </div>
 
         <input
-          type={showPw ? "text" : "password"}
-          placeholder="Confirm password"
-          value={form.confirm}
-          onChange={onChange("confirm")}
-          required
+            type={showPw ? "text" : "password"}
+            placeholder="Confirm password"
+            value={form.confirm}
+            onChange={onChange("confirm")}
+            required
+            autoComplete="new-password"
         />
       </div>
 
@@ -155,7 +161,7 @@ export default function Register() {
       )}
 
       <div className="helper-text">
-        Already have an account? <a href="/login">Sign in</a>
+        Already have an account? <Link to="/login">Sign in</Link>
       </div>
     </form>
   );
