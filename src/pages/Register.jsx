@@ -1,8 +1,9 @@
 // src/pages/Register.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import "./Login.css"; // reuse same styles
+import { api, API_BASE } from "../lib/apiClient";
+import "./Login.css";
 
 function scorePassword(pw) {
   let s = 0;
@@ -18,6 +19,7 @@ function scorePassword(pw) {
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
+
   const [form, setForm] = useState({
     tenantName: "",
     displayName: "",
@@ -28,9 +30,27 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking…" });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/health");
+        if (!mounted) return;
+        setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
+      } catch (e) {
+        console.error("Health check failed:", e);
+        setApiHealth({
+          ok: false,
+          msg: e?.message || "API unreachable",
+        });
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const pwScore = useMemo(() => scorePassword(form.password), [form.password]);
-
   const canSubmit =
     form.tenantName.trim().length > 0 &&
     form.displayName.trim().length > 0 &&
@@ -54,15 +74,10 @@ export default function Register() {
         email: form.email.trim(),
         password: form.password,
       });
-      // on success, you're authenticated → go home
       navigate("/", { replace: true });
     } catch (e2) {
-      const msg =
-        e2?.response?.data?.error ||
-        e2?.response?.data?.message ||
-        e2?.message ||
-        "Registration failed";
-      setErr(msg);
+      console.error("Register error:", e2, e2?.__debug);
+      setErr(e2?.message || "Registration failed");
     } finally {
       setBusy(false);
     }
@@ -70,6 +85,10 @@ export default function Register() {
 
   return (
     <form onSubmit={submit} className="space-y-3" aria-label="Create account">
+      <div className="helper-text" style={{ color: apiHealth.ok ? "#16a34a" : "#ef4444" }}>
+        {apiHealth.msg}
+      </div>
+
       <h2 style={{ margin: 0 }}>Create your account</h2>
 
       <input
@@ -130,12 +149,12 @@ export default function Register() {
         </div>
 
         <input
-            type={showPw ? "text" : "password"}
-            placeholder="Confirm password"
-            value={form.confirm}
-            onChange={onChange("confirm")}
-            required
-            autoComplete="new-password"
+          type={showPw ? "text" : "password"}
+          placeholder="Confirm password"
+          value={form.confirm}
+          onChange={onChange("confirm")}
+          required
+          autoComplete="new-password"
         />
       </div>
 
@@ -155,7 +174,7 @@ export default function Register() {
       </button>
 
       {err && (
-        <div className="helper-text" style={{ color: "#ef4444" }}>
+        <div className="helper-text" style={{ color: "#ef4444", whiteSpace: "pre-wrap" }}>
           {err}
         </div>
       )}

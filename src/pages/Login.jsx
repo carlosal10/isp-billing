@@ -1,7 +1,8 @@
 // src/pages/Login.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { api, API_BASE } from "../lib/apiClient";
 import "./Login.css";
 
 export default function Login() {
@@ -9,6 +10,25 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking…" });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/health");
+        if (!mounted) return;
+        setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
+      } catch (e) {
+        console.error("Health check failed:", e);
+        setApiHealth({
+          ok: false,
+          msg: e?.message || "API unreachable",
+        });
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -16,14 +36,10 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form);
-      window.location.replace("/"); // redirect after login
+      window.location.replace("/");
     } catch (e) {
-      const msg =
-        e?.response?.data?.error ||
-        e?.response?.data?.message ||
-        e?.message ||
-        "Login failed";
-      setErr(msg);
+      console.error("Login error:", e, e?.__debug);
+      setErr(e?.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -31,6 +47,10 @@ export default function Login() {
 
   return (
     <form onSubmit={handleSubmit} className="login-form space-y-3">
+      <div className="helper-text" style={{ color: apiHealth.ok ? "#16a34a" : "#ef4444" }}>
+        {apiHealth.msg}
+      </div>
+
       <input
         value={form.email}
         onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -52,7 +72,7 @@ export default function Login() {
       </button>
 
       {err && (
-        <div className="helper-text" style={{ color: "#ef4444" }}>
+        <div className="helper-text" style={{ color: "#ef4444", whiteSpace: "pre-wrap" }}>
           {err}
         </div>
       )}
