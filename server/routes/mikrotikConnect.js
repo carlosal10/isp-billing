@@ -1,48 +1,43 @@
-const express = require('express');
+// routes/mikrotikConnect.js
+const express = require("express");
 const router = express.Router();
-const {
-  connectToMikrotik,
-  disconnectMikrotik
-} = require('../utils/mikrotikConnectionManager'); // ✅ fix path
+const { setConfigLoader, sendCommand } = require("../utils/mikrotikConnectionManager");
 
-router.post('/', async (req, res) => {
-  const { host, user, password } = req.body;
+// Simple per-tenant in-memory store (replace with DB persist in production)
+const perTenantCfg = new Map();
 
-  if (!host || !user || !password) {
-    return res.status(400).json({ success: false, message: 'All fields are required' });
-  }
+// Tell the connection manager how to load a tenant's router config
+setConfigLoader(async (tenantId) => perTenantCfg.get(tenantId));
 
+router.post("/", async (req, res) => {
   try {
-    const client = await connectToMikrotik({ host, user, password });
+    const tenantId = req.tenantId; // set by requireTenant
+    if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
 
-    const identity = await client.write('/system/identity/print');
-    const routerName = identity[0]?.name || 'Unknown';
-
-    return res.status(200).json({
-      success: true,
-      message: `✅ Connected to MikroTik: ${routerName}`,
-      router: identity
-    });
-
-  } catch (error) {
-    console.error('❌ Connection error:', error.message);
-
-    let errorType = 'Unknown error';
-    const msg = error.message.toLowerCase();
-
-    if (msg.includes('timeout') || error.code === 'ETIMEDOUT') {
-      errorType = 'Connection timed out. Router may be unreachable or blocked.';
-    } else if (msg.includes('refused')) {
-      errorType = 'Connection refused. Router API port may be closed or filtered.';
-    } else if (msg.includes('login failure')) {
-      errorType = 'Invalid username or password.';
+    const { host, port, user, password, tls } = req.body || {};
+    if (!host || !user || !password) {
+      return res.status(400).json({ ok: false, error: "host, user, password required" });
     }
 
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to connect to MikroTik',
-      error: errorType
+    // Save/Upsert config for this tenant (swap with DB write)
+    perTenantCfg.set(tenantId, {
+      host: String(host).trim(),
+      port: Number(port) || (tls ? 8729 : 8728),
+      user: String(user).trim(),
+      password: String(password),
+      tls: !!tls,
+      timeout: 15000,
     });
+
+    // Test by reading identity via pooled manager (must pass tenantId!)
+    const out = await sendCommand("/system/identity/print", [], { tenantId, timeoutMs: 10000 });
+    const identity = Array.isArray(out) && out[0]?.name;
+
+    return res.json({ ok: true, identity: identity || "unknown" });
+  } catch (e) {
+    const msg = e?.message || "Connect failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
   }
 });
 
