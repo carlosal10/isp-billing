@@ -7,23 +7,21 @@ const { sendCommand } = require('../utils/mikrotikConnectionManager');
 // ✅ Get profiles directly from MikroTik
 router.get('/profiles', async (req, res) => {
   try {
-    const profiles = await sendCommand('/ppp/profile/print');
+    const tenantId = req.tenantId;
+    const profiles = await sendCommand('/ppp/profile/print', [], { tenantId, timeoutMs: 10000 });
 
-    if (!profiles.length) {
-      return res.status(404).json({ message: 'No profiles found on MikroTik' });
-    }
-
-    const formatted = profiles.map((p, index) => ({
-      id: p['.id'] || index, // fallback to index if no .id
+    const formatted = (Array.isArray(profiles) ? profiles : []).map((p, index) => ({
+      id: p['.id'] || p.id || index,
       name: p.name,
-      localAddress: p['local-address'] || null,
-      rateLimit: p['rate-limit'] || null,
+      localAddress: p['local-address'] || p.localAddress || null,
+      rateLimit: p['rate-limit'] || p.rateLimit || null,
     }));
 
-    res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
+    return res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
   } catch (err) {
-    console.error("Error fetching MikroTik profiles:", err);
-    res.status(500).json({ message: err.message });
+    console.error("Error fetching MikroTik profiles:", err?.message || err);
+    // Degrade gracefully so clients can handle empty state without throwing
+    return res.json({ message: 'No PPPoE profiles available', profiles: [], error: String(err?.message || err) });
   }
 });
 

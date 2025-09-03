@@ -45,16 +45,18 @@ function normalizeProfiles(raw) {
 }
 
 // ----------------- PPPoE Profiles -----------------
-router.get('/profiles', async (_req, res) => {
+router.get('/profiles', async (req, res) => {
   try {
-    const profiles = await sendCommand('/ppp/profile/print'); // should return array
+    const tenantId = req.tenantId;
+    // Execute against tenant-scoped MikroTik connection (may throw if not configured)
+    const profiles = await sendCommand('/ppp/profile/print', [], { tenantId, timeoutMs: 10000 });
     const formatted = normalizeProfiles(profiles);
     return res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
   } catch (err) {
     console.error('profiles error:', err?.message || err);
-    // Still respond with a safe shape so UI can continue
-    return res.status(500).json({
-      message: 'Failed to load PPPoE profiles',
+    // Degrade gracefully so UI can proceed; surface message but avoid 500
+    return res.json({
+      message: 'No PPPoE profiles available (router not connected or unauthorized)',
       profiles: [],
       error: String(err?.message || err),
     });
