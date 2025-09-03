@@ -1,14 +1,37 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { jwtDecode } from "jwt-decode";
 import { api, setApiAccessors } from "../lib/apiClient";
 
-const decodeToken = (t) => { try { return jwtDecode(t); } catch { return null; } };
-const msUntil = (exp) => Math.max((exp * 1000) - Date.now(), 0);
-const loadPersisted = () => { try { return JSON.parse(localStorage.getItem("auth") || "null"); } catch { return null; } };
-const persistAuth = (auth) => auth ? localStorage.setItem("auth", JSON.stringify(auth)) : localStorage.removeItem("auth");
+const decodeToken = (t) => {
+  try {
+    return jwtDecode(t);
+  } catch {
+    return null;
+  }
+};
+const msUntil = (exp) => Math.max(exp * 1000 - Date.now(), 0);
+const loadPersisted = () => {
+  try {
+    return JSON.parse(localStorage.getItem("auth") || "null");
+  } catch {
+    return null;
+  }
+};
+const persistAuth = (auth) =>
+  auth
+    ? localStorage.setItem("auth", JSON.stringify(auth))
+    : localStorage.removeItem("auth");
 
-// NEW: fallback builder if backend doesn't return user
+// Fallback user builder if backend doesn’t send a user object
 const userFromToken = (token) => {
   const d = decodeToken(token);
   if (!d) return null;
@@ -29,85 +52,138 @@ export function AuthProvider({ children }) {
   const [refreshToken, setRefreshToken] = useState(null);
   const refreshTimerRef = useRef(null);
 
-  function scheduleRefresh(decoded) {
-    clearTimeout(refreshTimerRef.current);
-    if (!decoded?.exp) return;
-    const ms = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
-    refreshTimerRef.current = setTimeout(() => { refresh().catch(() => logout()); }, ms);
-  }
-  function clearRefreshTimer() {
+  const clearRefreshTimer = useCallback(() => {
     clearTimeout(refreshTimerRef.current);
     refreshTimerRef.current = null;
-  }
+  }, []);
 
-  function setAuthState({ access, refresh: r, isp, usr }) {
-    setAccessToken(access || null);
-    setRefreshToken(r || null);
-    setIspId(isp || null);
+  const scheduleRefresh = useCallback(
+    (decoded) => {
+      clearRefreshTimer();
+      if (!decoded?.exp) return;
+      const ms = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
+      refreshTimerRef.current = setTimeout(() => {
+        refresh().catch(() => logout());
+      }, ms);
+    },
+    // refresh & logout are defined with useCallback below, but JS hoisting
+    // means we still need to list them as deps to satisfy ESLint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
-    // If caller didn't supply a user, derive from token once
-    if (usr !== undefined) {
-      setUser(usr);
-    } else if (access) {
-      setUser((prev) => prev ?? userFromToken(access));
-    } else {
-      setUser(null);
-    }
+  const setAuthState = useCallback(
+    ({ access, refresh: r, isp, usr }) => {
+      setAccessToken(access || null);
+      setRefreshToken(r || null);
+      setIspId(isp || null);
 
-    persistAuth(access && r ? {
-      accessToken: access,
-      refreshToken: r,
-      ispId: isp,
-      user: usr !== undefined ? usr : (access ? (user ?? userFromToken(access)) : null),
-    } : null);
+      // If caller didn't supply a user, derive from token once
+      if (usr !== undefined) {
+        setUser(usr);
+      } else if (access) {
+        setUser((prev) => prev ?? userFromToken(access));
+      } else {
+        setUser(null);
+      }
 
-    const decoded = access ? decodeToken(access) : null;
-    if (decoded) scheduleRefresh(decoded);
-  }
+      const toPersist =
+        access && r
+          ? {
+              accessToken: access,
+              refreshToken: r,
+              ispId: isp,
+              user:
+                usr !== undefined
+                  ? usr
+                  : access
+                  ? user ?? userFromToken(access)
+                  : null,
+            }
+          : null;
+      persistAuth(toPersist);
 
-  async function login({ email, password, ispId: ispOverride }) {
-    const { data } = await api.post("/auth/login", { email, password, ispId: ispOverride });
-    if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Login failed");
-    const dec = decodeToken(data.accessToken);
-    const isp = data.ispId || dec?.ispId || ispOverride;
-    const fallbackUser = data.user || userFromToken(data.accessToken);   // <-- key
-    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: fallbackUser });
-  }
+      const decoded = access ? decodeToken(access) : null;
+      if (decoded) scheduleRefresh(decoded);
+    },
+    [scheduleRefresh, user]
+  );
 
-  async function register({ tenantName, displayName, email, password }) {
-    const { data } = await api.post("/auth/register", { tenantName, displayName, email, password });
-    if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Registration failed");
-    const dec = decodeToken(data.accessToken);
-    const isp = data.ispId || dec?.ispId || null;
-    const fallbackUser = data.user || userFromToken(data.accessToken);   // <-- key
-    setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: fallbackUser });
-  }
-
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const r = refreshToken || loadPersisted()?.refreshToken;
     if (!r) throw new Error("No refresh token");
     const { data } = await api.post("/auth/refresh", { refreshToken: r });
-    if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Refresh failed");
+    if (!data?.ok || !data?.accessToken)
+      throw new Error(data?.error || "Refresh failed");
 
     const saved = loadPersisted() || {};
-    const fallbackUser = saved.user || userFromToken(data.accessToken) || user || null; // <-- key
-    const isp = ispId || saved.ispId || decodeToken(data.accessToken)?.ispId || null;
+    const fallbackUser =
+      saved.user || userFromToken(data.accessToken) || user || null;
+    const isp =
+      ispId || saved.ispId || decodeToken(data.accessToken)?.ispId || null;
 
     setAuthState({ access: data.accessToken, refresh: r, isp, usr: fallbackUser });
     return data.accessToken;
-  }
+  }, [refreshToken, ispId, user, setAuthState]);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     try {
       const r = refreshToken || loadPersisted()?.refreshToken;
       if (r) await api.post("/auth/logout", { refreshToken: r });
-    } catch {}
+    } catch {
+      // ignore network errors on logout
+    }
     clearRefreshTimer();
     setAuthState({ access: null, refresh: null, isp: null, usr: null });
-  }
+  }, [refreshToken, clearRefreshTimer, setAuthState]);
 
+  const login = useCallback(
+    async ({ email, password, ispId: ispOverride }) => {
+      const { data } = await api.post("/auth/login", {
+        email,
+        password,
+        ispId: ispOverride,
+      });
+      if (!data?.ok || !data?.accessToken)
+        throw new Error(data?.error || "Login failed");
+      const dec = decodeToken(data.accessToken);
+      const isp = data.ispId || dec?.ispId || ispOverride;
+      const fallbackUser = data.user || userFromToken(data.accessToken);
+      setAuthState({
+        access: data.accessToken,
+        refresh: data.refreshToken,
+        isp,
+        usr: fallbackUser,
+      });
+    },
+    [setAuthState]
+  );
+
+  const register = useCallback(
+    async ({ tenantName, displayName, email, password }) => {
+      const { data } = await api.post("/auth/register", {
+        tenantName,
+        displayName,
+        email,
+        password,
+      });
+      if (!data?.ok || !data?.accessToken)
+        throw new Error(data?.error || "Registration failed");
+      const dec = decodeToken(data.accessToken);
+      const isp = data.ispId || dec?.ispId || null;
+      const fallbackUser = data.user || userFromToken(data.accessToken);
+      setAuthState({
+        access: data.accessToken,
+        refresh: data.refreshToken,
+        isp,
+        usr: fallbackUser,
+      });
+    },
+    [setAuthState]
+  );
+
+  // Wire axios accessors once on mount
   useEffect(() => {
-    // give apiClient the hooks it needs
     setApiAccessors({
       getAccessToken: () => loadPersisted()?.accessToken || null,
       getIspId: () => loadPersisted()?.ispId || null,
@@ -121,22 +197,34 @@ export function AuthProvider({ children }) {
       setIspId(saved.ispId || dec?.ispId || null);
       setAccessToken(saved.accessToken);
       setRefreshToken(saved.refreshToken);
-      setUser(saved.user || userFromToken(saved.accessToken)); // <-- key
-      scheduleRefresh(dec);
+      setUser(saved.user || userFromToken(saved.accessToken));
+      if (dec) scheduleRefresh(dec);
     }
+
     return () => clearRefreshTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // run once
 
-  // IMPORTANT: don't require user to decide "authed"
+  // Consider the user "authed" if we have an access token (in state or persisted)
   const isAuthed = useMemo(
     () => Boolean(accessToken || loadPersisted()?.accessToken),
     [accessToken]
   );
 
+  // ✅ Include all functions used in the memo value to satisfy ESLint
   const value = useMemo(
-    () => ({ isAuthed, user, ispId, token: accessToken, login, register, refresh, logout }),
-    [isAuthed, user, ispId, accessToken]
+    () => ({
+      isAuthed,
+      isAuthenticated: isAuthed, // alias for callers expecting this name
+      user,
+      ispId,
+      token: accessToken,
+      login,
+      register,
+      refresh,
+      logout,
+    }),
+    [isAuthed, user, ispId, accessToken, login, register, refresh, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

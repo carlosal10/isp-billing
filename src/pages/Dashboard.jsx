@@ -62,7 +62,8 @@ export default function Dashboard() {
 
   const toggleSidebar = () => setSidebarOpen((s) => !s);
 
-  const { isAuthenticated, token } = useAuth(); // token not used directly; headers come from api interceptors
+  // 🔑 Use token + ispId directly to gate data loads
+  const { isAuthenticated, token, ispId } = useAuth();
 
   const [activeModal, setActiveModal] = useState(null);
 
@@ -97,7 +98,6 @@ export default function Dashboard() {
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
-  const [isReady, setIsReady] = useState(false); // flips true after first successful auth headers are present
 
   // ---------- FETCHERS (Axios `api` injects Authorization + x-isp-id) ----------
   const loadMikrotikStatus = async () => {
@@ -194,50 +194,30 @@ export default function Dashboard() {
     }
   };
 
-  // ---------- START WHEN AUTH HEADERS EXIST ----------
-  // Flip ready once we know we can hit a protected endpoint successfully.
+  // ---------- INITIAL LOAD ----------
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!isAuthenticated) return;
-      try {
-        await api.get("/health"); // public, but warms axios; harmless
-        // try a protected, tiny call to assert headers are attached:
-        await api.get("/mikrotik/ping");
-        if (mounted) setIsReady(true);
-      } catch (_e) {
-        // stays false; UI remains calm
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated]);
-
-  // ---------- INITIAL LOAD (after ready) ----------
-  useEffect(() => {
-    if (!isAuthenticated || !isReady) return;
+    if (!isAuthenticated || !token || !ispId) return;
     loadMikrotikStatus();
     loadStats();
     loadCustomers();
     loadPayments();
     loadSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isReady]);
+  }, [isAuthenticated, token, ispId]);
 
   // ---------- POLLING ----------
   useEffect(() => {
-    if (!isAuthenticated || !isReady) return;
+    if (!isAuthenticated || !token || !ispId) return;
     const id = setInterval(() => {
       loadMikrotikStatus();
       loadSessions();
     }, REFRESH_FAST_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isReady]);
+  }, [isAuthenticated, token, ispId]);
 
   useEffect(() => {
-    if (!isAuthenticated || !isReady) return;
+    if (!isAuthenticated || !token || !ispId) return;
     const id = setInterval(() => {
       loadStats();
       loadPayments();
@@ -245,7 +225,7 @@ export default function Dashboard() {
     }, REFRESH_SLOW_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isReady]);
+  }, [isAuthenticated, token, ispId]);
 
   // ---------- DATA ENRICHMENT ----------
   const customerByAccount = useMemo(() => {
@@ -486,7 +466,7 @@ export default function Dashboard() {
                     <td colSpan={9} style={{ textAlign: "center" }}>
                       {errors.sessions
                         ? `Failed to load sessions: ${errors.sessions}`
-                        : isAuthenticated && isReady
+                        : (isAuthenticated && token && ispId)
                         ? "No users online"
                         : "Signing you in…"}
                     </td>
