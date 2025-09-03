@@ -1,10 +1,16 @@
+// src/components/PaymentSetting.jsx
 import { useState, useEffect } from "react";
 import { FaTimes, FaStripe, FaPaypal, FaMoneyBillWave } from "react-icons/fa";
 import "./PaymentSetting.css";
+import { api } from "../lib/apiClient";
 
-const API_BASE = "https://isp-billing-uq58.onrender.com/api/payments-config";
+const PROVIDERS = [
+  { key: "mpesa", label: "M-Pesa", icon: <FaMoneyBillWave /> },
+  { key: "stripe", label: "Stripe", icon: <FaStripe /> },
+  { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
+];
 
-// ✅ Reusable Input Component
+// Simple text input
 function TextInput({ value, onChange, placeholder }) {
   return (
     <input
@@ -21,6 +27,7 @@ function TextInput({ value, onChange, placeholder }) {
 export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
   const [activeTab, setActiveTab] = useState("mpesa");
   const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
 
   const [formData, setFormData] = useState({
     mpesa: {
@@ -52,107 +59,110 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     paypal: ["clientId", "clientSecret"],
   };
 
-  // ✅ Fetch settings if ISP ID exists
   useEffect(() => {
     if (!isOpen) return;
+    setMsg("");
+    loadProvider(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTab]);
 
-    if (!ispId) {
-      console.warn("No ISP ID provided, skipping fetch.");
-      return;
-    }
-
-    const fetchSettings = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE}/${ispId}/${activeTab}`);
-        if (!res.ok) throw new Error("Failed to fetch settings");
-
-        const data = await res.json();
-        if (data) {
-          setFormData((prev) => ({
-            ...prev,
-            [activeTab]: { ...prev[activeTab], ...data },
-          }));
-        }
-      } catch (err) {
-        console.error("Error loading settings:", err);
-        alert("Failed to load settings. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSettings();
-  }, [isOpen, activeTab, ispId]);
-
-  const handleChange = (provider, field, value) => {
+  function onChange(provider, field, value) {
     setFormData((prev) => ({
       ...prev,
       [provider]: { ...prev[provider], [field]: value },
     }));
-  };
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!ispId) {
-      alert("ISP ID missing. Cannot save settings until multi-user setup is complete.");
-      return;
-    }
-
+  async function loadProvider(provider) {
     setLoading(true);
+    setMsg("");
+
     try {
-      const res = await fetch(`${API_BASE}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ispId,
-          provider: activeTab,
-          settings: formData[activeTab],
-        }),
-      });
+      // Primary style: /api/payment-config/:provider
+      let res, data;
+      try {
+        res = await api.get(`/payment-config/${provider}`);
+        data = res.data;
+      } catch (e1) {
+        // Fallback style: /api/payment-config?provider=mpesa
+        const res2 = await api.get(`/payment-config`, {
+          params: { provider },
+        });
+        data = res2.data;
+      }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save settings");
-
-      alert(data.message || "Settings saved successfully");
-      onClose();
-    } catch (err) {
-      console.error("Error saving settings:", err);
-      alert(err.message || "Server error while saving settings");
+      if (data && typeof data === "object") {
+        setFormData((prev) => ({
+          ...prev,
+          [provider]: { ...prev[provider], ...data },
+        }));
+      }
+    } catch (e) {
+      console.error("Load payment config failed:", e?.__debug || e);
+      setMsg(`❌ Failed to load ${provider} settings${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    setMsg("");
+
+    try {
+      const provider = activeTab;
+      const payload = {
+        provider,
+        settings: formData[provider],
+      };
+
+      // Primary style: POST /payment-config/:provider
+      try {
+        await api.post(`/payment-config/${provider}`, payload.settings, {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e1) {
+        // Fallback: POST /payment-config with { provider, settings }
+        await api.post(`/payment-config`, payload, {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      setMsg("✅ Settings saved");
+      onClose && onClose();
+    } catch (e) {
+      console.error("Save payment config failed:", e?.__debug || e);
+      setMsg(`❌ Failed to save settings${e?.message ? `: ${e.message}` : ""}`);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
       <div className="modal-content bg-white rounded-2xl shadow-lg w-full max-w-2xl p-6 relative">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-600 hover:text-red-500"
+          aria-label="Close"
         >
           <FaTimes size={20} />
         </button>
 
         <h2 className="text-2xl font-bold mb-2">Payment Integrations</h2>
 
-        {/* ⚠ Show warning if ISP ID is missing */}
         {!ispId && (
           <p className="text-red-600 text-sm mb-3">
-            ⚠ ISP ID not available. Payment settings cannot be loaded until multi-user setup is complete.
+            ⚠ ISP ID not available. Ensure you’re logged in and a tenant is selected.
           </p>
         )}
 
         {/* Tabs */}
         <div className="flex space-x-4 border-b mb-4">
-          {[
-            { key: "mpesa", label: "M-Pesa", icon: <FaMoneyBillWave /> },
-            { key: "stripe", label: "Stripe", icon: <FaStripe /> },
-            { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
-          ].map(({ key, label, icon }) => (
+          {PROVIDERS.map(({ key, label, icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -167,6 +177,11 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           ))}
         </div>
 
+        {msg && (
+          <p className={`text-sm mb-3 ${msg.startsWith("✅") ? "text-green-600" : "text-red-600"}`}>
+            {msg}
+          </p>
+        )}
         {loading && <p className="text-sm text-gray-500 mb-3">Loading...</p>}
 
         {/* Form */}
@@ -178,7 +193,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
                 key={field}
                 placeholder={field.replace(/([A-Z])/g, " $1")}
                 value={formData[activeTab][field]}
-                onChange={(val) => handleChange(activeTab, field, val)}
+                onChange={(val) => onChange(activeTab, field, val)}
               />
             ))}
           </div>
@@ -186,7 +201,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           <button
             type="submit"
             className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
-            disabled={loading || !ispId}
+            disabled={loading}
           >
             {loading ? "Saving..." : "Save Settings"}
           </button>

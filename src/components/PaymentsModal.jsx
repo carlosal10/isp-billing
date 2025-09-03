@@ -2,9 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
-import axios from "axios";
-
-const API_BASE = "https://isp-billing-uq58.onrender.com/api";
+import { api } from "../lib/apiClient"; // ✅ use shared axios with auth/x-isp-id
 
 export default function PaymentsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices"
@@ -45,10 +43,16 @@ export default function PaymentsModal({ isOpen, onClose }) {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // ---------- API calls ----------
+  // ---------- API helpers ----------
+  const getErrMsg = (err, fallback = "Request failed") =>
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback;
+
   const fetchPayments = async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/payments`);
+      const { data } = await api.get(`/payments`);
       setPayments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load payments:", err);
@@ -57,7 +61,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const fetchInvoices = async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/invoices`);
+      const { data } = await api.get(`/invoices`);
       setInvoices(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
@@ -75,9 +79,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
     setLoadingSearch(true);
     setSearchError("");
     try {
-      const { data } = await axios.get(
-        `${API_BASE}/customers/search?query=${encodeURIComponent(query)}`
-      );
+      // backend route expected: GET /api/customers/search?query=...
+      const { data } = await api.get(`/customers/search`, {
+        params: { query },
+      });
       setCustomerResults(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Customer search failed:", err);
@@ -92,6 +97,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
   useEffect(() => {
     const id = setTimeout(() => searchCustomers(searchTerm), 400);
     return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
   const handleManualValidation = async (e) => {
@@ -106,14 +112,16 @@ export default function PaymentsModal({ isOpen, onClose }) {
     }
 
     try {
-      await axios.post(`${API_BASE}/payments/manual`, {
-        customerId: manualPayment.customerId, // required (Path B)
-        accountNumber: manualPayment.accountNumber, // optional but nice to send
+      // Preferred route: POST /api/payments/manual
+      // Body contains: customerId (required), accountNumber (optional), transactionId, amount (optional), method
+      await api.post(`/payments/manual`, {
+        customerId: manualPayment.customerId,
+        accountNumber: manualPayment.accountNumber,
         transactionId: manualPayment.transactionId,
         amount:
           manualPayment.amount !== ""
             ? Number(manualPayment.amount)
-            : undefined, // backend will fallback to plan.price
+            : undefined, // backend can default to plan price
         method: manualPayment.method || "manual",
         validatedBy: "Admin Panel",
         notes: "Manual validation from PaymentsModal",
@@ -137,46 +145,42 @@ export default function PaymentsModal({ isOpen, onClose }) {
       fetchInvoices();
     } catch (err) {
       console.error("Validation failed:", err);
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Error validating payment";
-      alert(msg);
+      alert(getErrMsg(err, "Error validating payment"));
     }
   };
 
   const markInvoicePaid = async (id) => {
     try {
-      await axios.put(`${API_BASE}/invoices/${id}/pay`);
+      await api.put(`/invoices/${id}/pay`);
       alert("Invoice marked as paid!");
       fetchInvoices();
     } catch (err) {
       console.error("Failed to mark paid:", err);
-      alert("Error marking invoice as paid");
+      alert(getErrMsg(err, "Error marking invoice as paid"));
     }
   };
 
   const generateInvoice = async (id) => {
     try {
-      await axios.post(`${API_BASE}/invoices/${id}/generate`);
+      await api.post(`/invoices/${id}/generate`);
       alert("Invoice generated successfully!");
       fetchInvoices();
     } catch (err) {
       console.error("Failed to generate invoice:", err);
-      alert("Error generating invoice");
+      alert(getErrMsg(err, "Error generating invoice"));
     }
   };
 
   const viewInvoicePDF = async (id) => {
     try {
-      const res = await axios.get(`${API_BASE}/invoices/${id}/pdf`, {
+      const res = await api.get(`/invoices/${id}/pdf`, {
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       window.open(url, "_blank");
     } catch (err) {
       console.error("Failed to fetch PDF:", err);
-      alert("Error fetching invoice PDF");
+      alert(getErrMsg(err, "Error fetching invoice PDF"));
     }
   };
 

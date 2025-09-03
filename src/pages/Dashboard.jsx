@@ -18,48 +18,24 @@ import ConnectMikrotikModal from "../components/ConnectMikrotik";
 import UsageLogsModal from "../components/UsageModal";
 import PaymentsModal from "../components/PaymentsModal";
 import MikrotikTerminalModal from "../components/MikrotikTerminalModal";
-import { useAuth } from "../context/AuthContext";
 
-const API_BASE = "https://isp-billing-uq58.onrender.com/api";
-const ENDPOINTS = {
-  stats: `${API_BASE}/stats`,
-  customers: `${API_BASE}/customers`,
-  payments: `${API_BASE}/payments`,
-  invoices: `${API_BASE}/invoices`,
-  mikrotikStatus: `${API_BASE}/mikrotik/status`,
-  mikrotikPing: `${API_BASE}/mikrotik/ping`,
-  pppoeActivePrimary: `${API_BASE}/pppoe/active`,
-  pppoeActiveFallback: `${API_BASE}/mikrotik/pppoe/active`,
-  hotspotActive: `${API_BASE}/hotspot/active`,
-};
+import { useAuth } from "../context/AuthContext";
+import { api } from "../lib/apiClient";
 
 const DUE_WINDOW_DAYS = 3;
 const REFRESH_FAST_MS = 20000;
 const REFRESH_SLOW_MS = 60000;
 
-// attach Authorization header automatically if token exists
-async function fetchJSON(url, opts = {}, token) {
-  const headers = new Headers(opts.headers || {});
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  const res = await fetch(url, { ...opts, headers });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-
 function formatDate(d) {
   if (!d) return "-";
   return new Date(d).toLocaleString();
 }
-
 function daysUntil(date) {
   if (!date) return Infinity;
   const now = Date.now();
   const t = new Date(date).getTime();
   return Math.ceil((t - now) / (1000 * 60 * 60 * 24));
 }
-
 function daysSince(date) {
   if (!date) return 0;
   const now = Date.now();
@@ -73,8 +49,6 @@ export default function Dashboard() {
     typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
   );
   const [sidebarOpen, setSidebarOpen] = useState(isDesktop);
-  const { token, logout, user } = useAuth(); // token is our auth token
-  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width:1024px)");
@@ -85,6 +59,10 @@ export default function Dashboard() {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
+
+  const toggleSidebar = () => setSidebarOpen((s) => !s);
+
+  const { isAuthenticated, token } = useAuth(); // token not used directly; headers come from api interceptors
 
   const [activeModal, setActiveModal] = useState(null);
 
@@ -119,18 +97,16 @@ export default function Dashboard() {
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
+  const [isReady, setIsReady] = useState(false); // flips true after first successful auth headers are present
 
-  const toggleSidebar = () => setSidebarOpen((s) => !s);
-
-  // ---------- FETCHERS ----------
+  // ---------- FETCHERS (Axios `api` injects Authorization + x-isp-id) ----------
   const loadMikrotikStatus = async () => {
     try {
       setLoading((l) => ({ ...l, status: true }));
-      let data;
-      try {
-        data = await fetchJSON(ENDPOINTS.mikrotikStatus, {}, token);
-      } catch {
-        data = await fetchJSON(ENDPOINTS.mikrotikPing, {}, token);
+      let { data } = await api.get("/mikrotik/status");
+      if (!data?.ok) {
+        const ping = await api.get("/mikrotik/ping");
+        data = ping.data;
       }
       setMikrotik({
         connected: !!data?.connected,
@@ -150,7 +126,7 @@ export default function Dashboard() {
   const loadStats = async () => {
     try {
       setLoading((l) => ({ ...l, stats: true }));
-      const data = await fetchJSON(ENDPOINTS.stats, {}, token);
+      const { data } = await api.get("/stats");
       setStats((s) => ({ ...s, ...data }));
       setErrors((e) => ({ ...e, stats: null }));
     } catch (e) {
@@ -163,7 +139,7 @@ export default function Dashboard() {
   const loadCustomers = async () => {
     try {
       setLoading((l) => ({ ...l, customers: true }));
-      const data = await fetchJSON(ENDPOINTS.customers, {}, token);
+      const { data } = await api.get("/customers");
       setCustomers(Array.isArray(data) ? data : []);
       setErrors((e) => ({ ...e, customers: null }));
     } catch (e) {
@@ -176,7 +152,7 @@ export default function Dashboard() {
   const loadPayments = async () => {
     try {
       setLoading((l) => ({ ...l, payments: true }));
-      const data = await fetchJSON(ENDPOINTS.payments, {}, token);
+      const { data } = await api.get("/payments");
       setPayments(Array.isArray(data) ? data : []);
       setErrors((e) => ({ ...e, payments: null }));
     } catch (e) {
@@ -191,16 +167,19 @@ export default function Dashboard() {
       setLoading((l) => ({ ...l, sessions: true }));
       let pppoe = [];
       try {
-        pppoe = await fetchJSON(ENDPOINTS.pppoeActivePrimary, {}, token);
+        const { data } = await api.get("/pppoe/active"); // primary
+        pppoe = data?.users || data; // supports both shapes
       } catch {
-        pppoe = await fetchJSON(ENDPOINTS.pppoeActiveFallback, {}, token);
+        const { data } = await api.get("/mikrotik/pppoe/active"); // fallback
+        pppoe = data?.users || data;
       }
       setPppoeSessions(Array.isArray(pppoe) ? pppoe : []);
 
       // hotspot optional
       try {
-        const hs = await fetchJSON(ENDPOINTS.hotspotActive, {}, token);
-        setHotspotSessions(Array.isArray(hs) ? hs : []);
+        const { data: hs } = await api.get("/hotspot/active");
+        const list = hs?.users || hs;
+        setHotspotSessions(Array.isArray(list) ? list : []);
       } catch {
         setHotspotSessions([]);
       }
@@ -215,26 +194,50 @@ export default function Dashboard() {
     }
   };
 
-  // ---------- INITIAL + POLLING ----------
+  // ---------- START WHEN AUTH HEADERS EXIST ----------
+  // Flip ready once we know we can hit a protected endpoint successfully.
   useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!isAuthenticated) return;
+      try {
+        await api.get("/health"); // public, but warms axios; harmless
+        // try a protected, tiny call to assert headers are attached:
+        await api.get("/mikrotik/ping");
+        if (mounted) setIsReady(true);
+      } catch (_e) {
+        // stays false; UI remains calm
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthenticated]);
+
+  // ---------- INITIAL LOAD (after ready) ----------
+  useEffect(() => {
+    if (!isAuthenticated || !isReady) return;
     loadMikrotikStatus();
     loadStats();
     loadCustomers();
     loadPayments();
     loadSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated, isReady]);
 
+  // ---------- POLLING ----------
   useEffect(() => {
+    if (!isAuthenticated || !isReady) return;
     const id = setInterval(() => {
       loadMikrotikStatus();
       loadSessions();
     }, REFRESH_FAST_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated, isReady]);
 
   useEffect(() => {
+    if (!isAuthenticated || !isReady) return;
     const id = setInterval(() => {
       loadStats();
       loadPayments();
@@ -242,7 +245,7 @@ export default function Dashboard() {
     }, REFRESH_SLOW_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated, isReady]);
 
   // ---------- DATA ENRICHMENT ----------
   const customerByAccount = useMemo(() => {
@@ -271,8 +274,16 @@ export default function Dashboard() {
       };
     };
 
-    const ppp = pppoeSessions.map((s) => ({ ...mapSession(s), source: "PPPoE" }));
-    const hs = showHotspot ? hotspotSessions.map((s) => ({ ...mapSession(s), source: "Hotspot" })) : [];
+    const ppp = (Array.isArray(pppoeSessions) ? pppoeSessions : []).map((s) => ({
+      ...mapSession(s),
+      source: "PPPoE",
+    }));
+    const hs = showHotspot
+      ? (Array.isArray(hotspotSessions) ? hotspotSessions : []).map((s) => ({
+          ...mapSession(s),
+          source: "Hotspot",
+        }))
+      : [];
     return [...ppp, ...hs];
   }, [pppoeSessions, hotspotSessions, showHotspot, customerByAccount]);
 
@@ -381,24 +392,13 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       {/* Hamburger (mobile) */}
-      <div
-        className="hamburger"
-        onClick={toggleSidebar}
-        role="button"
-        aria-label="Toggle sidebar"
-      >
+      <div className="hamburger" onClick={toggleSidebar} role="button" aria-label="Toggle sidebar">
         ☰
       </div>
 
-      {!isDesktop && sidebarOpen && (
-        <div className="sidebar-backdrop" onClick={toggleSidebar} />
-      )}
+      {!isDesktop && sidebarOpen && <div className="sidebar-backdrop" onClick={toggleSidebar} />}
 
-      <Sidebar
-        open={sidebarOpen}
-        toggleSidebar={toggleSidebar}
-        onOpenModal={setActiveModal}
-      />
+      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} onOpenModal={setActiveModal} />
 
       <div className="main-content">
         <header className="page-header">
@@ -486,7 +486,9 @@ export default function Dashboard() {
                     <td colSpan={9} style={{ textAlign: "center" }}>
                       {errors.sessions
                         ? `Failed to load sessions: ${errors.sessions}`
-                        : "No users online"}
+                        : isAuthenticated && isReady
+                        ? "No users online"
+                        : "Signing you in…"}
                     </td>
                   </tr>
                 )}
@@ -591,7 +593,6 @@ export default function Dashboard() {
       <UsageLogsModal isOpen={activeModal === MODALS.USAGE} onClose={() => setActiveModal(null)} />
       <PaymentsModal isOpen={activeModal === MODALS.PAYMENTS} onClose={() => setActiveModal(null)} />
 
-      {/* ✅ pass the right token prop */}
       <MikrotikTerminalModal
         isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
         onClose={() => setActiveModal(null)}
