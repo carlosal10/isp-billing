@@ -17,7 +17,7 @@
 
   --radius:14px;
   --radius-lg:10px;
-  --shadow:0 2px 10px rgba(10,31,68,.08);
+  --shadow:0 2px 5px rgba(10,31,68,.08);
 }
 
 /* base */
@@ -25,7 +25,7 @@
 html,body,#root{height:100%}
 body{
   margin-left:15%;
-  background:var(--bg);
+  background:var(--card);
   color:var(--navy-700);
   font-family:Inter,ui-sans-serif,system-ui;
 }
@@ -35,7 +35,7 @@ body{
 .main-content{
   position:relative;
   padding:24px;
-  margin-left:0; /* your Sidebar handles spacing */
+  margin-left:10px; /* your Sidebar handles spacing */
 }
 @media (min-width:1024px){
   .main-content{padding:28px 32px}
@@ -88,10 +88,14 @@ body{
 
 /* quick counters */
 .quick-counters .counter{
-  background:var(--card);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:16px 18px;
+  background:var(--bg);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:16px 18px;
 }
-.counter-title{font-size:.85rem;color:var(--muted);margin-bottom:6px}
+.counter-title{font-size:.85rem;
+  color:#000;
+  margin-bottom:6px}
 .counter-value{
   font-size:1.6rem;font-weight:800;color:var(--green);
 }
@@ -102,7 +106,7 @@ body{
 .due-soon-section,
 .expired-section,
 .chart-container{
-  background:var(--card); border-radius:var(--radius-lg);
+  background:var(--bg); border-radius:var(--radius-lg);
   box-shadow:var(--shadow);padding:18px;margin-top:18px;
 }
 .section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
@@ -116,7 +120,8 @@ body{
 .table-wrapper{overflow:auto;border-radius:12px}
 table{width:100%;border-collapse:separate;border-spacing:0;min-width:820px}
 thead th{
-  text-align:left;padding:12px 14px;background:var(--card-sub);
+  text-align:left;padding:12px 14px;
+  background:var(--muted);
   color:var(--navy-700)var(--border);font-weight:700;
 }
 tbody td{padding:12px 14px;color:var(--navy-700)}

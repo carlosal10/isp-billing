@@ -24,6 +24,9 @@
   overflow:auto;
   animation:slideUp .14s ease-out;
 }
+.modal-content.customers-modal p{
+  color: #000;
+}
 @keyframes slideUp{from{transform:translateY(6px);opacity:.85} to{transform:translateY(0);opacity:1}}
 
 .close{
