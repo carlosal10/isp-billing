@@ -1,11 +1,55 @@
 // src/components/CustomersModal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import "./CustomersModal.css";
 import { api } from "../lib/apiClient";
+
+/** ---------- utils ---------- */
+
+function normalizeProfilesShape(input) {
+  // Accept a wide array of shapes and return [{ name, rateLimit, id }]
+  if (!input) return [];
+  let arr = input;
+
+  // If server wrapped it
+  if (Array.isArray(input.profiles)) arr = input.profiles;
+  if (Array.isArray(input.data?.profiles)) arr = input.data.profiles;
+
+  if (!Array.isArray(arr)) arr = [];
+
+  return arr
+    .map((p, idx) => {
+      if (p == null) return null;
+
+      // string -> {name}
+      if (typeof p === "string") return { name: p, rateLimit: "", id: String(idx) };
+
+      // MikroTik API adapters often return fields like ".id" or "name"
+      const name =
+        p.name ??
+        p.profile ??
+        p.profileName ??
+        p.title ??
+        p.id ??
+        p._id ??
+        p[".id"] ??
+        `profile_${idx}`;
+
+      const id = p.id ?? p._id ?? p[".id"] ?? String(idx);
+      const rateLimit = p.rateLimit ?? p["rate-limit"] ?? p.speed ?? p.bandwidth ?? "";
+
+      return { name: String(name), id: String(id), rateLimit: rateLimit ? String(rateLimit) : "" };
+    })
+    .filter(Boolean);
+}
+
+function getProfileValueForSelect(p) {
+  // We'll use name as the canonical value; if missing, fallback to id.
+  return p?.name || p?.id || "";
+}
 
 function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading }) {
   const [name, setName] = useState(customer?.name || "");
@@ -14,20 +58,41 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [address, setAddress] = useState(customer?.address || "");
   const [plan, setPlan] = useState(customer?.plan?._id || "");
   const [networkType, setNetworkType] = useState(customer?.connectionType || "pppoe");
-  const [selectedProfile, setSelectedProfile] = useState(customer?.pppoeConfig?.profile || "");
+
+  // Normalize the selected profile string across shapes:
+  const initialSelected =
+    customer?.pppoeConfig?.profile ||
+    customer?.pppoeConfig?.name ||
+    customer?.pppoeConfig?.id ||
+    "";
+  const [selectedProfile, setSelectedProfile] = useState(initialSelected);
+
   const [staticConfig, setStaticConfig] = useState(
     customer?.staticConfig || { ip: "", gateway: "", dns: "" }
   );
 
-  // Ensure a profile is always selected if PPPoE
+  // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
-    if (networkType === "pppoe" && pppoeProfiles.length && !selectedProfile) {
-      setSelectedProfile(pppoeProfiles[0].name);
-    }
+    if (networkType !== "pppoe") return;
+    if (!pppoeProfiles.length) return;
+    if (selectedProfile) return;
+
+    const first = pppoeProfiles[0];
+    setSelectedProfile(getProfileValueForSelect(first));
   }, [pppoeProfiles, networkType, selectedProfile]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Translate selectedProfile (which may be name or id) back into the object if needed
+    const chosen = pppoeProfiles.find(
+      (p) =>
+        getProfileValueForSelect(p) === selectedProfile ||
+        p?.name === selectedProfile ||
+        p?.id === selectedProfile
+    );
+
+    const profileName = chosen?.name || selectedProfile || "";
     const body = {
       name,
       email,
@@ -36,9 +101,10 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       plan,
       connectionType: networkType,
       ...(networkType === "pppoe"
-        ? { pppoeConfig: { profile: selectedProfile } }
+        ? { pppoeConfig: { profile: profileName } }
         : { staticConfig }),
     };
+
     onSubmit(body);
 
     if (type === "Add") {
@@ -83,9 +149,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               required
             >
               <option value="">Select PPPoE Profile</option>
-              {pppoeProfiles.map((p) => (
-                <option key={p.id || p.name} value={p.name}>
-                  {p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}
+              {pppoeProfiles.map((p, i) => (
+                <option key={p.id || p.name || i} value={getProfileValueForSelect(p)}>
+                  {p.name || p.id} {p.rateLimit ? `(${p.rateLimit})` : ""}
                 </option>
               ))}
             </select>
@@ -144,10 +210,13 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("Add");
 
-  // Helpers
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
-    setMessage(`❌ ${msg}${e?.message ? `: ${e.message}` : ""}`);
+    const detail =
+      e?.response?.data?.message ||
+      e?.message ||
+      (typeof e === "string" ? e : "");
+    setMessage(`❌ ${msg}${detail ? `: ${detail}` : ""}`);
   };
 
   const loadCustomers = async () => {
@@ -170,16 +239,25 @@ export default function CustomersModal({ isOpen, onClose }) {
 
   const loadProfiles = async () => {
     try {
-      // Try your original endpoint first
-      let { data } = await api.get("/customers/profiles");
-      if (!Array.isArray(data?.profiles)) {
-        // Fallback to /pppoe/profiles if your backend exposes that
-        const fb = await api.get("/pppoe/profiles");
-        data = { profiles: fb.data?.profiles || fb.data || [] };
+      // 1) Preferred route
+      const r1 = await api.get("/customers/profiles");
+      let normalized = normalizeProfilesShape(r1.data);
+      // 2) Fallback route(s)
+      if (!normalized.length) {
+        const r2 = await api.get("/pppoe/profiles"); // if exposed
+        normalized = normalizeProfilesShape(r2.data);
       }
-      setPppoeProfiles(Array.isArray(data.profiles) ? data.profiles : []);
+      if (!normalized.length) {
+        const r3 = await api.get("/mikrotik/pppoe-profiles"); // another common mount
+        normalized = normalizeProfilesShape(r3.data);
+      }
+      setPppoeProfiles(normalized);
+      if (!normalized.length) {
+        setMessage("⚠️ No PPPoE profiles found.");
+      }
     } catch (e) {
       showError("Failed to load PPPoE profiles", e);
+      setPppoeProfiles([]);
     }
   };
 

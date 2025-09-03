@@ -17,22 +17,47 @@ function generateAccountNumber() {
   return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+// Make profiles shape robust: return [{ id, name, localAddress, rateLimit }]
+function normalizeProfiles(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : Array.isArray(raw.profiles) ? raw.profiles : [];
+  return arr
+    .map((p, i) => {
+      if (p == null) return null;
+      // MikroTik usually: { '.id': '*1', name: 'profile', 'local-address': 'x', 'rate-limit': '10M/10M' }
+      const id = String(p['.id'] ?? p.id ?? i);
+      const name =
+        String(
+          p.name ??
+            p.profile ??
+            p.profileName ??
+            p.title ??
+            p.id ??
+            p._id ??
+            p['.id'] ??
+            `profile_${i}`
+        );
+      const localAddress = p['local-address'] ?? p.localAddress ?? null;
+      const rateLimit = p['rate-limit'] ?? p.rateLimit ?? '';
+      return { id, name, localAddress, rateLimit };
+    })
+    .filter(Boolean);
+}
+
 // ----------------- PPPoE Profiles -----------------
 router.get('/profiles', async (_req, res) => {
   try {
-    const profiles = await sendCommand('/ppp/profile/print');
-    const formatted = Array.isArray(profiles)
-      ? profiles.map((p, i) => ({
-          id: p['.id'] || i,
-          name: p.name,
-          localAddress: p['local-address'] || null,
-          rateLimit: p['rate-limit'] || null,
-        }))
-      : [];
-    res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
+    const profiles = await sendCommand('/ppp/profile/print'); // should return array
+    const formatted = normalizeProfiles(profiles);
+    return res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
   } catch (err) {
-    console.error('profiles error:', err);
-    res.status(500).json({ message: 'Failed to load PPPoE profiles' });
+    console.error('profiles error:', err?.message || err);
+    // Still respond with a safe shape so UI can continue
+    return res.status(500).json({
+      message: 'Failed to load PPPoE profiles',
+      profiles: [],
+      error: String(err?.message || err),
+    });
   }
 });
 
@@ -40,34 +65,34 @@ router.get('/profiles', async (_req, res) => {
 router.get('/', async (_req, res) => {
   try {
     const customers = await Customer.find()
-      .populate('plan', 'name price duration')
+      // add speed so UI and queue logic can use it consistently
+      .populate('plan', 'name price duration speed')
       .lean();
-    res.json(customers);
+    return res.json(customers);
   } catch (err) {
     console.error('list customers error:', err);
-    res.status(500).json({ message: 'Failed to retrieve customers' });
+    return res.status(500).json({ message: 'Failed to retrieve customers' });
   }
 });
 
 // ----------------- Customers: Search -----------------
-// Frontend should call:  GET /api/customers/search?query=<name or accountNumber>
 router.get('/search', async (req, res) => {
   const { query } = req.query;
   if (!query || !query.trim()) return res.json([]);
 
   try {
-    const regex = new RegExp(query.trim(), 'i'); // case-insensitive
+    const regex = new RegExp(query.trim(), 'i');
     const customers = await Customer.find(
       { $or: [{ name: regex }, { accountNumber: regex }] },
-      { name: 1, accountNumber: 1 } // projection: only what UI needs
+      { name: 1, accountNumber: 1 }
     )
       .limit(10)
       .lean();
 
-    res.json(customers);
+    return res.json(customers);
   } catch (err) {
     console.error('customer search failed:', err);
-    res.status(500).json({ error: 'Search failed' });
+    return res.status(500).json({ error: 'Search failed' });
   }
 });
 
@@ -75,13 +100,13 @@ router.get('/search', async (req, res) => {
 router.get('/by-id/:id', async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id)
-      .populate('plan', 'name price duration')
+      .populate('plan', 'name price duration speed')
       .lean();
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
-    res.json(customer);
+    return res.json(customer);
   } catch (err) {
     console.error('by-id error:', err);
-    res.status(500).json({ message: 'Error retrieving customer' });
+    return res.status(500).json({ message: 'Error retrieving customer' });
   }
 });
 
@@ -89,13 +114,13 @@ router.get('/by-id/:id', async (req, res) => {
 router.get('/by-account/:accountNumber', async (req, res) => {
   try {
     const customer = await Customer.findOne({ accountNumber: req.params.accountNumber })
-      .populate('plan', 'name price duration')
+      .populate('plan', 'name price duration speed')
       .lean();
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
-    res.json(customer);
+    return res.json(customer);
   } catch (err) {
     console.error('by-account error:', err);
-    res.status(500).json({ message: 'Error retrieving customer' });
+    return res.status(500).json({ message: 'Error retrieving customer' });
   }
 });
 
@@ -138,6 +163,7 @@ router.post('/', async (req, res) => {
           ? {
               profile: pppoeConfig.profile,
               localAddress: pppoeConfig.localAddress || null,
+              // keep consistent with plan.speed (Mbps)
               rateLimit: `${plan.speed}M/0M`,
             }
           : undefined,
@@ -169,10 +195,10 @@ router.post('/', async (req, res) => {
       console.warn('Queue apply failed:', e?.message || e);
     }
 
-    res.status(201).json({ message: 'Customer created successfully', customer: newCustomer });
+    return res.status(201).json({ message: 'Customer created successfully', customer: newCustomer });
   } catch (err) {
     console.error('Create customer failed:', err);
-    res.status(400).json({ message: 'Failed to create customer: ' + err.message });
+    return res.status(400).json({ message: 'Failed to create customer: ' + err.message });
   }
 });
 
@@ -187,6 +213,7 @@ router.put('/:id', async (req, res) => {
     const plan = await Plan.findById(planId || customer.plan);
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
+    // Apply basic updates
     Object.assign(customer, req.body);
 
     if (connectionType === 'pppoe') {
@@ -217,10 +244,10 @@ router.put('/:id', async (req, res) => {
       console.warn('Queue update failed:', e?.message || e);
     }
 
-    res.json({ message: 'Customer updated successfully', customer: updated });
+    return res.json({ message: 'Customer updated successfully', customer: updated });
   } catch (err) {
     console.error('Update customer failed:', err);
-    res.status(400).json({ message: 'Failed to update customer: ' + err.message });
+    return res.status(400).json({ message: 'Failed to update customer: ' + err.message });
   }
 });
 
@@ -245,10 +272,10 @@ router.delete('/:id', async (req, res) => {
       console.warn('Queue remove failed:', e?.message || e);
     }
 
-    res.json({ message: 'Customer deleted successfully' });
+    return res.json({ message: 'Customer deleted successfully' });
   } catch (err) {
     console.error('Delete customer failed:', err);
-    res.status(500).json({ message: 'Error deleting customer: ' + err.message });
+    return res.status(500).json({ message: 'Error deleting customer: ' + err.message });
   }
 });
 
