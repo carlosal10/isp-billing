@@ -175,6 +175,7 @@ router.post('/', async (req, res) => {
     const newCustomer = await customer.save();
 
     if (connectionType === 'pppoe') {
+      const tenantId = req.tenantId;
       const words = [
         `=name=${accountNumber}`,
         `=password=defaultpass`,
@@ -183,7 +184,7 @@ router.post('/', async (req, res) => {
         `=comment=Customer: ${name}`,
       ];
       try {
-        await sendCommand('/ppp/secret/add', words);
+        await sendCommand('/ppp/secret/add', words, { tenantId, timeoutMs: 10000 });
       } catch (e) {
         console.error('MikroTik add secret failed:', e?.message || e);
         await Customer.findByIdAndDelete(newCustomer._id);
@@ -227,9 +228,10 @@ router.put('/:id', async (req, res) => {
         rateLimit: `${plan.speed}M/0M`,
       };
 
+      const tenantId = req.tenantId;
       const words = [`=numbers=${customer.accountNumber}`, `=profile=${pppoeConfig.profile}`];
       try {
-        await sendCommand('/ppp/secret/set', words);
+        await sendCommand('/ppp/secret/set', words, { tenantId, timeoutMs: 10000 });
       } catch (e) {
         return res.status(500).json({ message: 'Failed to update PPPoE secret: ' + (e?.message || e) });
       }
@@ -260,9 +262,10 @@ router.delete('/:id', async (req, res) => {
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
     if (customer.connectionType === 'pppoe') {
+      const tenantId = req.tenantId;
       const words = [`=numbers=${customer.accountNumber}`];
       try {
-        await sendCommand('/ppp/secret/remove', words);
+        await sendCommand('/ppp/secret/remove', words, { tenantId, timeoutMs: 10000 });
       } catch (e) {
         console.warn('PPPoE secret remove failed:', e?.message || e);
       }
