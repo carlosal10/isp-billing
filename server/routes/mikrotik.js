@@ -100,6 +100,17 @@ router.get("/mikrotik/hotspot/active", limiter, async (req, res) => {
   res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
 });
 
+// Alias routes for legacy clients
+router.get("/pppoe/active", limiter, async (req, res) => {
+  const rows = await rosPrint(req.tenantId, "/ppp/active/print");
+  res.json({ ok: true, count: rows.length, users: rows.map(mapPPPActiveRow) });
+});
+
+router.get("/hotspot/active", limiter, async (req, res) => {
+  const rows = await rosPrint(req.tenantId, "/ip/hotspot/active/print");
+  res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
+});
+
 // GET /api/mikrotik/online  (combined counts)
 router.get("/mikrotik/online", limiter, async (req, res) => {
   const tenantId = req.tenantId;

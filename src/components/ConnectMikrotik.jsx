@@ -5,7 +5,11 @@ import { api } from "../lib/apiClient";
 import "./ConnectMikrotikModal.css";
 
 function loadAuth() {
-  try { return JSON.parse(localStorage.getItem("auth") || "null"); } catch { return null; }
+  try {
+    return JSON.parse(localStorage.getItem("auth") || "null");
+  } catch {
+    return null;
+  }
 }
 
 export default function ConnectMikrotikModal({ isOpen, onClose }) {
@@ -43,7 +47,7 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
           tls: !!form.tls,
         },
         {
-          // Force headers in case interceptors aren’t wired yet
+          // Force headers in case interceptors aren't wired yet
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(ispId ? { "x-isp-id": ispId } : {}),
@@ -52,9 +56,15 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       );
 
       if (!data?.ok) throw new Error(data?.error || "Connection failed");
-      setMsg(`✅ Connected: ${data.identity || "ok"}`);
+      setMsg(`Connected: ${data.identity || "ok"}`);
+      // Auto-close shortly after success
+      setTimeout(() => {
+        try {
+          onClose && onClose();
+        } catch {}
+      }, 800);
     } catch (err) {
-      setMsg("❌ " + (err?.message || "Connection failed"));
+      setMsg("Failed: " + (err?.message || "Connection failed"));
       console.error("Connect error:", err?.__debug || err);
     } finally {
       setLoading(false);
@@ -64,20 +74,26 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
   return (
     <div className="mikrotik-overlay">
       <div className="mikrotik-modal">
-        <button onClick={onClose} className="close-btn"><FaTimes size={20} /></button>
+        <button onClick={onClose} className="close-btn">
+          <FaTimes size={20} />
+        </button>
         <h2 className="modal-title">Connect To MikroTik</h2>
 
         <form onSubmit={onSubmit} className="modal-form">
-          <label>Router IP:
+          <label>
+            Router IP:
             <input id="host" value={form.host} onChange={onChange} required />
           </label>
-          <label>Port:
+          <label>
+            Port:
             <input id="port" type="number" value={form.port} onChange={onChange} />
           </label>
-          <label>Username:
+          <label>
+            Username:
             <input id="user" value={form.user} onChange={onChange} required />
           </label>
-          <label>Password:
+          <label>
+            Password:
             <input id="password" type="password" value={form.password} onChange={onChange} required />
           </label>
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -95,4 +111,5 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       </div>
     </div>
   );
-                                               }
+}
+
