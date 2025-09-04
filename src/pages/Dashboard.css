@@ -7,7 +7,7 @@
   --navy-500:#2E5E9E;
   --bg:#ffffff;
   --card:#f5f5f5;      /* smoke white cards */
-  --card-sub:#fffaf0;  /* light cream sub-surface */
+  --card-sub:#f1f1f1;  /* light cream sub-surface */
   --border:#e6eaf2;
   --muted:#6b7a99;
 
@@ -129,3 +129,4 @@ button:active,.btn:active{transform:translateY(1px)}
   body{
     margin: 0;  }
 }
+

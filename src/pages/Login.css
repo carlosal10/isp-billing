@@ -2,7 +2,7 @@
 
 /* ---------- Theme tokens ---------- */
 :root {
-  --auth-bg: #fff7e1;   /* cream-like */
+  --auth-bg: #f1f1f1;   /* cream-like */
   --auth-text: #000000; /* black text */
   --auth-border: #e5e7eb;
   --auth-ring: rgba(22, 163, 74, 0.3); /* green ring */
@@ -113,3 +113,4 @@ form.login-form .ghost:hover {
   box-shadow: 0 0 0 2px var(--auth-ring);
   border-color: var(--auth-green);
 }
+

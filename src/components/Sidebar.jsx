@@ -43,7 +43,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
       </div>
       <ul>
         <li>
-          <Link to="/">
+          <Link to="/" onClick={toggleSidebar}>
             <MdDashboard /> Dashboard
           </Link>
         </li>
@@ -93,7 +93,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
           </button>
         </li>
         <li>
-          <Link to="/settings">
+          <Link to="/settings" onClick={toggleSidebar}>
             <MdSettings /> Settings
           </Link>
         </li>
@@ -106,6 +106,7 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
     </nav>
   );
 }
+
 
 
 

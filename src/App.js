@@ -47,7 +47,7 @@ export default function App() {
 
   // Global Modals
   const [activeModal, setActiveModal] = useState(null);
-  const openModal = (modal) => setActiveModal(modal);
+  const openModal = (modal) => { setActiveModal(modal); setSidebarOpen(false); };
   const closeModal = () => setActiveModal(null);
 
   // Public shell
@@ -113,3 +113,4 @@ export default function App() {
     </Router>
   );
 }
+

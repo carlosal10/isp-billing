@@ -9,7 +9,7 @@
 .usage-modal .card {
   border-radius: 1rem;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  background: #fff7e1; /* cream */
+  background: #f1f1f1; /* cream */
 }
 
 /* Tables */
@@ -75,3 +75,9 @@
     overflow-x: auto;
   }
 }
+
+/* Fullscreen on small phones */
+@media (max-width: 640px){
+  .usage-modal { padding: 0 !important; }
+}
+
