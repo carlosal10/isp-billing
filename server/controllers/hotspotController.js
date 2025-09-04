@@ -3,7 +3,7 @@ const HotspotPlan = require('../models/HotspotPlan');
 const RegisteredHotspotUser = require('../models/RegisteredHotspotUser');
 const HotspotAccess = require('../models/HotspotAccess');
 
-const { addHotspotUser } = require('../routes/mikrotikConnect');
+const { ensureHotspotUser } = require('../utils/mikrotik');
 const { getMAC } = require('../utils/getMac');
 
 /**
@@ -31,11 +31,12 @@ exports.connectHotspotUser = async (req, res) => {
     const mac = getMAC(req);
     if (!mac) return res.status(400).json({ error: 'MAC address not detected.' });
 
-    const plan = await HotspotPlan.findById(planId);
+    const plan = await HotspotPlan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!plan) return res.status(404).json({ error: 'Plan not found.' });
 
     // Prevent overlapping active sessions for same MAC
     const existing = await RegisteredHotspotUser.findOne({
+      tenantId: req.tenantId,
       mac,
       expiresAt: { $gt: new Date() }
     });
@@ -47,18 +48,20 @@ exports.connectHotspotUser = async (req, res) => {
     const username = `HS${Date.now().toString().slice(-6)}`;
     const password = Math.random().toString(36).substring(2, 8);
 
-    // Push user to MikroTik
-    await addHotspotUser({
+    // Push user to MikroTik (tenant-scoped)
+    await ensureHotspotUser(String(req.tenantId), {
       server: plan.mikrotikServer,
       profile: plan.mikrotikProfile,
       username,
       password,
       macAddress: mac,
+      comment: `Hotspot ${phone}`,
     });
 
     // Save access record
-    const expiresAt = new Date(Date.now() + parseDuration(plan.duration));
+    const expiresAt = new Date(Date.now() + parseDuration(plan.planDuration));
     const access = await HotspotAccess.create({
+      tenantId: req.tenantId,
       phone,
       macAddress: mac,
       planId,
@@ -71,7 +74,7 @@ exports.connectHotspotUser = async (req, res) => {
       username,
       password,
       expiresAt,
-      plan: plan.name,
+      plan: plan.planName,
       message: 'Access granted successfully.'
     });
 
@@ -86,8 +89,16 @@ exports.connectHotspotUser = async (req, res) => {
  */
 exports.getAvailableHotspotPlans = async (req, res) => {
   try {
-    const plans = await HotspotPlan.find({ isActive: true }); // optional filter
-    res.json(plans);
+    const plans = await HotspotPlan.find({ tenantId: req.tenantId }).sort({ createdAt: -1 });
+    res.json(plans.map((p) => ({
+      _id: p._id,
+      name: p.planName,
+      price: p.planPrice,
+      duration: p.planDuration,
+      speed: p.planSpeed,
+      server: p.mikrotikServer,
+      profile: p.mikrotikProfile,
+    })));
   } catch (err) {
     console.error('getAvailableHotspotPlans error:', err);
     res.status(500).json({ error: 'Failed to fetch hotspot plans.' });
@@ -101,14 +112,14 @@ exports.prepareCheckout = async (req, res) => {
   const { planId } = req.body;
 
   try {
-    const plan = await HotspotPlan.findById(planId);
+    const plan = await HotspotPlan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!plan) return res.status(404).json({ error: 'Plan not found.' });
 
     res.json({
-      name: plan.name,
-      price: plan.price,
-      speed: plan.rateLimit,
-      validity: plan.duration,
+      name: plan.planName,
+      price: plan.planPrice,
+      speed: plan.planSpeed,
+      validity: plan.planDuration,
       mikrotikProfile: plan.mikrotikProfile,
       mikrotikServer: plan.mikrotikServer,
     });
@@ -124,7 +135,7 @@ exports.prepareCheckout = async (req, res) => {
 exports.getReceipt = async (req, res) => {
   try {
     const user = await RegisteredHotspotUser
-      .findOne({ transactionId: req.params.txnId })
+      .findOne({ tenantId: req.tenantId, transactionId: req.params.txnId })
       .populate('plan');
 
     if (!user) return res.status(404).json({ error: 'Receipt not found.' });
@@ -132,9 +143,9 @@ exports.getReceipt = async (req, res) => {
     res.json({
       name: user.phone,
       mac: user.mac,
-      plan: user.plan?.name,
-      amount: user.plan?.price,
-      validity: user.plan?.duration,
+      plan: user.plan?.planName,
+      amount: user.plan?.planPrice,
+      validity: user.plan?.planDuration,
       transactionId: user.transactionId,
       expiresAt: user.expiresAt,
       issuedAt: user.createdAt,
@@ -156,22 +167,24 @@ exports.confirmPaymentAndGrantAccess = async (req, res) => {
   }
 
   try {
-    const plan = await HotspotPlan.findById(planId);
+    const plan = await HotspotPlan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!plan) return res.status(404).json({ error: 'Plan not found.' });
 
-    const expiresAt = new Date(Date.now() + parseDuration(plan.duration));
+    const expiresAt = new Date(Date.now() + parseDuration(plan.planDuration));
 
     // Add user to MikroTik (using MAC as username for easy login)
-    await addHotspotUser({
+    await ensureHotspotUser(String(req.tenantId), {
       server: plan.mikrotikServer,
       profile: plan.mikrotikProfile,
       username: mac,
       password: '',
       macAddress: mac,
+      comment: `Hotspot ${phone}`,
     });
 
     // Save user
     const user = await RegisteredHotspotUser.create({
+      tenantId: req.tenantId,
       mac,
       phone,
       transactionId,

@@ -1,12 +1,12 @@
 // mikrotikController.js
-const { call } = require('../utils/mikrotikConnectionManager');
+const { sendCommand } = require('../utils/mikrotikConnectionManager');
 
 // ---------------- HOTSPOT CONTROLLERS ---------------- //
 
 // GET /api/hotspot/servers
 exports.getHotspotServers = async (req, res) => {
   try {
-    const servers = await call('/ip/hotspot/print');
+    const servers = await sendCommand('/ip/hotspot/print', [], { tenantId: req.tenantId, timeoutMs: 10000 });
     if (!servers || servers.length === 0) {
       return res.status(404).json({ message: 'No hotspot servers found' });
     }
@@ -20,7 +20,7 @@ exports.getHotspotServers = async (req, res) => {
 // GET /api/hotspot/profiles
 exports.getHotspotProfiles = async (req, res) => {
   try {
-    const profiles = await call('/ip/hotspot/user/profile/print');
+    const profiles = await sendCommand('/ip/hotspot/user/profile/print', [], { tenantId: req.tenantId, timeoutMs: 10000 });
     if (!profiles || profiles.length === 0) {
       return res.status(404).json({ message: 'No hotspot profiles found' });
     }
@@ -34,7 +34,7 @@ exports.getHotspotProfiles = async (req, res) => {
 // GET /api/hotspot/users
 exports.getHotspotUsers = async (req, res) => {
   try {
-    const users = await call('/ip/hotspot/user/print');
+    const users = await sendCommand('/ip/hotspot/user/print', [], { tenantId: req.tenantId, timeoutMs: 10000 });
     res.json({ message: 'Hotspot users fetched', users });
   } catch (err) {
     console.error('Error fetching hotspot users:', err.message);
