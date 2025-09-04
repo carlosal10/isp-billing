@@ -253,35 +253,7 @@ router.post('/stripe/create', async (req, res) => {
   }
 });
 
-// -------------------- Stripe Webhook --------------------
-// NOTE: mount this route BEFORE any global bodyParser.json() in your app
-router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object;
-      const payment = await Payment.findOne({ transactionId: paymentIntent.id }).populate('customer plan');
-      if (payment) {
-        payment.status = 'Success';
-        payment.expiryDate = new Date(Date.now() + payment.plan.duration * 24 * 60 * 60 * 1000);
-        await payment.save();
-        await applyBandwidth(payment.customer, payment.plan);
-      }
-    }
-    res.json({ received: true });
-  } catch (err) {
-    console.error('stripe webhook handler error:', err);
-    res.status(500).json({ error: 'Webhook handling failed' });
-  }
-});
+// Stripe webhook is mounted separately at /api/payment/stripe/webhook with raw body
 
 /// -------------------- Get all payments --------------------
 router.get('/', async (req, res) => {

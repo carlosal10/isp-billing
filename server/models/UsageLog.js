@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const DailyUsageSchema = new mongoose.Schema({
-  date: { type: Date, required: true, unique: true },
+  // Tenant scope for multi-tenant separation
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
+
+  date: { type: Date, required: true },
   activeUsersCount: { type: Number, default: 0 },
   usagePerUser: [
     {
@@ -10,6 +13,8 @@ const DailyUsageSchema = new mongoose.Schema({
       bytesOut: { type: Number, default: 0 },
     },
   ],
-});
+}, { timestamps: true });
+
+DailyUsageSchema.index({ tenantId: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model('DailyUsage', DailyUsageSchema);

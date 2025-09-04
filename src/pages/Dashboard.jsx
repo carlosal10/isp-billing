@@ -239,6 +239,24 @@ export default function Dashboard() {
     return [...ppp, ...hs];
   }, [pppoeSessions, hotspotSessions, showHotspot, customerByAccount]);
 
+  // Actions: enable/disable PPPoE account
+  async function enableAccount(acct) {
+    try {
+      await api.post(`/pppoe/${encodeURIComponent(acct)}/enable`);
+      loadSessions();
+    } catch (e) {
+      setErrors((er) => ({ ...er, sessions: e.message }));
+    }
+  }
+  async function disableAccount(acct) {
+    try {
+      await api.post(`/pppoe/${encodeURIComponent(acct)}/disable`, null, { params: { disconnect: true } });
+      loadSessions();
+    } catch (e) {
+      setErrors((er) => ({ ...er, sessions: e.message }));
+    }
+  }
+
   const totalBytesIn = useMemo(
     () => enrichedOnline.reduce((a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0), 0),
     [enrichedOnline]
@@ -429,6 +447,7 @@ export default function Dashboard() {
                   <th>Bytes In</th>
                   <th>Bytes Out</th>
                   <th>Plan</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -443,6 +462,16 @@ export default function Dashboard() {
                     <td>{u.bytesIn.toLocaleString()}</td>
                     <td>{u.bytesOut.toLocaleString()}</td>
                     <td>{u.planName}</td>
+                    <td>
+                      {u.source === 'PPPoE' && u.accountNumber ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn" onClick={() => enableAccount(u.accountNumber)}>Enable</button>
+                          <button className="btn" onClick={() => disableAccount(u.accountNumber)}>Disable</button>
+                        </div>
+                      ) : (
+                        <span style={{ opacity: 0.5 }}>-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {enrichedOnline.length === 0 && (

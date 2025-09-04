@@ -4,7 +4,7 @@ import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Line, Bar } from "react-chartjs-2";
 import { FaDownload, FaTimes } from "react-icons/fa";
-import axios from "axios";
+import { api } from "../lib/apiClient";
 import 'chart.js/auto';
 import "./UsageModal.css"; // ✅ custom styles
 
@@ -22,19 +22,19 @@ const UsageModal = ({ isOpen, onClose }) => {
 
   const fetchData = async () => {
     try {
-      const [trendsRes, activeRes, logsRes, invoicesRes] = await Promise.all([
-        axios.get("https://isp-billing-uq58.onrender.com/pppoe/stats/usage-trends"),
-        axios.get("https://isp-billing-uq58.onrender.com/pppoe/stats/active-daily"),
-        axios.get("https://isp-billing-uq58.onrender.com/pppoe/logs"),
-        axios.get("https://isp-billing-uq58.onrender.com/pppoe/invoices"),
-      ]);
+      // Record a snapshot for today (tenant-scoped on server)
+      try { await api.post("/usageLogs/record"); } catch {}
 
-      setUsageTrends(trendsRes.data);
-      setActiveUsers(activeRes.data);
-      setUsageLogs(logsRes.data);
-      setInvoices(invoicesRes.data);
+      const { data } = await api.get("/usageLogs/daily", { params: { days: 14 } });
+      const items = data?.items || [];
+      setUsageTrends(items.map((x) => ({ date: x.date, usagePerUser: x.activeUsersCount })));
+      setActiveUsers(items.map((x) => ({ date: x.date, activeUsersCount: x.activeUsersCount })));
+
+      // Optional: keep old tables with placeholders
+      setUsageLogs([]);
+      setInvoices([]);
     } catch (err) {
-      console.error("Failed to fetch data", err);
+      console.error("Failed to fetch usage data", err);
     }
   };
 

@@ -13,6 +13,7 @@ const n = (v, d = 0) => {
 };
 const s = (v, d = "") => (v == null ? d : String(v));
 const qs = (k, v) => `?${k}=${v}`;
+const w = (k, v) => `=${k}=${v}`;
 
 function mapPPPActiveRow(r = {}) {
   return {
@@ -109,6 +110,95 @@ router.get("/pppoe/active", limiter, async (req, res) => {
 router.get("/hotspot/active", limiter, async (req, res) => {
   const rows = await rosPrint(req.tenantId, "/ip/hotspot/active/print");
   res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
+});
+
+// ----- Manual control: enable/disable/disconnect PPPoE user by accountNumber -----
+router.post("/pppoe/:account/enable", limiter, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const name = String(req.params.account);
+    // find secret id by name
+    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000 });
+    if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
+    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "no")], { tenantId, timeoutMs: 10000 });
+    return res.json({ ok: true, message: "Enabled" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || "Enable failed" });
+  }
+});
+
+router.post("/pppoe/:account/disable", limiter, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const name = String(req.params.account);
+    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000 });
+    if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
+    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "yes")], { tenantId, timeoutMs: 10000 });
+    // optional disconnect active
+    if (String(req.query.disconnect || "true").toLowerCase() !== "false") {
+      const act = await sendCommand("/ppp/active/print", [qs("name", name)], { tenantId, timeoutMs: 8000 });
+      if (Array.isArray(act) && act[0]) {
+        const aid = act[0][".id"] || act[0].id || act[0].numbers;
+        await sendCommand("/ppp/active/remove", [w(".id", aid)], { tenantId, timeoutMs: 8000 });
+      }
+    }
+    return res.json({ ok: true, message: "Disabled" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || "Disable failed" });
+  }
+});
+
+// ----- Static IP queue apply/enable/disable by accountNumber -----
+router.post("/static/:account/apply-queue", limiter, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const name = String(req.params.account);
+    const rate = String(req.body.rateLimit || "10M/2M");
+    // Use simple queue with name = account
+    // Create or update
+    const list = await sendCommand("/queue/simple/print", [qs("name", name)], { tenantId, timeoutMs: 8000 });
+    if (Array.isArray(list) && list[0]) {
+      const id = list[0][".id"] || list[0].id || list[0].numbers;
+      await sendCommand("/queue/simple/set", [w("numbers", id), w("max-limit", rate)], { tenantId, timeoutMs: 8000 });
+    } else {
+      const target = String(req.body.target || ""); // e.g., 192.0.2.10/32
+      if (!target) return res.status(400).json({ ok: false, error: "target (ip/mask) required" });
+      await sendCommand(
+        "/queue/simple/add",
+        [w("name", name), w("target", target), w("max-limit", rate)],
+        { tenantId, timeoutMs: 8000 }
+      );
+    }
+    return res.json({ ok: true, message: "Queue applied" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || "Queue apply failed" });
+  }
+});
+
+router.post("/static/:account/enable-queue", limiter, async (req, res) => {
+  try {
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000 });
+    if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
+    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+    res.json({ ok: true, message: "Queue enabled" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || "Enable failed" });
+  }
+});
+
+router.post("/static/:account/disable-queue", limiter, async (req, res) => {
+  try {
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000 });
+    if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
+    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+    res.json({ ok: true, message: "Queue disabled" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || "Disable failed" });
+  }
 });
 
 // GET /api/mikrotik/online  (combined counts)

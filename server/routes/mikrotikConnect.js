@@ -2,12 +2,21 @@
 const express = require("express");
 const router = express.Router();
 const { setConfigLoader, sendCommand } = require("../utils/mikrotikConnectionManager");
+const MikroTikConnection = require("../models/MikrotikConnection");
 
-// Simple per-tenant in-memory store (replace with DB persist in production)
-const perTenantCfg = new Map();
-
-// Tell the connection manager how to load a tenant's router config
-setConfigLoader(async (tenantId) => perTenantCfg.get(tenantId));
+// Load a tenant's router config from DB
+setConfigLoader(async (tenantId) => {
+  const rec = await MikroTikConnection.findOne({ tenant: tenantId }).lean();
+  if (!rec) return undefined;
+  return {
+    host: rec.host,
+    port: rec.port || (rec.tls ? 8729 : 8728),
+    user: rec.username,
+    password: rec.password,
+    tls: !!rec.tls,
+    timeout: 15000,
+  };
+});
 
 router.post("/", async (req, res) => {
   try {
@@ -19,19 +28,29 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ ok: false, error: "host, user, password required" });
     }
 
-    // Save/Upsert config for this tenant (swap with DB write)
-    perTenantCfg.set(tenantId, {
-      host: String(host).trim(),
-      port: Number(port) || (tls ? 8729 : 8728),
-      user: String(user).trim(),
-      password: String(password),
-      tls: !!tls,
-      timeout: 15000,
-    });
+    // Persist per-tenant connection config
+    const doc = await MikroTikConnection.findOneAndUpdate(
+      { tenant: tenantId },
+      {
+        $set: {
+          host: String(host).trim(),
+          port: Number(port) || (tls ? 8729 : 8728),
+          username: String(user).trim(),
+          password: String(password),
+          tls: !!tls,
+          updatedBy: req.user?.sub || null,
+          lastVerifiedAt: null,
+        },
+      },
+      { new: true, upsert: true }
+    );
 
     // Test by reading identity via pooled manager (must pass tenantId!)
     const out = await sendCommand("/system/identity/print", [], { tenantId, timeoutMs: 10000 });
     const identity = Array.isArray(out) && out[0]?.name;
+
+    // Mark verified
+    try { await MikroTikConnection.updateOne({ _id: doc._id }, { $set: { lastVerifiedAt: new Date() } }); } catch {}
 
     return res.json({ ok: true, identity: identity || "unknown" });
   } catch (e) {
