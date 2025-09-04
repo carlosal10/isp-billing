@@ -3,9 +3,15 @@ import axios from "axios";
 
 // ---- local storage (minimal)
 const KEY = "auth";
-const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } };
+const read = () => {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) || "null");
+  } catch {
+    return null;
+  }
+};
 const getAccess = () => read()?.accessToken || null;
-const getIspId  = () => read()?.ispId || null;
+const getIspId = () => read()?.ispId || null;
 
 // ---- API base URL
 export const API_BASE =
@@ -43,9 +49,12 @@ api.interceptors.request.use((config) => {
 // ---- single-flight refresh queue
 let isRefreshing = false;
 let queue = [];
-const enqueue = (cb) => new Promise((resolve, reject) => queue.push({ resolve, reject, cb }));
+const enqueue = (cb) =>
+  new Promise((resolve, reject) => queue.push({ resolve, reject, cb }));
 const flushQueue = (error, token = null) => {
-  queue.forEach(({ resolve, reject, cb }) => (error ? reject(error) : resolve(cb(token))));
+  queue.forEach(({ resolve, reject, cb }) =>
+    error ? reject(error) : resolve(cb(token))
+  );
   queue = [];
 };
 
@@ -61,7 +70,8 @@ function annotateAxiosError(err) {
       err?.response?.data?.message ||
       err?.message ||
       "Request failed";
-    err.message = status ? `[${status}] ${method} ${url} → ${serverMsg}` : `${method} ${url} → ${serverMsg}`;
+    // Only show the message (optionally with status); hide method and URL
+    err.message = status ? `[${status}] ${serverMsg}` : `${serverMsg}`;
     err.__debug = {
       status,
       url,
@@ -82,13 +92,19 @@ api.interceptors.response.use(
     if (error?.response?.status !== 401 || original?._retry) {
       throw annotateAxiosError(error);
     }
-    if (original.url?.includes("/auth/login") || original.url?.includes("/auth/refresh")) {
+    if (
+      original.url?.includes("/auth/login") ||
+      original.url?.includes("/auth/refresh")
+    ) {
       throw annotateAxiosError(error);
     }
 
     if (isRefreshing) {
       return enqueue((token) => {
-        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${token}` };
+        original.headers = {
+          ...(original.headers || {}),
+          Authorization: `Bearer ${token}`,
+        };
         original._retry = true;
         return api(original);
       });
@@ -100,7 +116,10 @@ api.interceptors.response.use(
       if (!accessors.tryRefresh) throw annotateAxiosError(error);
       const newToken = await accessors.tryRefresh();
       flushQueue(null, newToken);
-      original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
+      original.headers = {
+        ...(original.headers || {}),
+        Authorization: `Bearer ${newToken}`,
+      };
       return api(original);
     } catch (e) {
       flushQueue(e, null);
@@ -111,3 +130,4 @@ api.interceptors.response.use(
     }
   }
 );
+
