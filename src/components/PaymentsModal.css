@@ -1,0 +1,95 @@
+/* PaymentsModal.css */
+
+/* Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
+/* Container */
+.modal-content.large {
+  background: #f1f1f1; /* cream */
+  color: #000;
+  width: 92%;
+  max-width: 840px;
+  border-radius: 12px;
+  padding: 18px;
+  position: relative;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Close button (make clearly visible) */
+.modal-content .close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  color: #4b5563; /* gray-600 */
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.modal-content .close:hover { color: #ef4444; }
+
+/* Tabs */
+.tabs { display: flex; gap: 10px; border-bottom: 2px solid #e5e7eb; margin-bottom: 12px; }
+.tabs button {
+  background: transparent !important;
+  border: none;
+  color: #163E72; /* navy */
+  padding: 8px 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs button.active {
+  color: #16a34a; /* green */
+  border-bottom: 2px solid #16a34a;
+}
+
+/* Tables */
+.table-wrapper{ overflow:auto; border-radius: 10px; }
+.data-table{ width: 100%; border-collapse: separate; border-spacing: 0; min-width: 760px; }
+.data-table thead th{ text-align:left; padding: 10px 12px; background: #fbfcff; color:#000; border-bottom:1px solid #e6eaf2; font-weight: 700; }
+.data-table tbody td{ padding: 10px 12px; color:#163E72; }
+.data-table tbody tr:hover{ background:#f6fbf8; }
+
+/* Form */
+.stacked-form{ display:flex; flex-direction:column; gap:10px; margin-top: 12px; }
+.stacked-form .field input,
+.stacked-form .field select{
+  width:100%; height: 42px; padding: 10px 12px; border:1px solid #d1d5db; border-radius: 10px;
+  background: #fff; color:#0A1F44; outline: none;
+}
+.stacked-form .field input:focus,
+.stacked-form .field select:focus{ border-color:#16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,.2); }
+
+.stacked-form .primary{
+  align-self: flex-start;
+  background: #16a34a; color:#fff; border:none; border-radius: 10px; padding: 10px 14px; font-weight:700;
+}
+.stacked-form .primary:hover{ background:#15803d }
+
+/* Search dropdown */
+.search-dropdown{ position:absolute; z-index:10; background:#fff; color:#0A1F44; border:1px solid #e6eaf2; border-radius:10px; margin-top:6px; width:100%; max-height:220px; overflow:auto; }
+.search-dropdown li{ padding:8px 10px; cursor:pointer; }
+.search-dropdown li:hover{ background:#fbfcff }
+.search-empty{ margin-top:6px; color:#6b7280; font-size:.9rem }
+
+@media (max-width: 640px){
+  .modal-overlay { padding: 0 !important; }
+  .modal-content.large{
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 16px !important;
+  }
+}
+

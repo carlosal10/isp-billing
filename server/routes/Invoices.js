@@ -5,7 +5,8 @@ const Customer = require('../models/customers');
 
 router.get('/', async (req, res) => {
   try {
-    const invoices = await Invoice.find().populate('customer', 'name accountNumber');
+    const invoices = await Invoice.find({ tenantId: req.tenantId })
+      .populate('customer', 'name accountNumber');
     const result = invoices.map(inv => ({
       ...inv.toObject(),
       customerName: inv.customer.name
@@ -18,10 +19,11 @@ router.get('/', async (req, res) => {
 });
 router.put('/:id/pay', async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id).populate('customer plan');
+    const invoice = await Invoice.findOne({ _id: req.params.id, tenantId: req.tenantId })
+      .populate('customer plan');
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-    invoice.status = 'Paid';
+    invoice.status = 'paid';
     await invoice.save();
 
     res.json({ message: 'Invoice marked as paid', invoice });
@@ -32,7 +34,8 @@ router.put('/:id/pay', async (req, res) => {
 });
 router.post('/:id/generate', async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id).populate('customer plan');
+    const invoice = await Invoice.findOne({ _id: req.params.id, tenantId: req.tenantId })
+      .populate('customer plan');
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
     // Logic to generate PDF or invoice number
@@ -49,7 +52,7 @@ const path = require('path');
 
 router.get('/:id/pdf', async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id);
+    const invoice = await Invoice.findOne({ _id: req.params.id, tenantId: req.tenantId });
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
     // Assuming PDFs are saved in /pdfs folder with invoice._id.pdf

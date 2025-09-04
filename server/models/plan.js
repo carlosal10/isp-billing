@@ -22,6 +22,8 @@ function parseDurationToDays(v) {
 }
 
 const planSchema = new mongoose.Schema({
+  // Tenant scope
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
   name: { type: String, required: true, unique: true, trim: true },
   description: { type: String, required: true },
   price: { type: Number, required: true },

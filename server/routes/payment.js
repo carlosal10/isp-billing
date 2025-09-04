@@ -17,11 +17,12 @@ router.post('/stk', async (req, res) => {
   }
 
   try {
-    const customer = await Customer.findById(customerId);
-    const plan = await Plan.findById(planId);
+    const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId });
+    const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!customer || !plan) return res.status(404).json({ error: 'Invalid customer or plan' });
 
     const payment = await Payment.create({
+      tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
       phoneNumber: phone,
       customer: customer._id,
@@ -32,7 +33,7 @@ router.post('/stk', async (req, res) => {
     });
 
     const stkResponse = await initiateSTKPush({
-      ispId: customer._id,
+      ispId: req.tenantId,
       amount,
       phone,
       accountReference: payment._id.toString(),
@@ -59,7 +60,7 @@ router.get('/search', async (req, res) => {
 
     // 1) Find matching customers (fast, indexable)
     const customers = await Customer.find(
-      { $or: [{ name: regex }, { accountNumber: regex }] },
+      { tenantId: req.tenantId, $or: [{ name: regex }, { accountNumber: regex }] },
       { _id: 1, name: 1, accountNumber: 1 }
     )
       .limit(20)
@@ -72,7 +73,7 @@ router.get('/search', async (req, res) => {
 
     // 2) Or return recent payments for those customers (current behavior)
     const customerIds = customers.map((c) => c._id);
-    const payments = await Payment.find({ customer: { $in: customerIds } })
+    const payments = await Payment.find({ tenantId: req.tenantId, customer: { $in: customerIds } })
       .sort({ createdAt: -1 })
       .limit(50)
       .populate('customer', 'name accountNumber')
@@ -136,7 +137,7 @@ router.post('/manual', async (req, res) => {
 
     // ---------- Path A ----------
     if (paymentId) {
-      const payment = await Payment.findById(paymentId).populate('customer plan');
+      const payment = await Payment.findOne({ _id: paymentId, tenantId: req.tenantId }).populate('customer plan');
       if (!payment) return res.status(404).json({ error: 'Payment not found', debugId });
       if (!payment.plan) return res.status(400).json({ error: 'Payment has no plan associated', debugId });
 
@@ -164,8 +165,8 @@ router.post('/manual', async (req, res) => {
 
     // ---------- Path B ----------
     let customer = null;
-    if (customerId) customer = await Customer.findById(customerId).populate('plan');
-    else if (accountNumber) customer = await Customer.findOne({ accountNumber }).populate('plan');
+    if (customerId) customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId }).populate('plan');
+    else if (accountNumber) customer = await Customer.findOne({ accountNumber, tenantId: req.tenantId }).populate('plan');
     else return res.status(400).json({ error: 'Provide customerId or accountNumber', debugId });
 
     if (!customer) return res.status(404).json({ error: 'Customer not found', debugId });
@@ -174,7 +175,7 @@ router.post('/manual', async (req, res) => {
     // If you already populated a full plan doc above, you can use it directly:
     // const plan = customer.plan;
     // If you prefer a fresh fetch, keep this:
-    const plan = await Plan.findById(customer.plan._id) || customer.plan;
+    const plan = (await Plan.findOne({ _id: customer.plan._id, tenantId: req.tenantId })) || customer.plan;
 
     const priceNum = (amount !== undefined && amount !== '')
       ? Number(amount)
@@ -192,6 +193,7 @@ router.post('/manual', async (req, res) => {
     }
 
     const payment = await Payment.create({
+      tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
       phoneNumber: customer.phone || undefined,
       customer: customer._id,
@@ -222,8 +224,8 @@ router.post('/stripe/create', async (req, res) => {
   if (!customerId || !planId) return res.status(400).json({ error: 'Missing customerId or planId' });
 
   try {
-    const customer = await Customer.findById(customerId);
-    const plan = await Plan.findById(planId);
+    const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId });
+    const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!customer || !plan) return res.status(404).json({ error: 'Invalid customer or plan' });
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -233,6 +235,7 @@ router.post('/stripe/create', async (req, res) => {
     });
 
     await Payment.create({
+      tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
       phoneNumber: customer.phone,
       customer: customer._id,
@@ -284,7 +287,7 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
 router.get('/', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 200, 500);
-    const payments = await Payment.find({})
+    const payments = await Payment.find({ tenantId: req.tenantId })
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate('customer', 'name accountNumber') // <-- get the name

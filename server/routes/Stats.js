@@ -8,18 +8,18 @@ const Invoice = require('../models/Invoice');   // Assuming you have an Invoice 
 router.get('/', async (req, res) => {
     try {
         // Fetch total customers
-        const totalCustomers = await Customer.countDocuments();
+        const totalCustomers = await Customer.countDocuments({ tenantId: req.tenantId });
 
         // Fetch active plans (Assuming 'active' is a boolean field in the Plan schema)
-        const totalPlans = await Plan.countDocuments();
+        const totalPlans = await Plan.countDocuments({ tenantId: req.tenantId });
 
         // Fetch pending invoices (Assuming 'status' field with 'pending' value in Invoice schema)
-        const pendingInvoices = await Invoice.countDocuments({ status: 'pending' });
+        const pendingInvoices = await Invoice.countDocuments({ tenantId: req.tenantId, status: 'unpaid' });
 
         // Return stats as JSON
         res.json({
             totalCustomers,
-            totalPlans,
+            activePlans: totalPlans,
             pendingInvoices
         });
     } catch (err) {

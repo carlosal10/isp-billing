@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
+  // Tenant scope
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
   accountNumber: { type: String, required: true, trim: true },
   phoneNumber: { type: String, required: true, trim: true },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },

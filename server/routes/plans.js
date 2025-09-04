@@ -35,9 +35,9 @@ function formatPlan(p) {
 }
 
 // ---------- GET all ----------
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const plans = await Plan.find().lean();
+    const plans = await Plan.find({ tenantId: req.tenantId }).lean();
     res.status(200).json(plans.map(formatPlan));
   } catch (err) {
     res.status(500).json({ message: 'Error fetching plans: ' + err.message });
@@ -47,7 +47,7 @@ router.get('/', async (_req, res) => {
 // ---------- GET by id ----------
 router.get('/:id', async (req, res) => {
   try {
-    const plan = await Plan.findById(req.params.id).lean();
+    const plan = await Plan.findOne({ _id: req.params.id, tenantId: req.tenantId }).lean();
     if (!plan) return res.status(404).json({ message: 'Plan not found' });
     res.status(200).json(formatPlan(plan));
   } catch (err) {
@@ -80,6 +80,7 @@ router.post('/', async (req, res) => {
     }
 
     const newPlan = await Plan.create({
+      tenantId: req.tenantId,
       name: String(name).trim(),
       description: description || 'No description provided',
       price: priceNum,
@@ -133,8 +134,8 @@ router.put('/:id', async (req, res) => {
     if (rateLimit != null) updates.rateLimit = String(rateLimit).trim();
     if (dataCap !== undefined) updates.dataCap = dataCap;
 
-    const updated = await Plan.findByIdAndUpdate(
-      req.params.id,
+    const updated = await Plan.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.tenantId },
       { $set: updates },
       { new: true, runValidators: true }
     ).lean();
@@ -149,7 +150,7 @@ router.put('/:id', async (req, res) => {
 // ---------- DELETE ----------
 router.delete('/:id', async (req, res) => {
   try {
-    const deleted = await Plan.findByIdAndDelete(req.params.id);
+    const deleted = await Plan.findOneAndDelete({ _id: req.params.id, tenantId: req.tenantId });
     if (!deleted) return res.status(404).json({ message: 'Plan not found' });
     res.status(200).json({ message: 'Plan deleted successfully' });
   } catch (err) {

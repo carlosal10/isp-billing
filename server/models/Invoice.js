@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const invoiceSchema = new mongoose.Schema({
+    // Tenant scope
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', required: true },
     amountDue: { type: Number, required: true },

@@ -1,4 +1,5 @@
 // src/components/PaymentsModal.jsx
+import "./PaymentsModal.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";

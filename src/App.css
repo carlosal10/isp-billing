@@ -19,14 +19,18 @@
   .content-area { padding: 24px 28px; }
 }
 
-/* Hamburger (mobile) */
+/* Hamburger (mobile/desktop when sidebar closed) */
 .hamburger{
   position:fixed;top:14px;left:14px;z-index:60;
   width:42px;height:42px;border-radius:12px;
   background:#f5f5f5;box-shadow:0 2px 5px rgba(10,31,68,.08);display:grid;place-items:center;
   color:#0A1F44;cursor:pointer;border:1px solid #e6eaf2;
 }
-@media (min-width:1024px){ .hamburger{display:none} }
+/* On desktop, show only when sidebar is closed */
+@media (min-width:1024px){
+  .app-container.sidebar-open .hamburger{ display:none }
+  .app-container:not(.sidebar-open) .hamburger{ display:grid }
+}
 
 /* Sidebar backdrop (mobile) */
 .sidebar-backdrop{

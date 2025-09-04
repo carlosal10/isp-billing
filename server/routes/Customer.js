@@ -64,9 +64,9 @@ router.get('/profiles', async (req, res) => {
 });
 
 // ----------------- Customers: List -----------------
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const customers = await Customer.find()
+    const customers = await Customer.find({ tenantId: req.tenantId })
       // add speed so UI and queue logic can use it consistently
       .populate('plan', 'name price duration speed')
       .lean();
@@ -85,7 +85,7 @@ router.get('/search', async (req, res) => {
   try {
     const regex = new RegExp(query.trim(), 'i');
     const customers = await Customer.find(
-      { $or: [{ name: regex }, { accountNumber: regex }] },
+      { tenantId: req.tenantId, $or: [{ name: regex }, { accountNumber: regex }] },
       { name: 1, accountNumber: 1 }
     )
       .limit(10)
@@ -101,7 +101,7 @@ router.get('/search', async (req, res) => {
 // ----------------- Customers: Get by ID -----------------
 router.get('/by-id/:id', async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, tenantId: req.tenantId })
       .populate('plan', 'name price duration speed')
       .lean();
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
@@ -115,7 +115,7 @@ router.get('/by-id/:id', async (req, res) => {
 // ----------------- Customers: Get by Account -----------------
 router.get('/by-account/:accountNumber', async (req, res) => {
   try {
-    const customer = await Customer.findOne({ accountNumber: req.params.accountNumber })
+    const customer = await Customer.findOne({ accountNumber: req.params.accountNumber, tenantId: req.tenantId })
       .populate('plan', 'name price duration speed')
       .lean();
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
@@ -143,7 +143,7 @@ router.post('/', async (req, res) => {
 
     const accountNumber = String(generateAccountNumber()).trim();
 
-    const plan = await Plan.findById(planId);
+    const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
     if (connectionType === 'pppoe' && (!pppoeConfig || !pppoeConfig.profile)) {
@@ -151,6 +151,7 @@ router.post('/', async (req, res) => {
     }
 
     const customer = new Customer({
+      tenantId: req.tenantId,
       name,
       email,
       phone,
@@ -208,12 +209,12 @@ router.post('/', async (req, res) => {
 // ----------------- Update Customer -----------------
 router.put('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findOne({ _id: req.params.id, tenantId: req.tenantId });
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
     const { plan: planId, connectionType, pppoeConfig, staticConfig } = req.body;
 
-    const plan = await Plan.findById(planId || customer.plan);
+    const plan = await Plan.findOne({ _id: (planId || customer.plan), tenantId: req.tenantId });
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
     // Apply basic updates
@@ -258,7 +259,7 @@ router.put('/:id', async (req, res) => {
 // ----------------- Delete Customer -----------------
 router.delete('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findOneAndDelete({ _id: req.params.id, tenantId: req.tenantId });
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
     if (customer.connectionType === 'pppoe') {

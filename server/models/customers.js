@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const customerSchema = new mongoose.Schema({
+  // Tenant scope (required for multi-tenant isolation)
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
   name: String,
   email: String,
   phone: String,
