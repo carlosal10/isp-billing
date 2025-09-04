@@ -88,6 +88,9 @@ export default function Login() {
       )}
 
       <div className="helper-text">
+        <Link to="/forgot-password">Forgot password?</Link>
+      </div>
+      <div className="helper-text">
         New here? <Link to="/register">Create an account</Link>
       </div>
     </form>

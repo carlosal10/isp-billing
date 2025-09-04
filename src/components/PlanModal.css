@@ -9,7 +9,7 @@
 }
 
 .modal-content {
-  background: #fff;
+  background: #fff7e1; /* cream */
   padding: 2rem;
   border-radius: 12px;
   width: 90%;
@@ -30,7 +30,7 @@
 h2, h3 {
   text-align: center;
   margin-bottom: 1rem;
-  color: #333;
+  color: #000;
 }
 
 form {
@@ -47,8 +47,8 @@ form input {
 }
 
 form button {
-  background: #0077ff;
-  color: white;
+  background: #16a34a; /* green */
+  color: #fff;
   padding: 0.8rem;
   border: none;
   border-radius: 6px;
@@ -57,7 +57,7 @@ form button {
 }
 
 form button:hover {
-  background: #005fcc;
+  background: #15803d;
 }
 
 .remove-btn {

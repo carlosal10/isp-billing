@@ -1,12 +1,12 @@
 // src/App.jsx
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import "./App.css";
+import { GiHamburgerMenu } from "react-icons/gi";
 
 import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Sidebar";
 import Login from "./pages/Login";
-
-// Modals (single source of truth here)
 import ClientsModal from "./components/CustomersModal";
 import SubscriptionPlansModal from "./components/PlanModal";
 import PppoeSetupModal from "./components/PppoeModal";
@@ -20,12 +20,14 @@ import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 import MODALS from "./constants/modals";
 import { useAuth } from "./context/AuthContext";
 import Register from "./pages/Register";
-
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import AccountSettings from "./pages/AccountSettings";
 
 export default function App() {
-  const { isAuthed } = useAuth();
+  const { isAuthed, token } = useAuth();
 
-  // —— Sidebar state: open on desktop, closed on mobile
+  // Sidebar state: open on desktop, closed on mobile
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
   );
@@ -43,36 +45,33 @@ export default function App() {
 
   const toggleSidebar = () => setSidebarOpen((s) => !s);
 
-  // —— Modals
+  // Global Modals
   const [activeModal, setActiveModal] = useState(null);
   const openModal = (modal) => setActiveModal(modal);
   const closeModal = () => setActiveModal(null);
 
-  // Public shell: only Login
+  // Public shell
   if (!isAuthed) {
     return (
       <Router>
         <Routes>
-          <Route path="/login" element={<Login />} /> 
-          <Route path="/*" element={<Login />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/*" element={<Login />} />
         </Routes>
       </Router>
     );
   }
 
-  // Authenticated shell: sidebar + routes + global modals
+  // Authenticated shell
   return (
     <Router>
-      <div className="app-container">
+      <div className={`app-container ${sidebarOpen ? "sidebar-open" : ""}`}>
         {/* Mobile hamburger */}
-        <div
-          className="hamburger"
-          onClick={toggleSidebar}
-          role="button"
-          aria-label="Toggle sidebar"
-        >
-          ☰
+        <div className="hamburger" onClick={toggleSidebar} role="button" aria-label="Toggle sidebar">
+          <GiHamburgerMenu />
         </div>
 
         {/* Mobile backdrop when drawer open */}
@@ -80,7 +79,7 @@ export default function App() {
           <div className="sidebar-backdrop" onClick={toggleSidebar} />
         )}
 
-        {/* The ONLY Sidebar in the app */}
+        {/* Sidebar */}
         <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} onOpenModal={openModal} />
 
         {/* Page content */}
@@ -88,48 +87,27 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/settings" element={<AccountSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
 
-        {/* Global Modals (keep them mounted here) */}
-        <ClientsModal
-          isOpen={activeModal === MODALS.CLIENTS}
-          onClose={closeModal}
-        />
-        <SubscriptionPlansModal
-          isOpen={activeModal === MODALS.PLANS}
-          onClose={closeModal}
-        />
-        <PppoeSetupModal
-          isOpen={activeModal === MODALS.PPPOE}
-          onClose={closeModal}
-        />
-        <HotspotSetupModal
-          isOpen={activeModal === MODALS.HOTSPOT}
-          onClose={closeModal}
-        />
+        {/* Global Modals */}
+        <ClientsModal isOpen={activeModal === MODALS.CLIENTS} onClose={closeModal} />
+        <SubscriptionPlansModal isOpen={activeModal === MODALS.PLANS} onClose={closeModal} />
+        <PppoeSetupModal isOpen={activeModal === MODALS.PPPOE} onClose={closeModal} />
+        <HotspotSetupModal isOpen={activeModal === MODALS.HOTSPOT} onClose={closeModal} />
         <PaymentIntegrationModal
           isOpen={activeModal === MODALS.PAYMENT_INTEGRATION}
           onClose={closeModal}
         />
-        <ConnectMikrotikModal
-          isOpen={activeModal === MODALS.MIKROTIK}
-          onClose={closeModal}
-        />
-        <MessagingModal
-          isOpen={activeModal === MODALS.MESSAGING}
-          onClose={closeModal}
-        />
-        <PaymentsModal
-          isOpen={activeModal === MODALS.PAYMENTS}
-          onClose={closeModal}
-        />
-
-        {/* No authToken prop needed; apiClient injects Authorization */}
+        <ConnectMikrotikModal isOpen={activeModal === MODALS.MIKROTIK} onClose={closeModal} />
+        <MessagingModal isOpen={activeModal === MODALS.MESSAGING} onClose={closeModal} />
+        <PaymentsModal isOpen={activeModal === MODALS.PAYMENTS} onClose={closeModal} />
         <MikrotikTerminalModal
           isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
           onClose={closeModal}
+          authToken={token}
         />
       </div>
     </Router>

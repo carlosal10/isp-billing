@@ -14,8 +14,8 @@
 
 /* Modal container */
 .modal-content.large {
-  background: #0f0f0f;
-  color: #e2e8f0;
+  background: #fff7e1; /* cream */
+  color: #000;
   width: 90%;
   max-width: 720px;
   border-radius: 12px;
@@ -39,16 +39,14 @@
   cursor: pointer;
   transition: color 0.2s;
 }
-.modal-content .close:hover {
-  color: #f87171;
-}
+.modal-content .close:hover { color: #ef4444; }
 
 /* Heading */
 .modal-content h2 {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.25rem;
-  color:#fff;
+  color:#000;
 }
 
 /* Input command box */
@@ -56,24 +54,21 @@
   width: 100%;
   padding: 0.75rem;
   border-radius: 8px;
-  border: 1px solid #1e293b;
-  background: #1e293b;
-  color: #f8fafc;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #000;
   font-family: monospace;
   resize: none;
   outline: none;
   transition: border 0.2s, box-shadow 0.2s;
 }
-.modal-content textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
-}
+.modal-content textarea:focus { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.35); }
 
 /* Run button */
 .modal-content button {
   align-self: flex-start;
   padding: 0.5rem 1rem;
-  background: #2563eb;
+  background: #16a34a; /* green */
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -81,17 +76,15 @@
   cursor: pointer;
   transition: background 0.2s, transform 0.05s;
 }
-.modal-content button:hover {
-  background: #1d4ed8;
-}
+.modal-content button:hover { background: #15803d; }
 .modal-content button:active {
   transform: translateY(1px);
 }
 
 /* Terminal output */
 .terminal-output {
-  background: #000000;
-  color: #22c55e;
+  background: #ffffff;
+  color: #000000;
   font-family: monospace;
   font-size: 0.875rem;
   border-radius: 8px;

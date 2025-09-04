@@ -131,6 +131,8 @@ const stripeWebhook = require("./routes/stripeWebhook");
 
 // Debug
 const debugRoutes = require("./routes/debug");
+const tenantRoutes = require("./routes/tenant");
+const accountRoutes = require("./routes/account");
 
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
@@ -149,6 +151,8 @@ app.use("/api/plans", authenticate, requireTenant, planRoutes);
 app.use("/api/invoices", authenticate, requireTenant, invoiceRoutes);
 app.use("/api/usageLogs", authenticate, requireTenant, usageLogsRoutes);
 app.use("/api/stats", authenticate, requireTenant, statsRoutes);
+app.use("/api/tenant", authenticate, requireTenant, tenantRoutes);
+app.use("/api/account", authenticate, accountRoutes);
 
 // MikroTik PPPoE & connectivity
 app.use("/api/pppoe", authenticate, requireTenant, mikrotikUserRoutes);

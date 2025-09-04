@@ -14,8 +14,8 @@
 /* ---- Modal Card ---- */
 .mikrotik-modal{
   width:min(520px, 100%);
-  background:var(--card, #fff);
-  color:var(--navy-700, #163E72);
+  background:#fff7e1; /* cream */
+  color:#000;         /* black text */
   border:1px solid var(--border, #e6eaf2);
   border-radius:var(--radius-lg, 20px);
   box-shadow:var(--shadow, 0 10px 28px rgba(10,31,68,.08));

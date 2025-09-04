@@ -13,8 +13,8 @@
 
 .modal-content.customers-modal{
   width:min(720px, 96%);
-  background:var(--card, #fff);
-  color:var(--navy-700, #163E72);
+  background:#fff7e1; /* cream */
+  color:#000;         /* black text */
   border:1px solid var(--border, #e6eaf2);
   border-radius:var(--radius-lg, 20px);
   box-shadow:var(--shadow, 0 10px 28px rgba(10,31,68,.08));
@@ -24,9 +24,7 @@
   overflow:auto;
   animation:slideUp .14s ease-out;
 }
-.modal-content.customers-modal p{
-  color: #000;
-}
+.modal-content.customers-modal p{ color:#000; }
 @keyframes slideUp{from{transform:translateY(6px);opacity:.85} to{transform:translateY(0);opacity:1}}
 
 .close{
@@ -52,8 +50,8 @@
   margin:6px 6px 12px;
   padding:10px 12px;
   border-radius:12px;
-  background:var(--green-50, #eafaf1);
-  color:var(--navy-700, green);
+  background:#eafaf1;
+  color:#16a34a; /* green */
   word-break:break-word;
 }
 

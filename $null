@@ -1,0 +1,69 @@
+        <section className="pppoe-status-section">
+          <div className="section-head">
+            <h2>
+              Online Users {loading.sessions && <small>(loading…)</small>}
+            </h2>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={showHotspot}
+                onChange={() => setShowHotspot((v) => !v)}
+              />
+              Include Hotspot
+            </label>
+          </div>
+
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Account #</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>IP</th>
+                  <th>Uptime</th>
+                  <th>Bytes In</th>
+                  <th>Bytes Out</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {onlinePageItems.map((u, i) => (
+                  <tr key={`${u.accountNumber}-${i}`}>
+                    <td>{u.source}</td>
+                    <td>{u.accountNumber}</td>
+                    <td>{u.name}</td>
+                    <td>{u.phone}</td>
+                    <td>{u.ip}</td>
+                    <td>{u.uptime}</td>
+                    <td>{u.bytesIn.toLocaleString()}</td>
+                    <td>{u.bytesOut.toLocaleString()}</td>
+                    <td>{u.planName}</td>
+                  </tr>
+                ))}
+                {enrichedOnline.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center" }}>
+                      {errors.sessions
+                        ? `Failed to load sessions: ${errors.sessions}`
+                        : (isAuthenticated && token && ispId)
+                        ? "No users online"
+                        : "Signing you in…"}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "right", fontWeight: 600 }}>
+                    Totals
+                  </td>
+                  <td>{pageBytesIn.toLocaleString()}</td>
+                  <td>{pageBytesOut.toLocaleString()}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>

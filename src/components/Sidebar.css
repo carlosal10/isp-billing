@@ -33,11 +33,10 @@
   transform: translateX(0);
 }
 
-/* Always visible on desktop */
+/* On desktop, still allow toggling via .show */
 @media (min-width:1024px){
-  .sidebar{
-    transform: none;
-  }
+  .sidebar{ transform: translateX(-100%); }
+  .sidebar.show{ transform: translateX(0); }
 }
 
 /* Make it a bit narrower on very small phones (OPTIONAL) */
@@ -66,7 +65,7 @@
   background: rgba(255,255,255,.06);
   border: 1px solid var(--border);
 }
-@media (min-width:1024px){ .close-btn{ display: none; } }
+/* Keep close button visible on desktop to toggle */
 
 /* === NAV ITEMS === */
 .sidebar ul{

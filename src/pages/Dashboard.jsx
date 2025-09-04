@@ -4,20 +4,7 @@ import { Chart } from "react-chartjs-2";
 import "chart.js/auto";
 import "./Dashboard.css";
 
-import Sidebar from "../components/Sidebar";
 import StatsCards from "../components/StatsCards";
-import MODALS from "../constants/modals";
-
-// Modals
-import ClientsModal from "../components/CustomersModal";
-import PlansModal from "../components/PlanModal";
-import PppoeSetupModal from "../components/PppoeModal";
-import HotspotSetupModal from "../components/HotspotModal";
-import PaymentIntegrationModal from "../components/PaymentSetting";
-import ConnectMikrotikModal from "../components/ConnectMikrotik";
-import UsageLogsModal from "../components/UsageModal";
-import PaymentsModal from "../components/PaymentsModal";
-import MikrotikTerminalModal from "../components/MikrotikTerminalModal";
 
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -44,28 +31,10 @@ function daysSince(date) {
 }
 
 export default function Dashboard() {
-  // Sidebar
-  const [isDesktop, setIsDesktop] = useState(
-    typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
-  );
-  const [sidebarOpen, setSidebarOpen] = useState(isDesktop);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width:1024px)");
-    const handler = (e) => {
-      setIsDesktop(e.matches);
-      setSidebarOpen(e.matches);
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  const toggleSidebar = () => setSidebarOpen((s) => !s);
-
-  // 🔑 Use token + ispId directly to gate data loads
+  // Sidebar is managed globally in App shell
   const { isAuthenticated, token, ispId } = useAuth();
 
-  const [activeModal, setActiveModal] = useState(null);
+  // page-local modals are managed globally in the App shell
 
   // system & stats
   const [mikrotik, setMikrotik] = useState({
@@ -98,6 +67,9 @@ export default function Dashboard() {
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
+  // Pagination for online users
+  const [onlinePage, setOnlinePage] = useState(1);
+  const pageSize = 10;
 
   // ---------- FETCHERS (Axios `api` injects Authorization + x-isp-id) ----------
   const loadMikrotikStatus = async () => {
@@ -276,6 +248,26 @@ export default function Dashboard() {
     [enrichedOnline]
   );
 
+  const onlineTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(enrichedOnline.length / pageSize)),
+    [enrichedOnline]
+  );
+  useEffect(() => {
+    setOnlinePage((p) => Math.min(Math.max(1, p), onlineTotalPages));
+  }, [onlineTotalPages]);
+  const onlinePageItems = useMemo(() => {
+    const start = (onlinePage - 1) * pageSize;
+    return enrichedOnline.slice(start, start + pageSize);
+  }, [enrichedOnline, onlinePage]);
+  const pageBytesIn = useMemo(
+    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0), 0),
+    [onlinePageItems]
+  );
+  const pageBytesOut = useMemo(
+    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0), 0),
+    [onlinePageItems]
+  );
+
   const expiryByCustomerId = useMemo(() => {
     const map = new Map();
     for (const p of payments) {
@@ -372,14 +364,6 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       {/* Hamburger (mobile) */}
-      <div className="hamburger" onClick={toggleSidebar} role="button" aria-label="Toggle sidebar">
-        ☰
-      </div>
-
-      {!isDesktop && sidebarOpen && <div className="sidebar-backdrop" onClick={toggleSidebar} />}
-
-      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} onOpenModal={setActiveModal} />
-
       <div className="main-content">
         <header className="page-header">
           <h1>Dashboard</h1>
@@ -448,7 +432,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {enrichedOnline.map((u, i) => (
+                {onlinePageItems.map((u, i) => (
                   <tr key={`${u.accountNumber}-${i}`}>
                     <td>{u.source}</td>
                     <td>{u.accountNumber}</td>
@@ -478,13 +462,26 @@ export default function Dashboard() {
                   <td colSpan={6} style={{ textAlign: "right", fontWeight: 600 }}>
                     Totals
                   </td>
-                  <td>{totalBytesIn.toLocaleString()}</td>
-                  <td>{totalBytesOut.toLocaleString()}</td>
+                  <td>{pageBytesIn.toLocaleString()}</td>
+                  <td>{pageBytesOut.toLocaleString()}</td>
                   <td />
                 </tr>
               </tfoot>
             </table>
           </div>
+          {enrichedOnline.length > pageSize && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <button className="btn" onClick={() => setOnlinePage((p) => Math.max(1, p - 1))} disabled={onlinePage === 1}>
+                Previous
+              </button>
+              <div style={{ color: '#000' }}>
+                Page {onlinePage} of {onlineTotalPages} • Showing {onlinePageItems.length} of {enrichedOnline.length}
+              </div>
+              <button className="btn" onClick={() => setOnlinePage((p) => Math.min(onlineTotalPages, p + 1))} disabled={onlinePage === onlineTotalPages}>
+                Next
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="due-soon-section">
@@ -562,22 +559,6 @@ export default function Dashboard() {
           <Chart type="line" data={paymentsChart} />
         </section>
       </div>
-
-      {/* Modals */}
-      <ClientsModal isOpen={activeModal === MODALS.CLIENTS} onClose={() => setActiveModal(null)} />
-      <PlansModal isOpen={activeModal === MODALS.PLANS} onClose={() => setActiveModal(null)} />
-      <PppoeSetupModal isOpen={activeModal === MODALS.PPPOE} onClose={() => setActiveModal(null)} />
-      <HotspotSetupModal isOpen={activeModal === MODALS.HOTSPOT} onClose={() => setActiveModal(null)} />
-      <PaymentIntegrationModal isOpen={activeModal === MODALS.PAYMENT_INTEGRATION} onClose={() => setActiveModal(null)} />
-      <ConnectMikrotikModal isOpen={activeModal === MODALS.MIKROTIK} onClose={() => setActiveModal(null)} />
-      <UsageLogsModal isOpen={activeModal === MODALS.USAGE} onClose={() => setActiveModal(null)} />
-      <PaymentsModal isOpen={activeModal === MODALS.PAYMENTS} onClose={() => setActiveModal(null)} />
-
-      <MikrotikTerminalModal
-        isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
-        onClose={() => setActiveModal(null)}
-        authToken={token}
-      />
     </div>
   );
 }

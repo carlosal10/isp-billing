@@ -2,44 +2,32 @@
   --sidebar-w: 280px;
 
   /* Palette */
-  --navy-900:#0A1F44;  /* headings, strong text */
-  --navy-700:#163E72;  /* body text */
-  --navy-500:#2E5E9E;  /* subtle accents/links */
-  --bg:#ffffff;        /* app background */
-  --card:#dfdfdf;      /* surfaces/cards */
-  --card-sub:#fbfcff;  /* lighter surface */
-  --border:#e6eaf2;    /* borders/dividers */
-  --muted:#6b7a99;     /* secondary text */
+  --navy-900:#0A1F44;
+  --navy-700:#163E72;
+  --navy-500:#2E5E9E;
+  --bg:#ffffff;
+  --card:#f5f5f5;      /* smoke white cards */
+  --card-sub:#fffaf0;  /* light cream sub-surface */
+  --border:#e6eaf2;
+  --muted:#6b7a99;
 
-  --green:#17c964;     /* primary accent */
-  --green-600:#169a52; /* hover/active */
-  --green-50:#eafaf1;  /* soft fill */
+  --green:#16a34a;     /* counters/success */
+  --green-600:#15803d;
+  --green-50:#eafaf1;
 
   --radius:14px;
-  --radius-lg:10px;
+  --radius-lg:14px;
   --shadow:0 2px 5px rgba(10,31,68,.08);
 }
 
 /* base */
 *{box-sizing:border-box}
 html,body,#root{height:100%}
-body{
-  margin-left:15%;
-  background:var(--card);
-  color:var(--navy-700);
-  font-family:Inter,ui-sans-serif,system-ui;
-}
+body{ background:#f5f5f5; color:var(--navy-700); font-family:Inter,ui-sans-serif,system-ui; }
 
 /* layout */
 .dashboard{position:relative;min-height:100vh;background:var(--bg)}
-.main-content{
-  position:relative;
-  padding:24px;
-  margin-left:10px; /* your Sidebar handles spacing */
-}
-@media (min-width:1024px){
-  .main-content{padding:28px 32px}
-}
+.main-content{ position:relative; padding:0; }
 
 /* header */
 .page-header{
@@ -88,7 +76,7 @@ body{
 
 /* quick counters */
 .quick-counters .counter{
-  background:var(--bg);
+  background:var(--card);
   border-radius:var(--radius);
   box-shadow:var(--shadow);
   padding:16px 18px;
@@ -106,7 +94,7 @@ body{
 .due-soon-section,
 .expired-section,
 .chart-container{
-  background:var(--bg); border-radius:var(--radius-lg);
+  background:var(--card); border-radius:var(--radius-lg);
   box-shadow:var(--shadow);padding:18px;margin-top:18px;
 }
 .section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
@@ -121,8 +109,8 @@ body{
 table{width:100%;border-collapse:separate;border-spacing:0;min-width:820px}
 thead th{
   text-align:left;padding:12px 14px;
-  background:var(--muted);
-  color:var(--navy-700)var(--border);font-weight:700;
+  background:var(--card-sub);
+  color:#000;border-bottom:1px solid var(--border);font-weight:700;
 }
 tbody td{padding:12px 14px;color:var(--navy-700)}
 tbody tr:hover{background:#f6fbf8} /* soft green hover */

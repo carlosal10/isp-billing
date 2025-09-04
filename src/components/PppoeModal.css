@@ -13,7 +13,7 @@
 }
 
 .modal-content {
-  background: #ffffff;
+  background: #fff7e1; /* cream */
   padding: 2rem;
   width: 100%;
   max-width: 550px;
@@ -41,7 +41,7 @@
 .modal-content h2 {
   font-size: 1.4rem;
   margin-bottom: 1.5rem;
-  color: #222;
+  color: #000;
   text-align: center;
   font-weight: 600;
 }
@@ -52,7 +52,7 @@
   flex-direction: column;
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: #f9fafb;
+  background: #fffaf0; /* light cream */
   border-radius: 12px;
 }
 
@@ -93,7 +93,7 @@
 
 /* Specific button styles */
 .modal-content button[type="submit"] {
-  background: #007bff;
+  background: #16a34a; /* green */
   color: #fff;
 }
 
@@ -102,9 +102,7 @@
   color: #fff;
 }
 
-.modal-content .remove-btn:hover {
-  background: #c9302c;
-}
+.modal-content .remove-btn:hover { background: #c9302c; }
 
 /* Inline icons */
 .inline-icon {

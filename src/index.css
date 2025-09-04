@@ -14,3 +14,9 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: #f9fafb;
 }
+:root {
+  --sidebar-w: 280px;
+  --success: #16a34a;
+}
+
+.success { color: var(--success); }
