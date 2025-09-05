@@ -1,29 +1,49 @@
-import React, { useState, useEffect } from "react";
-import { Modal } from "../components/ui/Modal";
-import { Button } from "../components/ui/Button";
-import { Card, CardContent } from "../components/ui/Card";
+import React, { useState, useEffect, useCallback } from "react";
 import { Line, Bar } from "react-chartjs-2";
 import { FaDownload, FaTimes } from "react-icons/fa";
 import { api } from "../lib/apiClient";
 import 'chart.js/auto';
-import "./UsageModal.css"; // ✅ custom styles
+import "./UsageModal.css";
+
+// Fallback minimal wrappers in case UI kit is absent
+const Modal = ({ isOpen, onClose, children }) =>
+  !isOpen ? null : (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999 }}>
+      <div style={{ background: "#fff", margin: "40px auto", padding: 16, borderRadius: 12, maxWidth: 900 }}>
+        {children}
+      </div>
+    </div>
+  );
+const Button = ({ children, ...props }) => (
+  <button {...props} style={{ padding: "6px 10px", background: "#111827", color: "#fff", borderRadius: 6 }}>
+    {children}
+  </button>
+);
+const Card = ({ children, className }) => (
+  <div className={className} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>{children}</div>
+);
+const CardContent = ({ children }) => <div>{children}</div>;
 
 const UsageModal = ({ isOpen, onClose }) => {
   const [usageTrends, setUsageTrends] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
   const [usageLogs, setUsageLogs] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [statusMsg, setStatusMsg] = useState("");
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchData();
-    }
-  }, [isOpen]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Record a snapshot for today (tenant-scoped on server)
-      try { await api.post("/usageLogs/record"); } catch {}
+      try {
+        await api.post("/usageLogs/record");
+        setStatusMsg("");
+      } catch (e) {
+        setStatusMsg("Waking API ... retrying in 2s");
+        setTimeout(() => {
+          fetchData();
+        }, 2000);
+        return;
+      }
 
       const { data } = await api.get("/usageLogs/daily", { params: { days: 14 } });
       const items = data?.items || [];
@@ -35,8 +55,15 @@ const UsageModal = ({ isOpen, onClose }) => {
       setInvoices([]);
     } catch (err) {
       console.error("Failed to fetch usage data", err);
+      setStatusMsg(err?.message || "Failed to load usage");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+    }
+  }, [isOpen, fetchData]);
 
   // Prepare chart data
   const usageTrendsData = {
@@ -70,6 +97,10 @@ const UsageModal = ({ isOpen, onClose }) => {
           <FaTimes size={20} />
         </button>
       </div>
+
+      {statusMsg && (
+        <div style={{ marginBottom: 8, color: "#6b7280" }}>{statusMsg}</div>
+      )}
 
       {/* Charts */}
       <Card className="mb-4">
@@ -152,3 +183,5 @@ const UsageModal = ({ isOpen, onClose }) => {
 };
 
 export default UsageModal;
+
+

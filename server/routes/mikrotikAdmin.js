@@ -10,6 +10,7 @@ const router = express.Router();
 const ADDRESS_LIST = "mgmt-allow";
 const MGMT_COMMENT = "mgmt-allow";
 const DEFAULT_PORTS = ["22", "8291", "8728"]; // + "8729" for api-ssl if used
+const STRICT_LIST = "ALLOWED-WAN";
 
 // ----- RBAC (FIXED precedence) -----
 function guardRole(req, res, next) {
@@ -290,3 +291,117 @@ router.get("/status", limiter, guardRole, async (req, res) => {
 });
 
 module.exports = router;
+
+// ===== Strict Internet Enforcement =====
+// Only allow forwarding to out-interface-list in ALLOWED-WAN
+// - Creates/ensures interface list and members
+// - Adds/ensures masquerade NAT for ALLOWED-WAN
+// - Adds/ensures drop rule for out-interface-list=!ALLOWED-WAN (forward chain)
+// - Optionally disables DHCP client on specified interfaces
+
+async function ensureInterfaceList(tenantId, name, timeoutMs) {
+  const out = await sendCommand("/interface/list/print", [qs("name", name)], { tenantId, timeoutMs });
+  if (Array.isArray(out) && out[0]) return pickId(out[0]);
+  const add = await sendCommand("/interface/list/add", [w("name", name)], { tenantId, timeoutMs });
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function ensureListMember(tenantId, listName, iface, timeoutMs) {
+  const rows = await sendCommand(
+    "/interface/list/member/print",
+    [qs("list", listName), qs("interface", iface)],
+    { tenantId, timeoutMs }
+  );
+  if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
+  const add = await sendCommand(
+    "/interface/list/member/add",
+    [w("list", listName), w("interface", iface)],
+    { tenantId, timeoutMs }
+  );
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function ensureMasqForList(tenantId, listName, timeoutMs) {
+  const rows = await sendCommand(
+    "/ip/firewall/nat/print",
+    [qs("chain", "srcnat"), qs("action", "masquerade"), qs("comment", "isp-billing-nat")],
+    { tenantId, timeoutMs }
+  );
+  if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
+  const add = await sendCommand(
+    "/ip/firewall/nat/add",
+    [w("chain", "srcnat"), w("action", "masquerade"), w("out-interface-list", listName), w("comment", "isp-billing-nat")],
+    { tenantId, timeoutMs }
+  );
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function ensureStrictDropRule(tenantId, listName, timeoutMs) {
+  const rows = await sendCommand(
+    "/ip/firewall/filter/print",
+    [qs("chain", "forward"), qs("out-interface-list", `!${listName}`), qs("comment", "isp-billing-strict")],
+    { tenantId, timeoutMs }
+  );
+  if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
+  const add = await sendCommand(
+    "/ip/firewall/filter/add",
+    [w("chain", "forward"), w("out-interface-list", `!${listName}`), w("action", "drop"), w("comment", "isp-billing-strict")],
+    { tenantId, timeoutMs }
+  );
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function disableDhcpClients(tenantId, interfaces, timeoutMs) {
+  for (const iface of interfaces || []) {
+    const rows = await sendCommand("/ip/dhcp-client/print", [qs("interface", iface)], { tenantId, timeoutMs });
+    if (Array.isArray(rows) && rows[0]) {
+      const id = pickId(rows[0]);
+      await sendCommand("/ip/dhcp-client/disable", [w("numbers", id)], { tenantId, timeoutMs });
+    }
+  }
+}
+
+router.post("/enforce/strict-internet", limiter, guardRole, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { allowInterfaces = [], disableDhcpOn = [] } = req.body || {};
+    const timeoutMs = 12000;
+    if (!Array.isArray(allowInterfaces) || allowInterfaces.length === 0) {
+      return res.status(400).json({ ok: false, error: "allowInterfaces required" });
+    }
+
+    await ensureInterfaceList(tenantId, STRICT_LIST, timeoutMs);
+    for (const iface of allowInterfaces) await ensureListMember(tenantId, STRICT_LIST, String(iface), timeoutMs);
+    await ensureMasqForList(tenantId, STRICT_LIST, timeoutMs);
+    await ensureStrictDropRule(tenantId, STRICT_LIST, timeoutMs);
+    await disableDhcpClients(tenantId, disableDhcpOn, timeoutMs);
+
+    return res.json({ ok: true, list: STRICT_LIST, allowInterfaces, dhcpDisabledOn: disableDhcpOn });
+  } catch (e) {
+    const msg = e?.message || "Enforcement failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});
+
+router.delete("/enforce/strict-internet", limiter, guardRole, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const timeoutMs = 12000;
+    // Remove drop rule
+    const rows = await sendCommand(
+      "/ip/firewall/filter/print",
+      [qs("chain", "forward"), qs("out-interface-list", `!${STRICT_LIST}`), qs("comment", "isp-billing-strict")],
+      { tenantId, timeoutMs }
+    );
+    if (Array.isArray(rows) && rows[0]) {
+      const id = pickId(rows[0]);
+      await sendCommand("/ip/firewall/filter/remove", [w("numbers", id)], { tenantId, timeoutMs });
+    }
+    return res.json({ ok: true, removed: true });
+  } catch (e) {
+    const msg = e?.message || "Remove enforcement failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});

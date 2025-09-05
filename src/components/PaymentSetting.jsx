@@ -28,6 +28,9 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
   const [activeTab, setActiveTab] = useState("mpesa");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [subdomain, setSubdomain] = useState("");
+  const [subMsg, setSubMsg] = useState("");
+  const [savingSub, setSavingSub] = useState(false);
 
   const [formData, setFormData] = useState({
     mpesa: {
@@ -63,6 +66,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     if (!isOpen) return;
     setMsg("");
     loadProvider(activeTab);
+    loadTenant();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeTab]);
 
@@ -102,6 +106,30 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       setMsg(`❌ Failed to load ${provider} settings${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadTenant() {
+    try {
+      const { data } = await api.get("/tenant/me");
+      setSubdomain(data?.subdomain || "");
+      setSubMsg("");
+    } catch (e) {
+      setSubMsg(e?.message || "Failed to load tenant");
+    }
+  }
+
+  async function saveSubdomain(e) {
+    e.preventDefault();
+    setSavingSub(true);
+    setSubMsg("");
+    try {
+      const { data } = await api.put("/tenant/subdomain", { subdomain });
+      setSubMsg(data?.url ? `Saved. URL: ${data.url}` : "Saved");
+    } catch (e) {
+      setSubMsg(`Failed: ${e?.message || "Save error"}`);
+    } finally {
+      setSavingSub(false);
     }
   }
 
@@ -183,6 +211,26 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           </p>
         )}
         {loading && <p className="text-sm text-gray-500 mb-3">Loading...</p>}
+
+        {/* Subdomain */}
+        <div className="space-y-3 mb-6">
+          <h3 className="text-lg font-semibold">Tenant Subdomain</h3>
+          <p className="text-sm text-gray-600">Set your subdomain (e.g., "acme" → acme.your-root-domain).</p>
+          <form onSubmit={saveSubdomain} className="flex gap-2">
+            <input
+              type="text"
+              className="flex-1 border rounded-lg px-3 py-2"
+              placeholder="subdomain"
+              value={subdomain}
+              onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
+              required
+            />
+            <button type="submit" className="bg-gray-800 text-white px-4 py-2 rounded-lg" disabled={savingSub}>
+              {savingSub ? "Saving…" : "Save"}
+            </button>
+          </form>
+          {subMsg && <p className="text-sm" style={{ color: subMsg.startsWith("Failed") ? "#ef4444" : "#16a34a" }}>{subMsg}</p>}
+        </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">

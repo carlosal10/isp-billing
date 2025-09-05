@@ -5,6 +5,7 @@ import "chart.js/auto";
 import "./Dashboard.css";
 
 import StatsCards from "../components/StatsCards";
+import UsageModal from "../components/UsageModal";
 
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -64,6 +65,8 @@ export default function Dashboard() {
     status: true,
   });
   const [errors, setErrors] = useState({});
+  const [toast, setToast] = useState(null);
+  const [showUsageModal, setShowUsageModal] = useState(false);
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
@@ -244,27 +247,30 @@ export default function Dashboard() {
     try {
       await api.post(`/pppoe/${encodeURIComponent(acct)}/enable`);
       loadSessions();
+      setToast({ type: "success", message: `Enabled ${acct}` });
     } catch (e) {
       setErrors((er) => ({ ...er, sessions: e.message }));
+      setToast({ type: "error", message: `Enable failed: ${e.message}` });
     }
   }
   async function disableAccount(acct) {
     try {
       await api.post(`/pppoe/${encodeURIComponent(acct)}/disable`, null, { params: { disconnect: true } });
       loadSessions();
+      setToast({ type: "success", message: `Disabled ${acct}` });
     } catch (e) {
       setErrors((er) => ({ ...er, sessions: e.message }));
+      setToast({ type: "error", message: `Disable failed: ${e.message}` });
     }
   }
 
-  const totalBytesIn = useMemo(
-    () => enrichedOnline.reduce((a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0), 0),
-    [enrichedOnline]
-  );
-  const totalBytesOut = useMemo(
-    () => enrichedOnline.reduce((a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0), 0),
-    [enrichedOnline]
-  );
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Page totals shown in footer; overall totals removed to avoid lint noise
 
   const onlineTotalPages = useMemo(
     () => Math.max(1, Math.ceil(enrichedOnline.length / pageSize)),
@@ -432,6 +438,9 @@ export default function Dashboard() {
               />
               Include Hotspot
             </label>
+            <button className="btn" onClick={() => setShowUsageModal(true)} style={{ marginLeft: 12 }}>
+              Usage
+            </button>
           </div>
 
           <div className="table-wrapper">
@@ -588,6 +597,24 @@ export default function Dashboard() {
           <Chart type="line" data={paymentsChart} />
         </section>
       </div>
+      {!!toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            right: 16,
+            background: toast.type === "success" ? "#16a34a" : "#ef4444",
+            color: "#fff",
+            padding: "8px 12px",
+            borderRadius: 8,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+            zIndex: 1000,
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
+      <UsageModal isOpen={showUsageModal} onClose={() => setShowUsageModal(false)} />
     </div>
   );
 }
