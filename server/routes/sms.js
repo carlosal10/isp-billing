@@ -102,5 +102,40 @@ router.post('/send-test', async (req, res) => {
   }
 });
 
-module.exports = router;
+// Send an SMS to a specific customer using a template and on-the-fly paylink
+// Body: { customerId, planId?, templateType?, language?, dueAt? }
+router.post('/send', async (req, res) => {
+  try {
+    const { customerId, planId, templateType = 'payment-link', language = 'en', dueAt } = req.body || {};
+    if (!customerId) return res.status(400).json({ error: 'Missing customerId' });
 
+    const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId }).lean();
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    const plan = planId
+      ? await Plan.findOne({ _id: planId, tenantId: req.tenantId }).lean()
+      : (customer.plan ? await Plan.findOne({ _id: customer.plan, tenantId: req.tenantId }).lean() : null);
+    if (!plan) return res.status(400).json({ error: 'Plan is required (customer has none assigned)' });
+
+    const linkDue = dueAt ? new Date(dueAt) : new Date(Date.now() + 3 * 24 * 3600 * 1000);
+    const { url } = await createPayLink({ tenantId: req.tenantId, customerId: customer._id, planId: plan._id, dueAt: linkDue });
+
+    const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
+    const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay: {{payment_link}}';
+
+    const rendered = renderTemplate(body, {
+      name: customer.name || 'Customer',
+      plan_name: plan.name || 'Plan',
+      amount: plan.price != null ? String(plan.price) : '',
+      expiry_date: formatDateISO(linkDue),
+      payment_link: url,
+    });
+
+    const resp = await sendSms(req.tenantId, customer.phone, rendered);
+    res.json({ ok: true, id: resp.id, provider: resp.provider, to: customer.phone });
+  } catch (e) {
+    console.error('sms send error', e);
+    res.status(500).json({ error: e.message || 'Failed to send SMS' });
+  }
+});
+
+module.exports = router;

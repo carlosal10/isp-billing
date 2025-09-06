@@ -15,6 +15,7 @@ import HotspotSetupModal from "./components/HotspotModal";
 import PaymentIntegrationModal from "./components/PaymentSetting";
 import ConnectMikrotikModal from "./components/ConnectMikrotik";
 import MessagingModal from "./components/MessagingModal";
+import SmsSettingsModal from "./components/SmsSettingsModal";
 import PaymentsModal from "./components/PaymentsModal";
 import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 
@@ -106,6 +107,7 @@ export default function App() {
         />
         <ConnectMikrotikModal isOpen={activeModal === MODALS.MIKROTIK} onClose={closeModal} />
         <MessagingModal isOpen={activeModal === MODALS.MESSAGING} onClose={closeModal} />
+        <SmsSettingsModal isOpen={activeModal === MODALS.SMS_SETTINGS} onClose={closeModal} />
         <PaymentsModal isOpen={activeModal === MODALS.PAYMENTS} onClose={closeModal} />
         <MikrotikTerminalModal
           isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}

@@ -9,6 +9,7 @@ const MODALS = {
   USAGE: "usage",
   PAYMENTS: "payments",
   MESSAGING: "messaging",
+  SMS_SETTINGS: "smsSettings",
   MIKROTIK_TERMINAL: "mikrotikTerminal",
   
 };

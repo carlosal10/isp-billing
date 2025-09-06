@@ -131,6 +131,7 @@ const mpesaSettingsRoutes = require("./routes/mpesaSettings");
 const stripeWebhook = require("./routes/stripeWebhook");
 const smsRoutes = require("./routes/sms");
 const paylinkRoutes = require("./routes/paylink");
+const paylinkAdminRoutes = require("./routes/paylinkAdmin");
 
 // Debug
 const debugRoutes = require("./routes/debug");
@@ -188,6 +189,8 @@ app.use("/api/payment/stripe", stripeWebhook);
 app.use("/api/sms", authenticate, requireTenant, smsRoutes);
 // Public paylink endpoints
 app.use("/api/paylink", paylinkRoutes);
+// Admin/protected paylink helpers
+app.use("/api/paylink/admin", authenticate, requireTenant, paylinkAdminRoutes);
 
 // Debug (echo headers as seen *after* guards)
 app.use("/api/debug", authenticate, requireTenant, debugRoutes);
