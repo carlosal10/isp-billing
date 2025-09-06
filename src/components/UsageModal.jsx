@@ -5,25 +5,23 @@ import { api } from "../lib/apiClient";
 import 'chart.js/auto';
 import "./UsageModal.css";
 
-// Fallback minimal wrappers in case UI kit is absent
-const Modal = ({ isOpen, onClose, children }) =>
-  !isOpen ? null : (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999 }}>
-      <div style={{ background: "#fff", margin: "40px auto", padding: 16, borderRadius: 12, maxWidth: 900 }}>
-        {children}
-      </div>
-    </div>
-  );
-const Button = ({ children, ...props }) => (
-  <button {...props} style={{ padding: "6px 10px", background: "#111827", color: "#fff", borderRadius: 6 }}>
+const Button = ({ children, className = "", ...props }) => (
+  <button
+    {...props}
+    className={className}
+    style={{ padding: "6px 10px", background: "#111827", color: "#fff", borderRadius: 6 }}
+  >
     {children}
   </button>
 );
 const Card = ({ children, className }) => (
-  <div className={className} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>{children}</div>
+  <div className={`card ${className || ""}`} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+    {children}
+  </div>
 );
-const CardContent = ({ children }) => <div>{children}</div>;
+const CardContent = ({ children, className = "" }) => <div className={`card-content ${className}`}>{children}</div>;
 
+// Converted from modal overlay to bottom panel that's part of the page
 const UsageModal = ({ isOpen, onClose }) => {
   const [usageTrends, setUsageTrends] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
@@ -89,96 +87,97 @@ const UsageModal = ({ isOpen, onClose }) => {
     ],
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Usage Logs & Reports</h2>
-        <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-          <FaTimes size={20} />
+    <div className="usage-panel open">
+      <div className="usage-panel-header">
+        <h2>Usage Logs & Reports</h2>
+        <button onClick={onClose} aria-label="Close usage panel" className="icon-button">
+          <FaTimes size={18} />
         </button>
       </div>
 
       {statusMsg && (
-        <div style={{ marginBottom: 8, color: "#6b7280" }}>{statusMsg}</div>
+        <div className="usage-panel-status">{statusMsg}</div>
       )}
 
-      {/* Charts */}
-      <Card className="mb-4">
-        <CardContent>
-          <h3 className="text-lg font-semibold mb-2">PPPoE Usage Trends</h3>
-          <Line data={usageTrendsData} />
-        </CardContent>
-      </Card>
+      <div className="usage-panel-body">
+        <Card className="mb-4">
+          <CardContent>
+            <h3 className="section-title">PPPoE Usage Trends</h3>
+            <Line data={usageTrendsData} />
+          </CardContent>
+        </Card>
 
-      <Card className="mb-4">
-        <CardContent>
-          <h3 className="text-lg font-semibold mb-2">Active PPPoE Users (Daily)</h3>
-          <Bar data={activeUsersData} />
-        </CardContent>
-      </Card>
+        <Card className="mb-4">
+          <CardContent>
+            <h3 className="section-title">Active PPPoE Users (Daily)</h3>
+            <Bar data={activeUsersData} />
+          </CardContent>
+        </Card>
 
-      {/* Usage Logs */}
-      <Card className="mb-4 overflow-x-auto">
-        <CardContent>
-          <h3 className="text-lg font-semibold mb-2">Usage Logs</h3>
-          <table className="w-full text-left border">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-2">#</th>
-                <th className="p-2">User</th>
-                <th className="p-2">Date</th>
-                <th className="p-2">Bytes In</th>
-                <th className="p-2">Bytes Out</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usageLogs.map((log, idx) => (
-                <tr key={log._id || idx} className="border-t">
-                  <td className="p-2">{idx + 1}</td>
-                  <td className="p-2">{log.user}</td>
-                  <td className="p-2">{new Date(log.date).toLocaleDateString()}</td>
-                  <td className="p-2">{log.in}</td>
-                  <td className="p-2">{log.out}</td>
+        <Card className="mb-4 overflow-x-auto">
+          <CardContent>
+            <h3 className="section-title">Usage Logs</h3>
+            <table className="w-full text-left border">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="p-2">#</th>
+                  <th className="p-2">User</th>
+                  <th className="p-2">Date</th>
+                  <th className="p-2">Bytes In</th>
+                  <th className="p-2">Bytes Out</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+              </thead>
+              <tbody>
+                {usageLogs.map((log, idx) => (
+                  <tr key={log._id || idx} className="border-t">
+                    <td className="p-2">{idx + 1}</td>
+                    <td className="p-2">{log.user}</td>
+                    <td className="p-2">{new Date(log.date).toLocaleDateString()}</td>
+                    <td className="p-2">{log.in}</td>
+                    <td className="p-2">{log.out}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
 
-      {/* Invoices */}
-      <Card className="mb-4 overflow-x-auto">
-        <CardContent>
-          <h3 className="text-lg font-semibold mb-2">Invoices</h3>
-          <table className="w-full text-left border">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-2">#</th>
-                <th className="p-2">Customer</th>
-                <th className="p-2">Amount</th>
-                <th className="p-2">Date</th>
-                <th className="p-2">Download</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv, idx) => (
-                <tr key={inv._id || idx} className="border-t">
-                  <td className="p-2">{idx + 1}</td>
-                  <td className="p-2">{inv.customer}</td>
-                  <td className="p-2">{inv.amount}</td>
-                  <td className="p-2">{new Date(inv.date).toLocaleDateString()}</td>
-                  <td className="p-2">
-                    <Button size="sm" className="flex items-center gap-2">
-                      <FaDownload /> PDF
-                    </Button>
-                  </td>
+        <Card className="mb-4 overflow-x-auto">
+          <CardContent>
+            <h3 className="section-title">Invoices</h3>
+            <table className="w-full text-left border">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="p-2">#</th>
+                  <th className="p-2">Customer</th>
+                  <th className="p-2">Amount</th>
+                  <th className="p-2">Date</th>
+                  <th className="p-2">Download</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-    </Modal>
+              </thead>
+              <tbody>
+                {invoices.map((inv, idx) => (
+                  <tr key={inv._id || idx} className="border-t">
+                    <td className="p-2">{idx + 1}</td>
+                    <td className="p-2">{inv.customer}</td>
+                    <td className="p-2">{inv.amount}</td>
+                    <td className="p-2">{new Date(inv.date).toLocaleDateString()}</td>
+                    <td className="p-2">
+                      <Button className="flex items-center gap-2">
+                        <FaDownload /> PDF
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 };
 
