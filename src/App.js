@@ -25,7 +25,7 @@ import ResetPassword from "./pages/ResetPassword";
 import AccountSettings from "./pages/AccountSettings";
 
 export default function App() {
-  const { isAuthed, token } = useAuth();
+  const { isAuthed, token, ispId } = useAuth();
 
   // Sidebar state: open on desktop, closed on mobile
   const [isDesktop, setIsDesktop] = useState(
@@ -100,6 +100,7 @@ export default function App() {
         <PaymentIntegrationModal
           isOpen={activeModal === MODALS.PAYMENT_INTEGRATION}
           onClose={closeModal}
+          ispId={ispId}
         />
         <ConnectMikrotikModal isOpen={activeModal === MODALS.MIKROTIK} onClose={closeModal} />
         <MessagingModal isOpen={activeModal === MODALS.MESSAGING} onClose={closeModal} />

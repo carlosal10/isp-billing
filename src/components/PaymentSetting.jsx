@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { FaTimes, FaStripe, FaPaypal, FaMoneyBillWave } from "react-icons/fa";
 import "./PaymentSetting.css";
 import { api } from "../lib/apiClient";
+import { useAuth } from "../context/AuthContext";
 
 const PROVIDERS = [
   { key: "mpesa", label: "M-Pesa", icon: <FaMoneyBillWave /> },
@@ -25,6 +26,8 @@ function TextInput({ value, onChange, placeholder }) {
 }
 
 export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
+  const { ispId: ctxIspId } = useAuth();
+  const effectiveIspId = ispId || ctxIspId || null;
   const [activeTab, setActiveTab] = useState("mpesa");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -182,7 +185,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
         <h2 className="text-2xl font-bold mb-2">Payment Integrations</h2>
 
-        {!ispId && (
+        {!effectiveIspId && (
           <p className="text-red-600 text-sm mb-3">
             ⚠ ISP ID not available. Ensure you’re logged in and a tenant is selected.
           </p>
