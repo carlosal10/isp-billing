@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
 import "./Login.css";
@@ -14,6 +14,11 @@ export default function AccountSettings() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
+
+  // Tenant subdomain management (moved from Payment Integration)
+  const [subdomain, setSubdomain] = useState("");
+  const [subMsg, setSubMsg] = useState("");
+  const [savingSub, setSavingSub] = useState(false);
 
   async function saveProfile(e) {
     e.preventDefault();
@@ -50,9 +55,52 @@ export default function AccountSettings() {
     }
   }
 
+  useEffect(() => {
+    async function loadTenant() {
+      try {
+        const { data } = await api.get("/tenant/me");
+        setSubdomain(data?.subdomain || "");
+        setSubMsg("");
+      } catch (e) {
+        setSubMsg(e?.message || "Failed to load tenant");
+      }
+    }
+    loadTenant();
+  }, []);
+
+  async function saveSubdomain(e) {
+    e.preventDefault();
+    setSavingSub(true);
+    setSubMsg("");
+    try {
+      const { data } = await api.put("/tenant/subdomain", { subdomain });
+      setSubMsg(data?.url ? `Saved. URL: ${data.url}` : "Saved");
+    } catch (e) {
+      setSubMsg(`Failed: ${e?.message || "Save error"}`);
+    } finally {
+      setSavingSub(false);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
       <h2 style={{ marginTop: 0 }}>Account Settings</h2>
+
+      <form onSubmit={saveSubdomain} className="space-y-3" aria-label="Tenant Subdomain">
+        <h3 style={{ margin: 0 }}>Tenant Subdomain</h3>
+        <p className="helper-text">Set your subdomain (e.g., "acme" → acme.your-root-domain)</p>
+        <input
+          type="text"
+          value={subdomain}
+          onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
+          placeholder="subdomain"
+          required
+        />
+        <button type="submit" disabled={savingSub}>{savingSub ? 'Saving…' : 'Save subdomain'}</button>
+        {subMsg && (
+          <div className="helper-text" style={{ color: subMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{subMsg}</div>
+        )}
+      </form>
 
       <form onSubmit={saveProfile} className="space-y-3" aria-label="Profile">
         <h3 style={{ margin: 0 }}>Profile</h3>
@@ -77,4 +125,3 @@ export default function AccountSettings() {
     </div>
   );
 }
-
