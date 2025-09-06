@@ -4,6 +4,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const path = require("path");
 require("./jobs/expireAccess");
 require("./jobs/smsReminders");
 
@@ -194,6 +195,20 @@ app.use("/api/paylink/admin", authenticate, requireTenant, paylinkAdminRoutes);
 
 // Debug (echo headers as seen *after* guards)
 app.use("/api/debug", authenticate, requireTenant, debugRoutes);
+
+// ----------------- Serve SPA (static build) -----------------
+// Gate behind SERVE_CLIENT to avoid double-hosting when frontend is separate
+if (String(process.env.SERVE_CLIENT).toLowerCase() === 'true') {
+  try {
+    const buildDir = path.resolve(__dirname, "../build");
+    app.use(express.static(buildDir));
+    // Rewrite non-API routes to index.html so deep-links refresh
+    app.get(/^(?!\/(api|platform-api)\b).*$/, (req, res, next) => {
+      if (req.method !== 'GET') return next();
+      res.sendFile(path.join(buildDir, "index.html"));
+    });
+  } catch {}
+}
 
 // ----------------- Socket.IO (namespaced terminal) -----------------
 io.of("/terminal").use((socket, next) => {

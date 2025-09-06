@@ -24,11 +24,16 @@ const SmsSettingsSchema = new mongoose.Schema(
     },
 
     // Simple schedule config (days/hours before expiry)
-    schedule: {
+  schedule: {
       reminder5Days: { type: Boolean, default: true },
       reminder3Days: { type: Boolean, default: true },
       dueWarnHours: { type: Number, default: 4 },
     },
+
+    // Automation toggles
+    autoSendOnCreate: { type: Boolean, default: false },
+    autoSendOnPlanChange: { type: Boolean, default: false },
+    autoTemplateType: { type: String, default: 'payment-link' },
   },
   { timestamps: true }
 );
@@ -36,4 +41,3 @@ const SmsSettingsSchema = new mongoose.Schema(
 SmsSettingsSchema.index({ tenantId: 1 }, { unique: true });
 
 module.exports = mongoose.model('SmsSettings', SmsSettingsSchema);
-

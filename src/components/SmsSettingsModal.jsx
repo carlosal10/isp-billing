@@ -14,6 +14,9 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     twilio: { accountSid: '', authToken: '', from: '' },
     africastalking: { apiKey: '', username: '', from: '' },
     schedule: { reminder5Days: true, reminder3Days: true, dueWarnHours: 4 },
+    autoSendOnCreate: false,
+    autoSendOnPlanChange: false,
+    autoTemplateType: 'payment-link',
   });
 
   const [templates, setTemplates] = useState([
@@ -152,6 +155,26 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
               <div>
                 <label className="block text-sm">Sender ID</label>
                 <input value={settings.senderId||''} onChange={(e)=>setSettings(s=>({...s, senderId: e.target.value}))} className="w-full border rounded px-3 py-2" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={settings.autoSendOnCreate} onChange={(e)=>setSettings(s=>({...s, autoSendOnCreate: e.target.checked}))} />
+                Auto send paylink on customer creation
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={settings.autoSendOnPlanChange} onChange={(e)=>setSettings(s=>({...s, autoSendOnPlanChange: e.target.checked}))} />
+                Auto send paylink when plan changes
+              </label>
+              <div>
+                <label className="block text-sm">Auto-send template</label>
+                <select value={settings.autoTemplateType} onChange={(e)=>setSettings(s=>({...s, autoTemplateType: e.target.value}))} className="w-full border rounded px-3 py-2">
+                  <option value="payment-link">payment-link</option>
+                  <option value="reminder-5">reminder-5</option>
+                  <option value="reminder-3">reminder-3</option>
+                  <option value="reminder-0">reminder-0</option>
+                </select>
               </div>
             </div>
 

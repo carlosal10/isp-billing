@@ -10,6 +10,11 @@ const {
   removeCustomerQueue,
   updateCustomerQueue,
 } = require('../utils/mikrotikBandwidthManager');
+const SmsSettings = require('../models/SmsSettings');
+const SmsTemplate = require('../models/SmsTemplate');
+const { createPayLink } = require('../utils/paylink');
+const { renderTemplate, formatDateISO } = require('../utils/template');
+const { sendSms } = require('../utils/sms');
 
 // ----------------- Helpers -----------------
 function generateAccountNumber() {
@@ -199,6 +204,30 @@ router.post('/', async (req, res) => {
       console.warn('Queue apply failed:', e?.message || e);
     }
 
+    // Optional: Auto-send paylink SMS on customer creation
+    try {
+      const smsCfg = await SmsSettings.findOne({ tenantId: req.tenantId }).lean();
+      if (smsCfg?.enabled && smsCfg?.autoSendOnCreate) {
+        const templateType = smsCfg?.autoTemplateType || 'payment-link';
+        const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, active: true }).lean();
+        const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}). Pay: {{payment_link}}';
+        const dueAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+        const { url } = await createPayLink({ tenantId: req.tenantId, customerId: newCustomer._id, planId: plan._id, dueAt });
+        const rendered = renderTemplate(body, {
+          name: newCustomer.name || 'Customer',
+          plan_name: plan.name || 'Plan',
+          amount: String(plan.price ?? ''),
+          expiry_date: formatDateISO(dueAt),
+          payment_link: url,
+        });
+        if (newCustomer.phone) {
+          await sendSms(req.tenantId, newCustomer.phone, rendered);
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-send paylink SMS failed:', e?.message || e);
+    }
+
     return res.status(201).json({ message: 'Customer created successfully', customer: newCustomer });
   } catch (err) {
     console.error('Create customer failed:', err);
@@ -213,7 +242,7 @@ router.put('/:id', async (req, res) => {
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
     const { plan: planId, connectionType, pppoeConfig, staticConfig } = req.body;
-
+    const originalPlanId = customer.plan ? String(customer.plan) : '';
     const plan = await Plan.findOne({ _id: (planId || customer.plan), tenantId: req.tenantId });
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
@@ -247,6 +276,40 @@ router.put('/:id', async (req, res) => {
       await updateCustomerQueue(customer, plan);
     } catch (e) {
       console.warn('Queue update failed:', e?.message || e);
+    }
+
+    // If plan was assigned/changed, optionally auto-send paylink SMS (separate toggle)
+    try {
+      const newPlanId = updated.plan ? String(updated.plan) : '';
+      const planChanged = newPlanId && newPlanId !== originalPlanId;
+      if (planChanged) {
+        const SmsSettings = require('../models/SmsSettings');
+        const SmsTemplate = require('../models/SmsTemplate');
+        const { createPayLink } = require('../utils/paylink');
+        const { renderTemplate, formatDateISO } = require('../utils/template');
+        const { sendSms } = require('../utils/sms');
+
+        const smsCfg = await SmsSettings.findOne({ tenantId: req.tenantId }).lean();
+        if (smsCfg?.enabled && smsCfg?.autoSendOnPlanChange) {
+          const templateType = smsCfg?.autoTemplateType || 'payment-link';
+          const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, active: true }).lean();
+          const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}). Pay: {{payment_link}}';
+          const dueAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+          const { url } = await createPayLink({ tenantId: req.tenantId, customerId: updated._id, planId: updated.plan, dueAt });
+          const rendered = renderTemplate(body, {
+            name: updated.name || 'Customer',
+            plan_name: plan.name || 'Plan',
+            amount: String(plan.price ?? ''),
+            expiry_date: formatDateISO(dueAt),
+            payment_link: url,
+          });
+          if (updated.phone) {
+            await sendSms(req.tenantId, updated.phone, rendered);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-send on plan change failed:', e?.message || e);
     }
 
     return res.json({ message: 'Customer updated successfully', customer: updated });
