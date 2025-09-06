@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
+import { api } from "../lib/apiClient";
 
 export default function MessagingModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
@@ -27,17 +28,17 @@ export default function MessagingModal({ isOpen, onClose }) {
     setResponse("");
 
     try {
-      // 🔹 Replace with actual API call later
-      // Example: await axios.post(`/api/send-${formData.channel}`, formData);
-
-      setTimeout(() => {
-        setLoading(false);
-        setResponse(`✅ ${formData.channel.toUpperCase()} sent successfully!`);
+      if (formData.channel === "sms") {
+        await api.post("/sms/send-test", { to: formData.recipient, body: formData.message });
+        setResponse("SMS sent successfully.");
         setFormData({ channel: "sms", recipient: "", message: "" });
-      }, 1500);
+      } else {
+        setResponse("Only SMS test is supported here for now.");
+      }
     } catch (err) {
+      setResponse(`Failed to send via ${formData.channel.toUpperCase()}: ${err?.message || 'error'}`);
+    } finally {
       setLoading(false);
-      setResponse(`❌ Failed to send via ${formData.channel.toUpperCase()}`);
     }
   };
 
@@ -134,3 +135,4 @@ export default function MessagingModal({ isOpen, onClose }) {
     </div>
   );
 }
+

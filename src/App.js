@@ -88,6 +88,8 @@ export default function App() {
         {/* Page content */}
         <div className="content-area">
           <Routes>
+            {/* Public pay page should be accessible even when logged in */}
+            <Route path="/pay" element={<PayLink />} />
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/settings" element={<AccountSettings />} />

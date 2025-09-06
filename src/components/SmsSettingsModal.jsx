@@ -81,7 +81,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   async function loadCatalog() {
     try {
       const [c, p] = await Promise.all([
-        api.get('/customers'),
+        api.get('/customers'), // includes populated plan
         api.get('/plans'),
       ]);
       setCustomers(Array.isArray(c.data) ? c.data : []);
@@ -90,6 +90,14 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   }
 
   useEffect(() => { if (tab === 'paylink') loadCatalog(); }, [tab]);
+
+  // Auto-select customer's assigned plan when customer changes
+  useEffect(() => {
+    if (!pick.customerId) return;
+    const c = customers.find(x => x._id === pick.customerId);
+    const planId = c?.plan?._id || c?.plan || '';
+    setPick(prev => ({ ...prev, planId: planId || '' }));
+  }, [pick.customerId, customers]);
 
   async function createPaylink() {
     setLoading(true); setMsg(''); setCreated({ url: '', token: '' });
@@ -213,13 +221,14 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm">Plan</label>
-                <select value={pick.planId} onChange={(e)=>setPick(p=>({...p, planId:e.target.value}))} className="w-full border rounded px-3 py-2">
-                  <option value="">Select plan</option>
-                  {plans.map(p => (
-                    <option key={p._id} value={p._id}>{p.name} (KES {p.price})</option>
-                  ))}
-                </select>
+                <label className="block text-sm">Plan (from customer)</label>
+                <div className="w-full border rounded px-3 py-2 bg-gray-50">
+                  {(() => {
+                    const c = customers.find(x => x._id === pick.customerId);
+                    const plan = c?.plan || plans.find(pl => pl._id === pick.planId);
+                    return plan ? `${plan.name} (KES ${plan.price})` : 'No plan assigned';
+                  })()}
+                </div>
               </div>
               <div>
                 <label className="block text-sm">Due Date</label>

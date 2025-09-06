@@ -70,14 +70,14 @@ router.post('/preview', async (req, res) => {
   }
 });
 
-// Send a test SMS using a template and a sample customer/plan
+// Send a test SMS using a template and a sample customer/plan (or custom body)
 router.post('/send-test', async (req, res) => {
   try {
-    const { to, templateType = 'payment-link', language = 'en' } = req.body || {};
+    const { to, templateType = 'payment-link', language = 'en', body: overrideBody, variables } = req.body || {};
     if (!to) return res.status(400).json({ error: 'Missing recipient phone' });
 
     const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
-    const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay here: {{payment_link}}';
+    const body = overrideBody || tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay here: {{payment_link}}';
 
     // pick a random or first customer+plan for preview; but allow override via req
     const customer = await Customer.findOne({ tenantId: req.tenantId }).lean();
@@ -92,6 +92,7 @@ router.post('/send-test', async (req, res) => {
       amount: plan?.price != null ? String(plan.price) : '',
       expiry_date: formatDateISO(dueAt),
       payment_link: url,
+      ...(variables || {}),
     });
 
     const resp = await sendSms(req.tenantId, to, rendered);
