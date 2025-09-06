@@ -4,6 +4,26 @@ const router = express.Router();
 const Payment = require('../models/Payment');
 const { applyCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 
+function parseDurationToDays(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().toLowerCase();
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+  const m = s.match(/(\d+(\.\d+)?)\s*(day|week|month|year)s?/);
+  if (m) {
+    const n = parseFloat(m[1]); const u = m[3];
+    if (u === 'day') return n;
+    if (u === 'week') return n * 7;
+    if (u === 'month') return n * 30;
+    if (u === 'year') return n * 365;
+  }
+  if (s === 'monthly' || s === 'month') return 30;
+  if (s === 'weekly' || s === 'week') return 7;
+  if (s === 'yearly' || s === 'annual' || s === 'year') return 365;
+  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  return Number.isFinite(num) ? num : NaN;
+}
+
 // -------------------- Safaricom STK Callback --------------------
 router.post('/callback', async (req, res) => {
   const body = req.body;
@@ -38,9 +58,12 @@ router.post('/callback', async (req, res) => {
         payment.amount = amount || payment.amount;
         payment.phoneNumber = phone || payment.phoneNumber;
 
-        // Set expiry date from plan duration (in days)
+        // Set expiry date from plan duration (string like '30 days' or 'monthly')
         if (payment.plan?.duration) {
-          payment.expiryDate = new Date(Date.now() + payment.plan.duration * 24 * 60 * 60 * 1000);
+          const days = payment.plan.durationDays ?? parseDurationToDays(payment.plan.duration);
+          if (Number.isFinite(days) && days > 0) {
+            payment.expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+          }
         }
 
         await payment.save();

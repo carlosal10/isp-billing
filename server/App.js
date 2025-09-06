@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("./jobs/expireAccess");
+require("./jobs/smsReminders");
 
 const app = express();
 
@@ -128,6 +129,8 @@ const paymentCallbackRoutes = require("./routes/paymentCallback");
 const paymentConfigRoutes = require("./routes/paymentConfig");
 const mpesaSettingsRoutes = require("./routes/mpesaSettings");
 const stripeWebhook = require("./routes/stripeWebhook");
+const smsRoutes = require("./routes/sms");
+const paylinkRoutes = require("./routes/paylink");
 
 // Debug
 const debugRoutes = require("./routes/debug");
@@ -181,6 +184,10 @@ app.use("/api/payment/callback", paymentCallbackRoutes);
 app.use("/api/payment-config", authenticate, requireTenant, paymentConfigRoutes);
 app.use("/api/mpesa-settings", authenticate, requireTenant, mpesaSettingsRoutes);
 app.use("/api/payment/stripe", stripeWebhook);
+// SMS settings/templates (tenant)
+app.use("/api/sms", authenticate, requireTenant, smsRoutes);
+// Public paylink endpoints
+app.use("/api/paylink", paylinkRoutes);
 
 // Debug (echo headers as seen *after* guards)
 app.use("/api/debug", authenticate, requireTenant, debugRoutes);

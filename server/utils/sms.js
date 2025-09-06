@@ -1,0 +1,89 @@
+const axios = require('axios');
+const qs = require('querystring');
+const SmsSettings = require('../models/SmsSettings');
+
+function getEnv(name, def = undefined) {
+  return process.env[name] || def;
+}
+
+function pickTenantFallback(provider, tenantSettings) {
+  // Return credentials, preferring tenant settings; fall back to env
+  if (provider === 'twilio') {
+    const acc = tenantSettings?.twilio?.accountSid || getEnv('TWILIO_ACCOUNT_SID');
+    const tok = tenantSettings?.twilio?.authToken || getEnv('TWILIO_AUTH_TOKEN');
+    const from = tenantSettings?.twilio?.from || tenantSettings?.senderId || getEnv('TWILIO_FROM');
+    if (acc && tok && from) return { accountSid: acc, authToken: tok, from };
+    return null;
+  }
+  if (provider === 'africastalking') {
+    const apiKey = tenantSettings?.africastalking?.apiKey || getEnv('AFRICASTALKING_API_KEY');
+    const username = tenantSettings?.africastalking?.username || getEnv('AFRICASTALKING_USERNAME');
+    const from = tenantSettings?.africastalking?.from || tenantSettings?.senderId || getEnv('AFRICASTALKING_FROM');
+    if (apiKey && username) return { apiKey, username, from };
+    return null;
+  }
+  return null;
+}
+
+async function sendViaTwilio(creds, to, body) {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(creds.accountSid)}/Messages.json`;
+  const data = qs.stringify({ From: creds.from, To: to, Body: body });
+  const auth = Buffer.from(`${creds.accountSid}:${creds.authToken}`).toString('base64');
+  const res = await axios.post(url, data, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    timeout: 15000,
+  });
+  return { id: res.data?.sid, provider: 'twilio', raw: res.data };
+}
+
+async function sendViaAfricasTalking(creds, to, body) {
+  const url = 'https://api.africastalking.com/version1/messaging';
+  const data = qs.stringify({ username: creds.username, to, message: body, from: creds.from });
+  const res = await axios.post(url, data, {
+    headers: {
+      apiKey: creds.apiKey,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    timeout: 15000,
+  });
+  const msg = res.data?.SMSMessageData?.Recipients?.[0] || {};
+  return { id: msg?.messageId || String(Date.now()), provider: 'africastalking', raw: res.data };
+}
+
+function normalizePhone(phone) {
+  if (!phone) return phone;
+  const p = String(phone).trim();
+  if (p.startsWith('+')) return p;
+  if (p.startsWith('0')) return '+254' + p.slice(1); // Kenya default
+  if (/^\d{12}$/.test(p) && p.startsWith('254')) return '+'.concat(p);
+  return p;
+}
+
+async function sendSms(tenantId, to, body) {
+  const settings = await SmsSettings.findOne({ tenantId }).lean();
+  const enabled = settings?.enabled ?? false;
+  if (!enabled) throw new Error('SMS disabled');
+
+  const order = [settings?.primaryProvider || 'twilio', settings?.primaryProvider === 'twilio' ? 'africastalking' : 'twilio'];
+  const normalized = normalizePhone(to);
+
+  let lastError = null;
+  for (const p of order) {
+    try {
+      const creds = pickTenantFallback(p, settings);
+      if (!creds) { lastError = new Error(`Missing credentials for ${p}`); continue; }
+      if (p === 'twilio') return await sendViaTwilio(creds, normalized, body);
+      if (p === 'africastalking') return await sendViaAfricasTalking(creds, normalized, body);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error('No SMS provider configured');
+}
+
+module.exports = { sendSms, normalizePhone };
+

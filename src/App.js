@@ -7,6 +7,7 @@ import { GiHamburgerMenu } from "react-icons/gi";
 import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Sidebar";
 import Login from "./pages/Login";
+import PayLink from "./pages/PayLink";
 import ClientsModal from "./components/CustomersModal";
 import SubscriptionPlansModal from "./components/PlanModal";
 import PppoeSetupModal from "./components/PppoeModal";
@@ -55,6 +56,7 @@ export default function App() {
     return (
       <Router>
         <Routes>
+          <Route path="/pay" element={<PayLink />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
