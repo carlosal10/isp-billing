@@ -41,7 +41,7 @@ export default function PayLink() {
     if (!token || !phone) return;
     setSending(true); setMessage(''); setError('');
     try {
-      const res = await api.post('/paylink/stk', { token, phone });
+      await api.post('/paylink/stk', { token, phone });
       setMessage('Payment request sent. Check your phone to approve.');
     } catch (e) {
       setError(e?.message || 'Failed to initiate payment');
@@ -105,4 +105,3 @@ export default function PayLink() {
     </div>
   );
 }
-
