@@ -159,6 +159,12 @@ app.use("/api/stats", authenticate, requireTenant, statsRoutes);
 app.use("/api/tenant", authenticate, requireTenant, tenantRoutes);
 app.use("/api/account", authenticate, accountRoutes);
 
+// Public paylink endpoints (must be before any generic /api auth wrappers)
+app.use("/api/paylink", paylinkRoutes);
+// Public payment provider callbacks
+app.use("/api/payment/callback", paymentCallbackRoutes);
+app.use("/api/payment/stripe", stripeWebhook);
+
 // MikroTik PPPoE & connectivity
 app.use("/api/pppoe", authenticate, requireTenant, mikrotikUserRoutes);
 app.use("/api/connect", authenticate, requireTenant, mikrotikConnectRoutes);
@@ -182,14 +188,10 @@ app.use("/api/hotspot", authenticate, requireTenant, hotspotRoutes);
 
 // Payments & M-Pesa
 app.use("/api/payments", authenticate, requireTenant, paymentRoutes);
-app.use("/api/payment/callback", paymentCallbackRoutes);
 app.use("/api/payment-config", authenticate, requireTenant, paymentConfigRoutes);
 app.use("/api/mpesa-settings", authenticate, requireTenant, mpesaSettingsRoutes);
-app.use("/api/payment/stripe", stripeWebhook);
 // SMS settings/templates (tenant)
 app.use("/api/sms", authenticate, requireTenant, smsRoutes);
-// Public paylink endpoints
-app.use("/api/paylink", paylinkRoutes);
 // Admin/protected paylink helpers
 app.use("/api/paylink/admin", authenticate, requireTenant, paylinkAdminRoutes);
 
