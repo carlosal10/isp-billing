@@ -448,3 +448,61 @@ router.get('/health/:accountNumber', async (req, res) => {
 });
 
 module.exports = router;
+
+// ----------------- List Disabled/Inactive on Router -----------------
+// Provides a quick way to list accounts that are disabled on the router, to re-enable from UI.
+// GET /api/customers/disabled
+router.get('/disabled', async (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    let secrets = [];
+    let queues = [];
+    try {
+      secrets = await sendCommand('/ppp/secret/print', [], { tenantId, timeoutMs: 12000 });
+    } catch (e) {
+      secrets = [];
+    }
+    try {
+      queues = await sendCommand('/queue/simple/print', [], { tenantId, timeoutMs: 10000 });
+    } catch (e) {
+      queues = [];
+    }
+
+    const pppoe = [];
+    const staticQ = [];
+
+    const disabledYes = (v) => String(v).toLowerCase() === 'yes' || v === true;
+
+    // map PPPoE disabled secrets
+    for (const s of Array.isArray(secrets) ? secrets : []) {
+      const name = s?.name || s?.user || s?.username;
+      if (!name) continue;
+      if (disabledYes(s?.disabled)) {
+        pppoe.push({ accountNumber: String(name), disabled: true });
+      }
+    }
+
+    // map Static queues disabled
+    for (const q of Array.isArray(queues) ? queues : []) {
+      const name = q?.name;
+      if (!name) continue;
+      if (disabledYes(q?.disabled)) {
+        staticQ.push({ accountNumber: String(name), disabled: true });
+      }
+    }
+
+    // attach minimal customer info if exists
+    const allAccounts = [...pppoe, ...staticQ].map((x) => x.accountNumber);
+    const customers = await Customer.find({ tenantId, accountNumber: { $in: allAccounts } })
+      .select('accountNumber name phone email address plan connectionType')
+      .populate('plan', 'name speed price')
+      .lean();
+    const byAcct = new Map(customers.map((c) => [String(c.accountNumber), c]));
+    const attach = (arr) => arr.map((x) => ({ ...x, customer: byAcct.get(x.accountNumber) || null }));
+
+    return res.json({ ok: true, pppoe: attach(pppoe), static: attach(staticQ) });
+  } catch (e) {
+    console.error('list disabled failed:', e?.message || e);
+    return res.status(500).json({ ok: false, error: 'Failed to load disabled users' });
+  }
+});

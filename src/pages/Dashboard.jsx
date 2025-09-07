@@ -7,6 +7,7 @@ import "./Dashboard.css";
 import StatsCards from "../components/StatsCards";
 import UsageModal from "../components/UsageModal";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
+import CustomersBrowserModal from "../components/CustomersBrowserModal";
 
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -73,6 +74,7 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
+  const [browseOpen, setBrowseOpen] = useState(false);
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
@@ -440,6 +442,7 @@ export default function Dashboard() {
               onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
             />
+            <button className="btn" onClick={() => setBrowseOpen(true)} style={{ marginLeft: 8 }}>Browse All</button>
             {searchOpen && searchQuery.trim() && (
               <div className="search-results">
                 {searchResults.map((r) => (
@@ -679,6 +682,11 @@ export default function Dashboard() {
         open={customerModal.open}
         customer={customerModal.customer}
         onClose={() => setCustomerModal({ open: false, customer: null })}
+      />
+      <CustomersBrowserModal
+        open={browseOpen}
+        onClose={() => setBrowseOpen(false)}
+        onSelect={(c) => { setBrowseOpen(false); setCustomerModal({ open: true, customer: c }); }}
       />
     </div>
   );

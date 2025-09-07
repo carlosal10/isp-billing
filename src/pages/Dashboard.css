@@ -39,7 +39,7 @@ body{ background:#f5f5f5; color:var(--navy-700); font-family:Inter,ui-sans-serif
 }
 
 /* header search */
-.header-search{ position: relative; min-width: 320px; }
+.header-search{ position: relative; min-width: 320px; display:flex; align-items:center; gap:8px; }
 .search-input{
   width: 100%; padding:10px 12px; border:1px solid var(--border);
   border-radius:12px; outline:none; background:#fff; color:var(--navy-700);

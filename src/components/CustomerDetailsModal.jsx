@@ -72,7 +72,24 @@ export default function CustomerDetailsModal({ open, onClose, customer }) {
   return (
     <Modal open={open} onClose={onClose} title="Customer Details">
       <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 18 }}>{customer.name || "-"}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 18 }}>{customer.name || "-"}</div>
+          {!!health && (
+            <span
+              title={health.disabled ? 'Disabled on router' : 'Active on router'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                borderRadius: 999, padding: '4px 10px',
+                background: health.disabled ? '#fee2e2' : '#eafaf1',
+                color: health.disabled ? '#991b1b' : '#166534', fontWeight: 700,
+                border: `1px solid ${health.disabled ? '#fecaca' : '#bbf7d0'}`,
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: health.disabled ? '#ef4444' : '#16a34a' }} />
+              {health.disabled ? 'Inactive' : 'Active'}
+            </span>
+          )}
+        </div>
         <div style={{ color: "#111" }}>
           <strong>Account:</strong> {customer.accountNumber || "-"}
         </div>
