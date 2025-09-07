@@ -447,8 +447,6 @@ router.get('/health/:accountNumber', async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // ----------------- List Disabled/Inactive on Router -----------------
 // Provides a quick way to list accounts that are disabled on the router, to re-enable from UI.
 // GET /api/customers/disabled
@@ -506,3 +504,5 @@ router.get('/disabled', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Failed to load disabled users' });
   }
 });
+
+module.exports = router;
