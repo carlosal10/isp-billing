@@ -54,27 +54,27 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.CLIENTS)}>
-            <FaUsers /> Clients
+            <FaUsers /> Manage Clients
           </button>
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.PLANS)}>
-            <MdViewList /> Subscription Plans
+            <MdViewList /> Create Plans
           </button>
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.PPPOE)}>
-            <MdLan /> PPPoE Setup
+            <MdLan /> Configure PPPoE
           </button>
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.HOTSPOT)}>
-            <FaWifi /> Hotspot Setup
+            <FaWifi /> Manage Hotspot
           </button>
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.PAYMENTS)}>
-            <MdPayments /> Payments
+            <MdPayments /> Manage Payments
           </button>
         </li>
         <li>

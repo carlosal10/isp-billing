@@ -58,7 +58,7 @@
 /* Make global buttons NOT affect tabs */
 .customers-modal button:not(.tab-btn){
   height:44px; border:none; border-radius:12px;
-  background:var(--green, #949795); color:#fff; font-weight:700; cursor:pointer;
+  background:var(--green, #949795); color:#000; font-weight:700; cursor:pointer;
   transition:background .15s, transform .06s, box-shadow .15s;
   box-shadow:0 6px 16px rgba(23,201,100,.18);
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -87,7 +87,7 @@
 .tabs .tab-btn:hover{ border-color:#dbe8f7; background:var(--card-sub, #fbfcff) }
 .tabs .tab-btn.active{
   background:var(--green, #818181);
-  color:#fff;
+  color:#0A1F44;
   border-color:var(--green, #5d6b63);
   box-shadow:0 6px 16px rgba(23,201,100,.18);
 }
