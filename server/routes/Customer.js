@@ -88,12 +88,24 @@ router.get('/search', async (req, res) => {
   if (!query || !query.trim()) return res.json([]);
 
   try {
-    const regex = new RegExp(query.trim(), 'i');
+    const q = query.trim();
+    const regex = new RegExp(q, 'i');
     const customers = await Customer.find(
-      { tenantId: req.tenantId, $or: [{ name: regex }, { accountNumber: regex }] },
-      { name: 1, accountNumber: 1 }
+      {
+        tenantId: req.tenantId,
+        $or: [
+          { name: regex },
+          { accountNumber: regex },
+          { email: regex },
+          { phone: regex },
+          { address: regex },
+        ],
+      },
+      // return concise fields for results list; full details fetched via /by-id
+      { name: 1, accountNumber: 1, phone: 1, email: 1, address: 1, plan: 1 }
     )
-      .limit(10)
+      .limit(20)
+      .populate('plan', 'name speed price')
       .lean();
 
     return res.json(customers);
@@ -345,6 +357,93 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('Delete customer failed:', err);
     return res.status(500).json({ message: 'Error deleting customer: ' + err.message });
+  }
+});
+
+module.exports = router;
+
+// ------------- After exports guard to satisfy linter (placed logically above in real app) -------------
+
+// NOTE: Health endpoint lives here to tie MikroTik state to a specific customer/account
+// GET /api/customers/health/:accountNumber
+router.get('/health/:accountNumber', async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const accountNumber = String(req.params.accountNumber);
+
+    const customer = await Customer.findOne({ tenantId, accountNumber })
+      .populate('plan', 'name speed price duration')
+      .lean();
+
+    if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
+
+    const out = {
+      ok: true,
+      accountNumber,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      plan: customer.plan || null,
+      connectionType: customer.connectionType,
+      disabled: null,
+      online: false,
+      uptime: null,
+      bytesIn: 0,
+      bytesOut: 0,
+      addressIp: null,
+      deviceCount: null, // hotspot sessions count or PPPoE=1 if online
+    };
+
+    // PPPoE health
+    if (customer.connectionType === 'pppoe') {
+      let secret = [];
+      let active = [];
+      try {
+        secret = await sendCommand('/ppp/secret/print', [`?name=${accountNumber}`], { tenantId, timeoutMs: 10000 });
+      } catch (_) {}
+      try {
+        active = await sendCommand('/ppp/active/print', [`?name=${accountNumber}`], { tenantId, timeoutMs: 8000 });
+      } catch (_) {}
+
+      const s0 = Array.isArray(secret) ? secret[0] : null;
+      const a0 = Array.isArray(active) ? active[0] : null;
+      const disabledVal = (s0 && (s0.disabled ?? s0['disabled'])) || 'no';
+      const disabled = String(disabledVal).toLowerCase() === 'yes' || disabledVal === true;
+
+      out.disabled = disabled;
+      out.online = !!a0;
+      out.uptime = a0?.uptime || null;
+      out.bytesIn = Number(a0?.['bytes-in'] || a0?.rx || 0) || 0;
+      out.bytesOut = Number(a0?.['bytes-out'] || a0?.tx || 0) || 0;
+      out.addressIp = a0?.address || a0?.['remote-address'] || null;
+      out.deviceCount = out.online ? 1 : 0;
+      out.status = disabled ? 'inactive' : 'active';
+      return res.json(out);
+    }
+
+    // Static IP: reflect queue status if present
+    if (customer.connectionType === 'static') {
+      let queues = [];
+      try {
+        queues = await sendCommand('/queue/simple/print', [`?name=${accountNumber}`], { tenantId, timeoutMs: 8000 });
+      } catch (_) {}
+      const q0 = Array.isArray(queues) ? queues[0] : null;
+      const qDisabledVal = q0?.disabled ?? 'no';
+      const disabled = String(qDisabledVal).toLowerCase() === 'yes' || qDisabledVal === true;
+      out.disabled = disabled;
+      out.status = disabled ? 'inactive' : 'active';
+      out.online = null; // not directly measurable here
+      out.deviceCount = null; // not measurable from ISP router without deeper telemetry
+      return res.json(out);
+    }
+
+    // default fallback
+    out.status = customer.status || 'active';
+    return res.json(out);
+  } catch (e) {
+    console.error('health endpoint failed:', e?.message || e);
+    return res.status(500).json({ ok: false, error: 'Failed to fetch health' });
   }
 });
 

@@ -6,6 +6,7 @@ import "./Dashboard.css";
 
 import StatsCards from "../components/StatsCards";
 import UsageModal from "../components/UsageModal";
+import CustomerDetailsModal from "../components/CustomerDetailsModal";
 
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -67,6 +68,11 @@ export default function Dashboard() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
   const [showUsageModal, setShowUsageModal] = useState(false);
+  // search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
@@ -134,6 +140,40 @@ export default function Dashboard() {
       setErrors((er) => ({ ...er, payments: e.message }));
     } finally {
       setLoading((l) => ({ ...l, payments: false }));
+    }
+  };
+
+  // ---------- SEARCH (Dashboard header) ----------
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/customers/search`, { params: { query: q } });
+        if (!cancelled) setSearchResults(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setSearchResults([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [searchQuery]);
+
+  const openCustomerDetails = async (item) => {
+    try {
+      const id = item?._id || item?.id;
+      if (!id) return;
+      const { data } = await api.get(`/customers/by-id/${id}`);
+      setCustomerModal({ open: true, customer: data });
+      setSearchOpen(false);
+    } catch (e) {
+      setToast({ type: "error", message: e.message });
     }
   };
 
@@ -392,6 +432,29 @@ export default function Dashboard() {
         <header className="page-header">
           <h1>Dashboard</h1>
 
+          <div className="header-search">
+            <input
+              className="search-input"
+              placeholder="Search customers (name, account, phone, email, address)"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+              onFocus={() => setSearchOpen(true)}
+            />
+            {searchOpen && searchQuery.trim() && (
+              <div className="search-results">
+                {searchResults.map((r) => (
+                  <div key={r._id} className="search-item" onClick={() => openCustomerDetails(r)}>
+                    <div className="search-primary">{r.name || '-'} <span className="muted">({r.accountNumber || '-'})</span></div>
+                    <div className="search-secondary">{r.phone || ''}{r.email ? ` • ${r.email}` : ''}</div>
+                  </div>
+                ))}
+                {searchResults.length === 0 && (
+                  <div className="search-empty">No matches</div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div
             className={`mikrotik-status ${mikrotik.connected ? "online" : "offline"}`}
             title={mikrotik.routerIp || ""}
@@ -473,10 +536,7 @@ export default function Dashboard() {
                     <td>{u.planName}</td>
                     <td>
                       {u.source === 'PPPoE' && u.accountNumber ? (
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button className="btn" onClick={() => enableAccount(u.accountNumber)}>Enable</button>
-                          <button className="btn" onClick={() => disableAccount(u.accountNumber)}>Disable</button>
-                        </div>
+                        <button className="btn" onClick={() => disableAccount(u.accountNumber)}>Disable</button>
                       ) : (
                         <span style={{ opacity: 0.5 }}>-</span>
                       )}
@@ -615,6 +675,11 @@ export default function Dashboard() {
         </div>
       )}
       <UsageModal isOpen={showUsageModal} onClose={() => setShowUsageModal(false)} />
+      <CustomerDetailsModal
+        open={customerModal.open}
+        customer={customerModal.customer}
+        onClose={() => setCustomerModal({ open: false, customer: null })}
+      />
     </div>
   );
 }
