@@ -5,6 +5,11 @@ const PaymentConfigSchema = new mongoose.Schema(
     ispId: { type: String, required: true },
     provider: { type: String, required: true, enum: ['mpesa','stripe','paypal'] },
     // Settings will vary by provider
+    // --- M-Pesa (per-tenant) ---
+    consumerKey: String,
+    consumerSecret: String,
+    payMethod: { type: String, enum: ['paybill', 'buygoods'], default: 'paybill' },
+    environment: { type: String, enum: ['sandbox', 'production'], default: 'sandbox' },
     businessName: String,      // M-Pesa
     paybillShortcode: String,  // M-Pesa
     paybillPasskey: String,    // M-Pesa

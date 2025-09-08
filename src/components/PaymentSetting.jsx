@@ -34,6 +34,10 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
   const [formData, setFormData] = useState({
     mpesa: {
+      consumerKey: "",
+      consumerSecret: "",
+      payMethod: "paybill",
+      environment: "sandbox",
       businessName: "",
       paybillShortcode: "",
       paybillPasskey: "",
@@ -52,6 +56,10 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
   const fields = {
     mpesa: [
+      "consumerKey",
+      "consumerSecret",
+      "payMethod",
+      "environment",
       "businessName",
       "paybillShortcode",
       "paybillPasskey",
@@ -179,14 +187,42 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-3">
             <h3 className="text-lg font-semibold capitalize">{activeTab} Settings</h3>
-            {fields[activeTab].map((field) => (
-              <TextInput
-                key={field}
-                placeholder={field.replace(/([A-Z])/g, " $1")}
-                value={formData[activeTab][field]}
-                onChange={(val) => onChange(activeTab, field, val)}
-              />
-            ))}
+            {fields[activeTab].map((field) => {
+              if (activeTab === 'mpesa' && field === 'payMethod') {
+                return (
+                  <select
+                    key={field}
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={formData.mpesa.payMethod || 'paybill'}
+                    onChange={(e) => onChange('mpesa', 'payMethod', e.target.value)}
+                  >
+                    <option value="paybill">Paybill</option>
+                    <option value="buygoods">Buy Goods (Till)</option>
+                  </select>
+                );
+              }
+              if (activeTab === 'mpesa' && field === 'environment') {
+                return (
+                  <select
+                    key={field}
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={formData.mpesa.environment || 'sandbox'}
+                    onChange={(e) => onChange('mpesa', 'environment', e.target.value)}
+                  >
+                    <option value="sandbox">Sandbox</option>
+                    <option value="production">Production</option>
+                  </select>
+                );
+              }
+              return (
+                <TextInput
+                  key={field}
+                  placeholder={field.replace(/([A-Z])/g, " $1")}
+                  value={formData[activeTab][field]}
+                  onChange={(val) => onChange(activeTab, field, val)}
+                />
+              );
+            })}
           </div>
 
           <button
@@ -201,4 +237,3 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     </div>
   );
 }
-
