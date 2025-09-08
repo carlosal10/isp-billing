@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "react-chartjs-2";
 import "chart.js/auto";
 import "./Dashboard.css";
@@ -75,6 +75,7 @@ export default function Dashboard() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
   const [browseOpen, setBrowseOpen] = useState(false);
+  const customersSectionRef = useRef(null);
   // refs
   const [didMount, setDidMount] = useState(false);
 
@@ -151,13 +152,13 @@ export default function Dashboard() {
   useEffect(() => { setDidMount(true); }, []);
   const scrollToCustomers = () => {
     try {
-      const el = document.querySelector('.pppoe-status-section') || document.querySelector('.dashboard');
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } catch (_) {}
+      const el = customersSectionRef.current || document.querySelector('.pppoe-status-section') || document.body;
+      const rect = el.getBoundingClientRect();
+      const y = rect.top + window.pageYOffset - 12;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    } catch (_) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   // ---------- SEARCH (Dashboard header) ----------
@@ -189,7 +190,8 @@ export default function Dashboard() {
       const { data } = await api.get(`/customers/by-id/${id}`);
       setCustomerModal({ open: true, customer: data });
       setSearchOpen(false);
-      scrollToCustomers();
+      // defer to next tick to ensure layout is stable
+      setTimeout(scrollToCustomers, 0);
     } catch (e) {
       setToast({ type: "error", message: e.message });
     }
@@ -197,7 +199,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!didMount) return;
-    if (browseOpen) scrollToCustomers();
+    if (browseOpen) setTimeout(scrollToCustomers, 0);
   }, [browseOpen, didMount]);
 
   const loadSessions = async () => {
@@ -512,7 +514,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="pppoe-status-section">
+        <section ref={customersSectionRef} className="pppoe-status-section">
           <div className="section-head">
             <h2>
               Online Users {loading.sessions && <small>(loading…)</small>}
