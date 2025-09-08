@@ -75,6 +75,8 @@ export default function Dashboard() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
   const [browseOpen, setBrowseOpen] = useState(false);
+  // refs
+  const [didMount, setDidMount] = useState(false);
 
   // toggles
   const [showHotspot, setShowHotspot] = useState(false);
@@ -145,6 +147,19 @@ export default function Dashboard() {
     }
   };
 
+  // helper: scroll to top of customers view area when opening details/browse
+  useEffect(() => { setDidMount(true); }, []);
+  const scrollToCustomers = () => {
+    try {
+      const el = document.querySelector('.pppoe-status-section') || document.querySelector('.dashboard');
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (_) {}
+  };
+
   // ---------- SEARCH (Dashboard header) ----------
   useEffect(() => {
     const q = searchQuery.trim();
@@ -174,10 +189,16 @@ export default function Dashboard() {
       const { data } = await api.get(`/customers/by-id/${id}`);
       setCustomerModal({ open: true, customer: data });
       setSearchOpen(false);
+      scrollToCustomers();
     } catch (e) {
       setToast({ type: "error", message: e.message });
     }
   };
+
+  useEffect(() => {
+    if (!didMount) return;
+    if (browseOpen) scrollToCustomers();
+  }, [browseOpen, didMount]);
 
   const loadSessions = async () => {
     try {
@@ -686,7 +707,7 @@ export default function Dashboard() {
       <CustomersBrowserModal
         open={browseOpen}
         onClose={() => setBrowseOpen(false)}
-        onSelect={(c) => { setBrowseOpen(false); setCustomerModal({ open: true, customer: c }); }}
+        onSelect={(c) => { setBrowseOpen(false); setCustomerModal({ open: true, customer: c }); scrollToCustomers(); }}
       />
     </div>
   );

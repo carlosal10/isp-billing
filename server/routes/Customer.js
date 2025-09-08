@@ -50,6 +50,10 @@ function normalizeProfiles(raw) {
 }
 
 // ----------------- PPPoE Profiles -----------------
+const isYes = (v) => {
+  const s = String(v).trim().toLowerCase();
+  return s === 'yes' || s === 'true' || s === '1' || s === 'on';
+};
 router.get('/profiles', async (req, res) => {
   try {
     const tenantId = req.tenantId;
@@ -408,8 +412,8 @@ router.get('/health/:accountNumber', async (req, res) => {
 
       const s0 = Array.isArray(secret) ? secret[0] : null;
       const a0 = Array.isArray(active) ? active[0] : null;
-      const disabledVal = (s0 && (s0.disabled ?? s0['disabled'])) || 'no';
-      const disabled = String(disabledVal).toLowerCase() === 'yes' || disabledVal === true;
+      const disabledVal = (s0 && (s0.disabled ?? s0['disabled'])) ?? 'no';
+      const disabled = isYes(disabledVal);
 
       out.disabled = disabled;
       out.online = !!a0;
@@ -430,7 +434,7 @@ router.get('/health/:accountNumber', async (req, res) => {
       } catch (_) {}
       const q0 = Array.isArray(queues) ? queues[0] : null;
       const qDisabledVal = q0?.disabled ?? 'no';
-      const disabled = String(qDisabledVal).toLowerCase() === 'yes' || qDisabledVal === true;
+      const disabled = isYes(qDisabledVal);
       out.disabled = disabled;
       out.status = disabled ? 'inactive' : 'active';
       out.online = null; // not directly measurable here
@@ -469,7 +473,7 @@ router.get('/disabled', async (req, res) => {
     const pppoe = [];
     const staticQ = [];
 
-    const disabledYes = (v) => String(v).toLowerCase() === 'yes' || v === true;
+    const disabledYes = (v) => isYes(v);
 
     // map PPPoE disabled secrets
     for (const s of Array.isArray(secrets) ? secrets : []) {

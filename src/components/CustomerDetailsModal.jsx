@@ -71,92 +71,81 @@ export default function CustomerDetailsModal({ open, onClose, customer }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Customer Details">
-      <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>{customer.name || "-"}</div>
+      <div style={{ display: 'grid', gap: 14 }}>
+        {/* Header & status */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#0f172a' }}>{customer.name || '-'}</div>
+            <div style={{ color: '#334155', marginTop: 2 }}>Account #{customer.accountNumber || '-'}</div>
+          </div>
           {!!health && (
             <span
               title={health.disabled ? 'Disabled on router' : 'Active on router'}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                borderRadius: 999, padding: '4px 10px',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                borderRadius: 999, padding: '6px 12px',
                 background: health.disabled ? '#fee2e2' : '#eafaf1',
-                color: health.disabled ? '#991b1b' : '#166534', fontWeight: 700,
+                color: health.disabled ? '#991b1b' : '#166534', fontWeight: 800,
                 border: `1px solid ${health.disabled ? '#fecaca' : '#bbf7d0'}`,
               }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: health.disabled ? '#ef4444' : '#16a34a' }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: health.disabled ? '#ef4444' : '#16a34a' }} />
               {health.disabled ? 'Inactive' : 'Active'}
             </span>
           )}
         </div>
-        <div style={{ color: "#111" }}>
-          <strong>Account:</strong> {customer.accountNumber || "-"}
-        </div>
-        <div style={{ color: "#111" }}>
-          <strong>Phone:</strong> {customer.phone || "-"}
-        </div>
-        <div style={{ color: "#111" }}>
-          <strong>Email:</strong> {customer.email || "-"}
-        </div>
-        <div style={{ color: "#111" }}>
-          <strong>Address:</strong> {customer.address || "-"}
-        </div>
-        <div style={{ color: "#111" }}>
-          <strong>Plan:</strong> {plan?.name || "-"} {plan?.speed ? `• ${plan.speed}Mbps` : ""}
-        </div>
-        <div style={{ color: "#111" }}>
-          <strong>Connection:</strong> {customer.connectionType || "-"}
-          {customer.connectionType === "pppoe" && customer.pppoeConfig?.profile
-            ? ` • PPPoE Profile: ${customer.pppoeConfig.profile}`
-            : ""}
-          {customer.connectionType === "static" && customer.staticConfig?.ip
-            ? ` • IP: ${customer.staticConfig.ip}`
-            : ""}
+
+        {/* Info grid */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10,
+          background: '#f8fafc', border: '1px solid #e6eaf2', borderRadius: 12, padding: 12
+        }}>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Phone</div><div style={{ fontWeight: 700 }}>{customer.phone || '-'}</div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Email</div><div style={{ fontWeight: 700 }}>{customer.email || '-'}</div></div>
+          <div style={{ gridColumn: '1 / -1' }}><div style={{ color: '#64748b', fontSize: 12 }}>Address</div><div style={{ fontWeight: 700 }}>{customer.address || '-'}</div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Plan</div><div style={{ fontWeight: 700 }}>{plan?.name || '-'}{plan?.speed ? ` • ${plan.speed}Mbps` : ''}</div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Connection</div><div style={{ fontWeight: 700 }}>
+            {customer.connectionType || '-'}
+            {customer.connectionType === 'pppoe' && customer.pppoeConfig?.profile ? ` • ${customer.pppoeConfig.profile}` : ''}
+            {customer.connectionType === 'static' && customer.staticConfig?.ip ? ` • ${customer.staticConfig.ip}` : ''}
+          </div></div>
         </div>
 
-        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e6eaf2" }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Router Health</div>
+        {/* Health card */}
+        <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>
+          <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Router Health</div>
           {loading && <div>Loading health…</div>}
-          {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+          {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
           {!!health && (
-            <div style={{ display: "grid", gap: 6 }}>
-              <div>
-                <strong>Status:</strong> {health.status || (health.disabled ? "inactive" : "active")}
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
+              <div><div style={{ color: '#64748b', fontSize: 12 }}>Status</div><div style={{ fontWeight: 700 }}>{health.status || (health.disabled ? 'inactive' : 'active')}</div></div>
               {health.online !== null && (
-                <div>
-                  <strong>Online:</strong> {health.online ? "Yes" : "No"}
-                </div>
+                <div><div style={{ color: '#64748b', fontSize: 12 }}>Online</div><div style={{ fontWeight: 700 }}>{health.online ? 'Yes' : 'No'}</div></div>
               )}
               {health.uptime && (
-                <div>
-                  <strong>Uptime:</strong> {health.uptime}
-                </div>
-              )}
-              {(health.bytesIn || health.bytesOut) && (
-                <div>
-                  <strong>Usage:</strong> In {Number(health.bytesIn || 0).toLocaleString()} • Out {Number(health.bytesOut || 0).toLocaleString()}
-                </div>
+                <div><div style={{ color: '#64748b', fontSize: 12 }}>Uptime</div><div style={{ fontWeight: 700 }}>{health.uptime}</div></div>
               )}
               {health.addressIp && (
-                <div>
-                  <strong>IP:</strong> {health.addressIp}
+                <div><div style={{ color: '#64748b', fontSize: 12 }}>IP</div><div style={{ fontWeight: 700 }}>{health.addressIp}</div></div>
+              )}
+              {(health.bytesIn || health.bytesOut) && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ color: '#64748b', fontSize: 12 }}>Usage</div>
+                  <div style={{ fontWeight: 700 }}>In {Number(health.bytesIn || 0).toLocaleString()} • Out {Number(health.bytesOut || 0).toLocaleString()}</div>
                 </div>
               )}
-              {typeof health.deviceCount === "number" && (
-                <div>
-                  <strong>Devices:</strong> {health.deviceCount}
-                </div>
+              {typeof health.deviceCount === 'number' && (
+                <div><div style={{ color: '#64748b', fontSize: 12 }}>Devices</div><div style={{ fontWeight: 700 }}>{health.deviceCount}</div></div>
               )}
-              {canToggle && (
-                <div style={{ marginTop: 8 }}>
-                  {health.disabled ? (
-                    <button disabled={saving} onClick={doEnable} className="btn">Enable Account</button>
-                  ) : (
-                    <button disabled={saving} onClick={doDisable} className="btn">Disable Account</button>
-                  )}
-                </div>
+            </div>
+          )}
+
+          {canToggle && (
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+              {health?.disabled ? (
+                <button disabled={saving} onClick={doEnable} className="btn">Enable Account</button>
+              ) : (
+                <button disabled={saving} onClick={doDisable} className="btn">Disable Account</button>
               )}
             </div>
           )}
