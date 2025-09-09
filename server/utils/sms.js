@@ -46,8 +46,9 @@ async function sendViaTwilio(creds, to, body) {
 async function sendViaAfricasTalking(creds, to, body) {
   const base = creds.sandbox ? 'https://api.sandbox.africastalking.com' : 'https://api.africastalking.com';
   const url = `${base}/version1/messaging`;
-  const data = qs.stringify({ username: creds.username, to, message: body, from: creds.from });
-  const res = await axios.post(url, data, {
+  const payload = { username: creds.username, to, message: body, bulkSMSMode: 1, enqueue: 1 };
+  if (creds.from) payload.from = creds.from;
+  const res = await axios.post(url, qs.stringify(payload), {
     headers: {
       apiKey: creds.apiKey,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -55,8 +56,15 @@ async function sendViaAfricasTalking(creds, to, body) {
     },
     timeout: 15000,
   });
-  const msg = res.data?.SMSMessageData?.Recipients?.[0] || {};
-  return { id: msg?.messageId || String(Date.now()), provider: 'africastalking', raw: res.data };
+  const msgData = res.data?.SMSMessageData;
+  const rec = Array.isArray(msgData?.Recipients) ? msgData.Recipients[0] : null;
+  const status = String(rec?.status || '').toLowerCase();
+  if (!rec) throw new Error('Africa\'s Talking: No recipients in response');
+  if (status !== 'success') {
+    const msg = `Africa's Talking: ${rec?.status || 'Failed'} (${rec?.statusCode || ''}) ${rec?.errorMessage || ''}`.trim();
+    throw new Error(msg);
+  }
+  return { id: rec?.messageId || String(Date.now()), provider: 'africastalking', status: rec?.status, cost: rec?.cost, raw: res.data };
 }
 
 function normalizePhone(phone) {

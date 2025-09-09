@@ -42,7 +42,7 @@ export default function StatsCards({
         <div className="stat-card" role="listitem" key={it.key}>
           <div className="stat-label">{it.label}</div>
           <div className={`stat-value ${busy ? "is-loading" : ""}`}>
-            {busy ? "—" : it.value}
+            {busy ? "..." : it.value}
           </div>
         </div>
       ))}
@@ -55,3 +55,4 @@ export default function StatsCards({
     </div>
   );
 }
+

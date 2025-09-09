@@ -96,7 +96,7 @@ router.post('/send-test', async (req, res) => {
     });
 
     const resp = await sendSms(req.tenantId, to, rendered);
-    res.json({ ok: true, id: resp.id, provider: resp.provider });
+    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued' });
   } catch (e) {
     console.error('sms send-test error', e);
     res.status(500).json({ error: e.message || 'Failed to send test SMS' });
@@ -132,7 +132,7 @@ router.post('/send', async (req, res) => {
     });
 
     const resp = await sendSms(req.tenantId, customer.phone, rendered);
-    res.json({ ok: true, id: resp.id, provider: resp.provider, to: customer.phone });
+    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', to: customer.phone });
   } catch (e) {
     console.error('sms send error', e);
     res.status(500).json({ error: e.message || 'Failed to send SMS' });

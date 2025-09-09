@@ -32,6 +32,7 @@ body{ background:#f5f5f5; color:var(--navy-700); font-family:Inter,ui-sans-serif
 /* header */
 .page-header{
   display:flex;align-items:center;justify-content:space-between;gap:16px;
+  flex-wrap: wrap; /* allow wrapping on small screens */
   margin-bottom:18px;
 }
 .page-header h1{
@@ -84,6 +85,18 @@ body{ background:#f5f5f5; color:var(--navy-700); font-family:Inter,ui-sans-serif
 .mikrotik-status.online{border-color:#cfeedd;background:var(--green-50)}
 .mikrotik-status.online .dot{background:var(--green)}
 .mikrotik-status.offline{border-color:#e7eaf0;background:#fafbff}
+
+/* Responsive header behavior */
+@media (max-width: 900px){
+  .page-header{ gap:10px; }
+  .page-header h1{ flex: 0 0 100%; font-size:1.15rem; }
+  .header-search{ flex: 1 1 100%; min-width: 0; }
+  .mikrotik-status{ width: 100%; }
+}
+@media (max-width: 640px){
+  .header-search{ min-width: 0; width: 100%; }
+  .search-input{ flex: 1 1 auto; }
+}
 
 /* stat cards container (works even if component injects its own) */
 .stats-cards, .quick-counters{
