@@ -20,7 +20,10 @@ function pickTenantFallback(provider, tenantSettings) {
     const apiKey = tenantSettings?.africastalking?.apiKey || getEnv('AFRICASTALKING_API_KEY') || getEnv('AFRICA_TALKING_API_KEY');
     const username = tenantSettings?.africastalking?.username || getEnv('AFRICASTALKING_USERNAME') || getEnv('AFRICA_TALKING_USERNAME');
     const from = tenantSettings?.africastalking?.from || tenantSettings?.senderId || getEnv('AFRICASTALKING_FROM') || getEnv('AFRICA_TALKING_FROM');
-    if (apiKey && username) return { apiKey, username, from };
+    const sandboxEnv = (tenantSettings?.africastalking?.useSandbox === true)
+      || String(getEnv('AFRICASTALKING_ENV') || getEnv('AFRICA_TALKING_ENV') || '').toLowerCase() === 'sandbox'
+      || String(username || '').toLowerCase() === 'sandbox';
+    if (apiKey && username) return { apiKey, username, from, sandbox: !!sandboxEnv };
     return null;
   }
   return null;
@@ -41,7 +44,8 @@ async function sendViaTwilio(creds, to, body) {
 }
 
 async function sendViaAfricasTalking(creds, to, body) {
-  const url = 'https://api.africastalking.com/version1/messaging';
+  const base = creds.sandbox ? 'https://api.sandbox.africastalking.com' : 'https://api.africastalking.com';
+  const url = `${base}/version1/messaging`;
   const data = qs.stringify({ username: creds.username, to, message: body, from: creds.from });
   const res = await axios.post(url, data, {
     headers: {

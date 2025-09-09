@@ -22,6 +22,7 @@ const SmsSettingsSchema = new mongoose.Schema(
       apiKey: String,
       username: String,
       from: String,
+      useSandbox: { type: Boolean, default: false },
     },
 
     // Simple schedule config (days/hours before expiry)

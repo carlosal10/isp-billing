@@ -13,7 +13,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     fallbackEnabled: false,
     senderId: '',
     twilio: { accountSid: '', authToken: '', from: '' },
-    africastalking: { apiKey: '', username: '', from: '' },
+    africastalking: { apiKey: '', username: '', from: '', useSandbox: false },
     schedule: { reminder5Days: true, reminder3Days: true, dueWarnHours: 4 },
     autoSendOnCreate: false,
     autoSendOnPlanChange: false,
@@ -217,6 +217,10 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                     <input disabled={atDisabled} placeholder="Username" value={settings.africastalking?.username||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, username: e.target.value}}))} className="w-full border rounded px-3 py-2" />
                     <input disabled={atDisabled} placeholder="From (Sender)" value={settings.africastalking?.from||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, from: e.target.value}}))} className="w-full border rounded px-3 py-2" />
                   </div>
+                  <label className="flex items-center gap-2 mt-2">
+                    <input type="checkbox" disabled={atDisabled} checked={!!settings.africastalking?.useSandbox} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, useSandbox: e.target.checked}}))} />
+                    <span className="text-sm">Use Africa's Talking Sandbox</span>
+                  </label>
                 </div>
               );
             })()}
