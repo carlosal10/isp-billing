@@ -10,6 +10,7 @@ const SmsSettingsSchema = new mongoose.Schema(
     senderId: { type: String, default: '' },
 
     primaryProvider: { type: String, enum: ['twilio', 'africastalking'], default: 'twilio' },
+    fallbackEnabled: { type: Boolean, default: false },
 
     // Provider credentials (optional, per-tenant)
     twilio: {

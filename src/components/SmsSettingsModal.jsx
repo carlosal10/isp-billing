@@ -10,6 +10,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   const [settings, setSettings] = useState({
     enabled: false,
     primaryProvider: 'twilio',
+    fallbackEnabled: false,
     senderId: '',
     twilio: { accountSid: '', authToken: '', from: '' },
     africastalking: { apiKey: '', username: '', from: '' },
@@ -144,7 +145,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={settings.enabled} onChange={(e)=>setSettings(s=>({...s, enabled: e.target.checked}))} /> Enable SMS
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div>
                 <label className="block text-sm">Primary Provider</label>
                 <select value={settings.primaryProvider} onChange={(e)=>setSettings(s=>({...s, primaryProvider: e.target.value}))} className="w-full border rounded px-3 py-2">
@@ -156,6 +157,14 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                 <label className="block text-sm">Sender ID</label>
                 <input value={settings.senderId||''} onChange={(e)=>setSettings(s=>({...s, senderId: e.target.value}))} className="w-full border rounded px-3 py-2" />
               </div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!settings.fallbackEnabled}
+                  onChange={(e)=>setSettings(s=>({...s, fallbackEnabled: e.target.checked}))}
+                />
+                <span className="text-sm">Enable fallback to secondary</span>
+              </label>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -178,23 +187,39 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
               </div>
             </div>
 
-            <div>
-              <h3 className="font-semibold">Twilio</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input placeholder="Account SID" value={settings.twilio?.accountSid||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, accountSid: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-                <input placeholder="Auth Token" value={settings.twilio?.authToken||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, authToken: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-                <input placeholder="From" value={settings.twilio?.from||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, from: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-              </div>
-            </div>
+            {(() => {
+              const twilioDisabled = settings.primaryProvider !== 'twilio';
+              return (
+                <div className={twilioDisabled ? 'opacity-50' : ''}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Twilio</h3>
+                    {twilioDisabled && <span className="text-xs text-gray-500">Disabled (not selected)</span>}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input disabled={twilioDisabled} placeholder="Account SID" value={settings.twilio?.accountSid||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, accountSid: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                    <input disabled={twilioDisabled} placeholder="Auth Token" value={settings.twilio?.authToken||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, authToken: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                    <input disabled={twilioDisabled} placeholder="From" value={settings.twilio?.from||''} onChange={(e)=>setSettings(s=>({...s, twilio:{...s.twilio, from: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                  </div>
+                </div>
+              );
+            })()}
 
-            <div>
-              <h3 className="font-semibold">Africa's Talking</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input placeholder="API Key" value={settings.africastalking?.apiKey||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, apiKey: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-                <input placeholder="Username" value={settings.africastalking?.username||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, username: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-                <input placeholder="From (Sender)" value={settings.africastalking?.from||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, from: e.target.value}}))} className="w-full border rounded px-3 py-2" />
-              </div>
-            </div>
+            {(() => {
+              const atDisabled = settings.primaryProvider !== 'africastalking';
+              return (
+                <div className={atDisabled ? 'opacity-50' : ''}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Africa's Talking</h3>
+                    {atDisabled && <span className="text-xs text-gray-500">Disabled (not selected)</span>}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input disabled={atDisabled} placeholder="API Key" value={settings.africastalking?.apiKey||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, apiKey: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                    <input disabled={atDisabled} placeholder="Username" value={settings.africastalking?.username||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, username: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                    <input disabled={atDisabled} placeholder="From (Sender)" value={settings.africastalking?.from||''} onChange={(e)=>setSettings(s=>({...s, africastalking:{...s.africastalking, from: e.target.value}}))} className="w-full border rounded px-3 py-2" />
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <h3 className="font-semibold">Reminder Schedule</h3>

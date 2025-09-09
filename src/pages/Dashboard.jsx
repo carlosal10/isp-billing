@@ -7,6 +7,7 @@ import "./Dashboard.css";
 import StatsCards from "../components/StatsCards";
 import UsageModal from "../components/UsageModal";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
+import CustomerDetailsPanel from "../components/CustomerDetailsPanel";
 import CustomersBrowserModal from "../components/CustomersBrowserModal";
 
 import { useAuth } from "../context/AuthContext";
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
   const [browseOpen, setBrowseOpen] = useState(false);
   const customersSectionRef = useRef(null);
+  const [inlineCustomer, setInlineCustomer] = useState(null);
   // refs
   const [didMount, setDidMount] = useState(false);
 
@@ -188,7 +190,8 @@ export default function Dashboard() {
       const id = item?._id || item?.id;
       if (!id) return;
       const { data } = await api.get(`/customers/by-id/${id}`);
-      setCustomerModal({ open: true, customer: data });
+      setInlineCustomer(data);
+      setCustomerModal({ open: false, customer: null });
       setSearchOpen(false);
       // defer to next tick to ensure layout is stable
       setTimeout(scrollToCustomers, 0);
@@ -514,7 +517,14 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section ref={customersSectionRef} className="pppoe-status-section">
+        {/* Inline customer details panel (appears when a customer is chosen) */}
+        {inlineCustomer && (
+          <div ref={customersSectionRef} style={{ marginTop: 18 }}>
+            <CustomerDetailsPanel customer={inlineCustomer} onClose={() => setInlineCustomer(null)} />
+          </div>
+        )}
+
+        <section className="pppoe-status-section">
           <div className="section-head">
             <h2>
               Online Users {loading.sessions && <small>(loading…)</small>}
@@ -701,6 +711,7 @@ export default function Dashboard() {
         </div>
       )}
       <UsageModal isOpen={showUsageModal} onClose={() => setShowUsageModal(false)} />
+      {/* Keep modal wiring available but unused now that inline panel exists */}
       <CustomerDetailsModal
         open={customerModal.open}
         customer={customerModal.customer}
@@ -709,7 +720,7 @@ export default function Dashboard() {
       <CustomersBrowserModal
         open={browseOpen}
         onClose={() => setBrowseOpen(false)}
-        onSelect={(c) => { setBrowseOpen(false); setCustomerModal({ open: true, customer: c }); scrollToCustomers(); }}
+        onSelect={(c) => { setBrowseOpen(false); setInlineCustomer(c); setCustomerModal({ open: false, customer: null }); setTimeout(scrollToCustomers, 0); }}
       />
     </div>
   );

@@ -16,9 +16,10 @@ function pickTenantFallback(provider, tenantSettings) {
     return null;
   }
   if (provider === 'africastalking') {
-    const apiKey = tenantSettings?.africastalking?.apiKey || getEnv('AFRICASTALKING_API_KEY');
-    const username = tenantSettings?.africastalking?.username || getEnv('AFRICASTALKING_USERNAME');
-    const from = tenantSettings?.africastalking?.from || tenantSettings?.senderId || getEnv('AFRICASTALKING_FROM');
+    // Accept both AFRICASTALKING_* and AFRICA_TALKING_* env names
+    const apiKey = tenantSettings?.africastalking?.apiKey || getEnv('AFRICASTALKING_API_KEY') || getEnv('AFRICA_TALKING_API_KEY');
+    const username = tenantSettings?.africastalking?.username || getEnv('AFRICASTALKING_USERNAME') || getEnv('AFRICA_TALKING_USERNAME');
+    const from = tenantSettings?.africastalking?.from || tenantSettings?.senderId || getEnv('AFRICASTALKING_FROM') || getEnv('AFRICA_TALKING_FROM');
     if (apiKey && username) return { apiKey, username, from };
     return null;
   }
@@ -68,22 +69,29 @@ async function sendSms(tenantId, to, body) {
   const enabled = settings?.enabled ?? false;
   if (!enabled) throw new Error('SMS disabled');
 
-  const order = [settings?.primaryProvider || 'twilio', settings?.primaryProvider === 'twilio' ? 'africastalking' : 'twilio'];
+  const primary = settings?.primaryProvider || 'twilio';
   const normalized = normalizePhone(to);
 
+  // Use fallback only if explicitly enabled
+  const order = settings?.fallbackEnabled
+    ? [primary, primary === 'twilio' ? 'africastalking' : 'twilio']
+    : [primary];
+
   let lastError = null;
+  let firstError = null;
   for (const p of order) {
     try {
       const creds = pickTenantFallback(p, settings);
-      if (!creds) { lastError = new Error(`Missing credentials for ${p}`); continue; }
+      if (!creds) throw new Error(`Missing credentials for ${p}`);
       if (p === 'twilio') return await sendViaTwilio(creds, normalized, body);
       if (p === 'africastalking') return await sendViaAfricasTalking(creds, normalized, body);
+      throw new Error('Unsupported SMS provider');
     } catch (e) {
+      if (!firstError) firstError = e;
       lastError = e;
     }
   }
-  throw lastError || new Error('No SMS provider configured');
+  throw firstError || lastError || new Error('No SMS provider configured');
 }
 
 module.exports = { sendSms, normalizePhone };
-

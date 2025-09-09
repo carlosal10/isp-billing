@@ -11,10 +11,10 @@ const PROVIDERS = [
   { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
 ];
 
-function TextInput({ value, onChange, placeholder }) {
+function TextInput({ value, onChange, placeholder, type = "text" }) {
   return (
     <input
-      type="text"
+      type={type}
       placeholder={placeholder}
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
@@ -89,9 +89,9 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     setMsg("");
     try {
       // Primary style: /api/payment-config/:provider
-      let res, data;
+      let data;
       try {
-        res = await api.get(`/payment-config/${provider}`);
+        const res = await api.get(`/payment-config/${provider}`);
         data = res.data;
       } catch (e1) {
         // Fallback style: /api/payment-config?provider=mpesa
@@ -106,7 +106,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       }
     } catch (e) {
       console.error("Load payment config failed:", e?.__debug || e);
-      setMsg(`⚠ Failed to load ${provider} settings${e?.message ? `: ${e.message}` : ""}`);
+      setMsg(`Failed to load ${provider} settings${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       onClose && onClose();
     } catch (e) {
       console.error("Save payment config failed:", e?.__debug || e);
-      setMsg(`⚠ Failed to save settings${e?.message ? `: ${e.message}` : ""}`);
+      setMsg(`Failed to save settings${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
 
         {!effectiveIspId && (
           <p className="text-red-600 text-sm mb-3">
-            ⚠ ISP ID not available. Ensure you’re logged in and a tenant is selected.
+            ISP ID not available. Ensure you’re logged in and a tenant is selected.
           </p>
         )}
 
@@ -214,10 +214,13 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
                   </select>
                 );
               }
+              const label = field.replace(/([A-Z])/g, " $1");
+              const type = /secret|passkey/i.test(field) ? 'password' : 'text';
               return (
                 <TextInput
                   key={field}
-                  placeholder={field.replace(/([A-Z])/g, " $1")}
+                  placeholder={label}
+                  type={type}
                   value={formData[activeTab][field]}
                   onChange={(val) => onChange(activeTab, field, val)}
                 />
@@ -237,3 +240,4 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     </div>
   );
 }
+
