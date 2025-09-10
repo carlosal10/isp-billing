@@ -182,3 +182,6 @@
   .plan-top{ flex-direction: column; align-items:flex-start; }
   .plan-price{ margin-top: 6px; }
 }
+@media (max-width: 320px){
+  .pay-card{ padding: 14px; }
+}

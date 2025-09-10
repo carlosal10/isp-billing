@@ -51,7 +51,15 @@ export default function Landing() {
 
       {/* Hero */}
       <header className="hero" role="banner">
-        <div className="hero-bg" aria-hidden="true" />
+        <div
+          className="hero-bg"
+          aria-hidden="true"
+          style={{
+            background: `radial-gradient(1200px 380px at 80% -10%, rgba(230,57,70,.20), transparent 60%),
+            radial-gradient(900px 320px at 0% 30%, rgba(241,196,15,.18), transparent 60%),
+            linear-gradient(180deg, rgba(11,37,69,.85), rgba(11,37,69,.70))`,
+          }}
+        />
         <div className="hero-inner">
           <div className="hero-copy">
             <span className="chip">Built for ISPs</span>
@@ -117,3 +125,4 @@ export default function Landing() {
     </div>
   );
 }
+

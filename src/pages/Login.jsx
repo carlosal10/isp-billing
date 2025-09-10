@@ -17,7 +17,7 @@ export default function Login() {
 
   const from = location.state?.from?.pathname || "/";
 
-  // quick API health check so misconfig shows up immediately
+  // Health check
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -27,13 +27,10 @@ export default function Login() {
         setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
       } catch (e) {
         setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
-        // also log the shaped debug if present
         if (e?.__debug) console.error("Health debug:", e.__debug);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   async function handleSubmit(e) {
@@ -42,10 +39,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form);
-      // route back to where they came from (or home)
       navigate(from, { replace: true });
     } catch (e) {
-      // message is annotated by apiClient interceptor; show verbatim
       setErr(e?.message || "Login failed");
       if (e?.__debug) console.error("Login debug:", e.__debug);
     } finally {
@@ -54,45 +49,123 @@ export default function Login() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="login-form space-y-3" aria-label="Sign in">
-      <div className="helper-text" style={{ color: apiHealth.ok ? "#16a34a" : "#ef4444" }}>
-        {apiHealth.msg}
-      </div>
+    <main className="login-shell" aria-label="Login">
+      {/* Left: Brand + Pitch */}
+      <section className="login-left" aria-labelledby="login-title" style={{
+        background:
+          "radial-gradient(1200px 380px at 80% -10%, rgba(230,57,70,.20), transparent 60%)," +
+          "radial-gradient(900px 320px at 0% 30%, rgba(241,196,15,.18), transparent 60%)," +
+          "linear-gradient(180deg, rgba(11,37,69,.93), rgba(11,37,69,.82))," +
+          "url('/images/login/hero.jpg')"
+      }}>
+        <div className="login-left-inner">
+          <span className="login-chip">KT-SwiftBridge</span>
+          <h1 id="login-title" className="login-title">
+            Bill smarter. Grow faster.
+          </h1>
+          <p className="login-sub">
+            Manage plans, automate invoices, and collect payments with confidence.
+            Built for ISPs that value speed, clarity, and reliability.
+          </p>
 
-      <input
-        value={form.email}
-        onChange={(e) => setForm({ ...form, email: e.target.value })}
-        placeholder="Email"
-        type="email"
-        required
-        autoComplete="username"
-      />
+          <ul className="login-benefits" role="list">
+            <li><span className="dot dot-green" /> One-tap M-Pesa STK Push</li>
+            <li><span className="dot dot-amber" /> Automated SMS & email reminders</li>
+            <li><span className="dot dot-blue" /> Real-time analytics & collections</li>
+          </ul>
 
-      <input
-        value={form.password}
-        onChange={(e) => setForm({ ...form, password: e.target.value })}
-        placeholder="Password"
-        type="password"
-        required
-        autoComplete="current-password"
-      />
+          <div className="login-badges" aria-label="Trust and uptime">
+            <div className="badge">
+              <span className="badge-num">99.9%</span>
+              <span className="badge-label">Uptime</span>
+            </div>
+            <div className="badge">
+              <span className="badge-num">AES-256</span>
+              <span className="badge-label">Encryption</span>
+            </div>
+            <div className="badge">
+              <span className="badge-num">24/7</span>
+              <span className="badge-label">Support</span>
+            </div>
+          </div>
 
-      <button type="submit" disabled={loading}>
-        {loading ? "Signing in..." : "Login"}
-      </button>
-
-      {err && (
-        <div className="helper-text" style={{ color: "#ef4444", whiteSpace: "pre-wrap" }}>
-          {err}
+          <div className="login-footlinks">
+            <a href="/status">Status</a>
+            <a href="/docs">Docs</a>
+            <a href="/contact">Contact</a>
+          </div>
         </div>
-      )}
+        {/* Decorative mesh/ambient */}
+        <div className="login-ambient" aria-hidden="true" />
+      </section>
 
-      <div className="helper-text">
-        <Link to="/forgot-password">Forgot password?</Link>
-      </div>
-      <div className="helper-text">
-        New here? <Link to="/register">Create an account</Link>
-      </div>
-    </form>
+      {/* Right: Form */}
+      <section className="login-right">
+        <form onSubmit={handleSubmit} className="login-form" aria-label="Sign in form">
+          <div
+            className="helper-text"
+            style={{ color: apiHealth.ok ? "#16a34a" : apiHealth.ok === null ? "#6b7280" : "#ef4444" }}
+            aria-live="polite"
+          >
+            {apiHealth.msg}
+          </div>
+
+          <label className="label" htmlFor="email">Email</label>
+          <input
+            id="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="you@company.com"
+            type="email"
+            required
+            autoComplete="username"
+            className="input"
+          />
+
+          <label className="label" htmlFor="password">Password</label>
+          <input
+            id="password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            placeholder="••••••••"
+            type="password"
+            required
+            autoComplete="current-password"
+            className="input"
+          />
+
+          <button type="submit" disabled={loading} className="btn-primary">
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+          {err && (
+            <div className="helper-text err" role="alert" aria-live="assertive">
+              {err}
+            </div>
+          )}
+
+          <div className="form-links">
+            <Link to="/forgot-password">Forgot password?</Link>
+            <span className="sep">•</span>
+            <Link to="/register">Create an account</Link>
+          </div>
+
+          <div className="sso-row">
+            <span className="sso-line" />
+            <span className="sso-label">or</span>
+            <span className="sso-line" />
+          </div>
+
+          <div className="sso-actions">
+            <button type="button" className="btn-ghost" onClick={() => alert("SSO stub")}>
+              Continue with Google
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => alert("SSO stub")}>
+              Continue with Microsoft
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
   );
 }
