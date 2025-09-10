@@ -13,13 +13,20 @@ import CustomersBrowserModal from "../components/CustomersBrowserModal";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
 
+/* -----------------------------------
+   Constants
+----------------------------------- */
 const DUE_WINDOW_DAYS = 3;
 const REFRESH_FAST_MS = 20000;
 const REFRESH_SLOW_MS = 60000;
 
+/* -----------------------------------
+   Small utilities
+----------------------------------- */
 function formatDate(d) {
   if (!d) return "-";
-  return new Date(d).toLocaleString();
+  const t = new Date(d);
+  return Number.isFinite(t.getTime()) ? t.toLocaleString() : "-";
 }
 function daysUntil(date) {
   if (!date) return Infinity;
@@ -33,14 +40,71 @@ function daysSince(date) {
   const t = new Date(date).getTime();
   return Math.ceil((now - t) / (1000 * 60 * 60 * 24));
 }
+async function retry(fn, { attempts = 2, baseDelay = 400 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, baseDelay * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+function usePageVisibility() {
+  const [visible, setVisible] = useState(!document.hidden);
+  useEffect(() => {
+    const onVis = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  return visible;
+}
+function exportCSV(rows) {
+  if (!rows || !rows.length) return;
+  const headers = [
+    "Source",
+    "Account",
+    "Name",
+    "Phone",
+    "IP",
+    "Uptime",
+    "Bytes In",
+    "Bytes Out",
+    "Plan",
+  ];
+  const out = [headers, ...rows.map((r) => [
+    r.source,
+    r.accountNumber,
+    r.name,
+    r.phone,
+    r.ip,
+    r.uptime,
+    r.bytesIn,
+    r.bytesOut,
+    r.planName,
+  ])]
+    .map((a) => a.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
 
+  const blob = new Blob([out], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `online-users-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* -----------------------------------
+   Component
+----------------------------------- */
 export default function Dashboard() {
-  // Sidebar is managed globally in App shell
   const { isAuthenticated, token, ispId } = useAuth();
+  const pageVisible = usePageVisibility();
 
-  // page-local modals are managed globally in the App shell
-
-  // system & stats
+  // router/system state
   const [mikrotik, setMikrotik] = useState({
     connected: false,
     identity: "",
@@ -59,7 +123,7 @@ export default function Dashboard() {
   const [pppoeSessions, setPppoeSessions] = useState([]);
   const [hotspotSessions, setHotspotSessions] = useState([]);
 
-  // ui
+  // ui state
   const [loading, setLoading] = useState({
     stats: true,
     customers: true,
@@ -69,33 +133,40 @@ export default function Dashboard() {
   });
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
+  const toastRef = useRef(null);
+
   const [showUsageModal, setShowUsageModal] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
+  const [inlineCustomer, setInlineCustomer] = useState(null);
+
+  const [showHotspot, setShowHotspot] = useState(false);
+  const [didMount, setDidMount] = useState(false);
+
   // search
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [customerModal, setCustomerModal] = useState({ open: false, customer: null });
-  const [browseOpen, setBrowseOpen] = useState(false);
-  const customersSectionRef = useRef(null);
-  const [inlineCustomer, setInlineCustomer] = useState(null);
-  // refs
-  const [didMount, setDidMount] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
-  // toggles
-  const [showHotspot, setShowHotspot] = useState(false);
-  // Pagination for online users
+  // pagination for online users
   const [onlinePage, setOnlinePage] = useState(1);
   const pageSize = 10;
 
-  // ---------- FETCHERS (Axios `api` injects Authorization + x-isp-id) ----------
+  const customersSectionRef = useRef(null);
+
+  /* -----------------------------------
+     Fetchers
+  ----------------------------------- */
   const loadMikrotikStatus = async () => {
     try {
       setLoading((l) => ({ ...l, status: true }));
-      let { data } = await api.get("/mikrotik/status");
-      if (!data?.ok) {
-        const ping = await api.get("/mikrotik/ping");
-        data = ping.data;
-      }
+      const data = await retry(async () => {
+        const a = await api.get("/mikrotik/status");
+        if (a.data?.ok) return a.data;
+        const b = await api.get("/mikrotik/ping");
+        return b.data;
+      });
       setMikrotik({
         connected: !!data?.connected,
         identity: data?.identity || data?.routerIdentity || "",
@@ -150,83 +221,29 @@ export default function Dashboard() {
     }
   };
 
-  // helper: scroll to top of customers view area when opening details/browse
-  useEffect(() => { setDidMount(true); }, []);
-  const scrollToCustomers = () => {
-    try {
-      const el = customersSectionRef.current || document.querySelector('.pppoe-status-section') || document.body;
-      const rect = el.getBoundingClientRect();
-      const y = rect.top + window.pageYOffset - 12;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    } catch (_) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  // ---------- SEARCH (Dashboard header) ----------
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q || q.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await api.get(`/customers/search`, { params: { query: q } });
-        if (!cancelled) setSearchResults(Array.isArray(data) ? data : []);
-      } catch {
-        if (!cancelled) setSearchResults([]);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [searchQuery]);
-
-  const openCustomerDetails = async (item) => {
-    try {
-      const id = item?._id || item?.id;
-      if (!id) return;
-      const { data } = await api.get(`/customers/by-id/${id}`);
-      setInlineCustomer(data);
-      setCustomerModal({ open: false, customer: null });
-      setSearchOpen(false);
-      // defer to next tick to ensure layout is stable
-      setTimeout(scrollToCustomers, 0);
-    } catch (e) {
-      setToast({ type: "error", message: e.message });
-    }
-  };
-
-  useEffect(() => {
-    if (!didMount) return;
-    if (browseOpen) setTimeout(scrollToCustomers, 0);
-  }, [browseOpen, didMount]);
-
   const loadSessions = async () => {
     try {
       setLoading((l) => ({ ...l, sessions: true }));
-      let pppoe = [];
-      try {
-        const { data } = await api.get("/pppoe/active"); // primary
-        pppoe = data?.users || data; // supports both shapes
-      } catch {
-        const { data } = await api.get("/mikrotik/pppoe/active"); // fallback
-        pppoe = data?.users || data;
-      }
-      setPppoeSessions(Array.isArray(pppoe) ? pppoe : []);
+      const pppoe = await retry(async () => {
+        try {
+          const { data } = await api.get("/pppoe/active"); // primary
+          return Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+        } catch {
+          const { data } = await api.get("/mikrotik/pppoe/active"); // fallback
+          return Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+        }
+      });
 
-      // hotspot optional
+      let hs = [];
       try {
-        const { data: hs } = await api.get("/hotspot/active");
-        const list = hs?.users || hs;
-        setHotspotSessions(Array.isArray(list) ? list : []);
+        const { data } = await api.get("/hotspot/active");
+        hs = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
       } catch {
-        setHotspotSessions([]);
+        hs = [];
       }
 
+      setPppoeSessions(pppoe);
+      setHotspotSessions(hs);
       setErrors((e) => ({ ...e, sessions: null }));
     } catch (e) {
       setErrors((er) => ({ ...er, sessions: e.message }));
@@ -237,7 +254,11 @@ export default function Dashboard() {
     }
   };
 
-  // ---------- INITIAL LOAD ----------
+  /* -----------------------------------
+     Lifecycle
+  ----------------------------------- */
+  useEffect(() => setDidMount(true), []);
+
   useEffect(() => {
     if (!isAuthenticated || !token || !ispId) return;
     loadMikrotikStatus();
@@ -248,19 +269,19 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token, ispId]);
 
-  // ---------- POLLING ----------
+  // Poll (pause while tab hidden)
   useEffect(() => {
-    if (!isAuthenticated || !token || !ispId) return;
+    if (!isAuthenticated || !token || !ispId || !pageVisible) return;
     const id = setInterval(() => {
       loadMikrotikStatus();
       loadSessions();
     }, REFRESH_FAST_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token, ispId]);
+  }, [isAuthenticated, token, ispId, pageVisible]);
 
   useEffect(() => {
-    if (!isAuthenticated || !token || !ispId) return;
+    if (!isAuthenticated || !token || !ispId || !pageVisible) return;
     const id = setInterval(() => {
       loadStats();
       loadPayments();
@@ -268,9 +289,91 @@ export default function Dashboard() {
     }, REFRESH_SLOW_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, token, ispId]);
+  }, [isAuthenticated, token, ispId, pageVisible]);
 
-  // ---------- DATA ENRICHMENT ----------
+  // scroll helper
+  const scrollToCustomers = () => {
+    try {
+      const el =
+        customersSectionRef.current ||
+        document.querySelector(".pppoe-status-section") ||
+        document.body;
+      const rect = el.getBoundingClientRect();
+      const y = rect.top + window.pageYOffset - 12;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    } catch {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  useEffect(() => {
+    if (!didMount) return;
+    if (browseOpen) setTimeout(scrollToCustomers, 0);
+  }, [browseOpen, didMount]);
+
+  /* -----------------------------------
+     Search (abortable + keyboard nav)
+  ----------------------------------- */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    setActiveIndex(-1);
+    if (q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/customers/search`, {
+          params: { query: q },
+          signal: ctrl.signal,
+        });
+        setSearchResults(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (e.name !== "CanceledError" && e.name !== "AbortError") {
+          setSearchResults([]);
+        }
+      }
+    }, 280);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [searchQuery]);
+
+  function onSearchKey(e) {
+    if (!searchResults.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, searchResults.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      openCustomerDetails(searchResults[activeIndex]);
+    } else if (e.key === "Escape") {
+      setSearchOpen(false);
+    }
+  }
+
+  const openCustomerDetails = async (item) => {
+    try {
+      const id = item?._id || item?.id;
+      if (!id) return;
+      const { data } = await api.get(`/customers/by-id/${id}`);
+      setInlineCustomer(data);
+      setCustomerModal({ open: false, customer: null });
+      setSearchOpen(false);
+      setTimeout(scrollToCustomers, 0);
+    } catch (e) {
+      setToast({ type: "error", message: e.message });
+    }
+  };
+
+  /* -----------------------------------
+     Data enrichment / memo
+  ----------------------------------- */
   const customerByAccount = useMemo(() => {
     const map = new Map();
     for (const c of customers) {
@@ -281,17 +384,22 @@ export default function Dashboard() {
 
   const enrichedOnline = useMemo(() => {
     const mapSession = (s) => {
-      const username = s.username || s.name || s.user || s.account || s.login || "";
+      const username =
+        s.username || s.name || s.user || s.account || s.login || "";
       const acct = String(username || "").trim();
       const c = customerByAccount.get(acct);
+      const toNum = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+        };
       return {
         accountNumber: acct || "-",
         name: c?.name || s.fullName || "-",
         phone: c?.phone || "-",
         ip: s.address || s.ip || s.ipAddress || "-",
         uptime: s.uptime || "-",
-        bytesIn: Number(s.bytesIn || s.rx || s["bytes-in"] || 0),
-        bytesOut: Number(s.bytesOut || s.tx || s["bytes-out"] || 0),
+        bytesIn: toNum(s.bytesIn || s.rx || s["bytes-in"]),
+        bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"]),
         planName: c?.plan?.name || s.plan || "-",
         source: s.source || "PPPoE",
       };
@@ -310,36 +418,6 @@ export default function Dashboard() {
     return [...ppp, ...hs];
   }, [pppoeSessions, hotspotSessions, showHotspot, customerByAccount]);
 
-  // Actions: enable/disable PPPoE account
-  async function enableAccount(acct) {
-    try {
-      await api.post(`/pppoe/${encodeURIComponent(acct)}/enable`);
-      loadSessions();
-      setToast({ type: "success", message: `Enabled ${acct}` });
-    } catch (e) {
-      setErrors((er) => ({ ...er, sessions: e.message }));
-      setToast({ type: "error", message: `Enable failed: ${e.message}` });
-    }
-  }
-  async function disableAccount(acct) {
-    try {
-      await api.post(`/pppoe/${encodeURIComponent(acct)}/disable`, null, { params: { disconnect: true } });
-      loadSessions();
-      setToast({ type: "success", message: `Disabled ${acct}` });
-    } catch (e) {
-      setErrors((er) => ({ ...er, sessions: e.message }));
-      setToast({ type: "error", message: `Disable failed: ${e.message}` });
-    }
-  }
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  // Page totals shown in footer; overall totals removed to avoid lint noise
-
   const onlineTotalPages = useMemo(
     () => Math.max(1, Math.ceil(enrichedOnline.length / pageSize)),
     [enrichedOnline]
@@ -347,16 +425,26 @@ export default function Dashboard() {
   useEffect(() => {
     setOnlinePage((p) => Math.min(Math.max(1, p), onlineTotalPages));
   }, [onlineTotalPages]);
+
   const onlinePageItems = useMemo(() => {
     const start = (onlinePage - 1) * pageSize;
     return enrichedOnline.slice(start, start + pageSize);
   }, [enrichedOnline, onlinePage]);
+
   const pageBytesIn = useMemo(
-    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0), 0),
+    () =>
+      onlinePageItems.reduce(
+        (a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0),
+        0
+      ),
     [onlinePageItems]
   );
   const pageBytesOut = useMemo(
-    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0), 0),
+    () =>
+      onlinePageItems.reduce(
+        (a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0),
+        0
+      ),
     [onlinePageItems]
   );
 
@@ -448,14 +536,76 @@ export default function Dashboard() {
           borderColor: "rgb(255,59,59)",
           backgroundColor: "rgba(255,59,59,0.2)",
           tension: 0.3,
+          pointRadius: 2,
         },
       ],
     };
   }, [payments]);
 
+  const paymentsOpts = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: "index", intersect: false },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 7 } },
+        y: {
+          ticks: { callback: (v) => `KES ${Number(v).toLocaleString()}` },
+          grid: { color: "rgba(0,0,0,0.05)" },
+        },
+      },
+    }),
+    []
+  );
+
+  /* -----------------------------------
+     Actions
+  ----------------------------------- */
+  const [acting, setActing] = useState({});
+  async function enableAccount(acct) {
+    try {
+      setActing((a) => ({ ...a, [acct]: true }));
+      await api.post(`/pppoe/${encodeURIComponent(acct)}/enable`);
+      loadSessions();
+      setToast({ type: "success", message: `Enabled ${acct}` });
+    } catch (e) {
+      setErrors((er) => ({ ...er, sessions: e.message }));
+      setToast({ type: "error", message: `Enable failed: ${e.message}` });
+    } finally {
+      setActing((a) => ({ ...a, [acct]: false }));
+    }
+  }
+  async function disableAccount(acct) {
+    try {
+      setActing((a) => ({ ...a, [acct]: true }));
+      await api.post(`/pppoe/${encodeURIComponent(acct)}/disable`, null, {
+        params: { disconnect: true },
+      });
+      loadSessions();
+      setToast({ type: "success", message: `Disabled ${acct}` });
+    } catch (e) {
+      setErrors((er) => ({ ...er, sessions: e.message }));
+      setToast({ type: "error", message: `Disable failed: ${e.message}` });
+    } finally {
+      setActing((a) => ({ ...a, [acct]: false }));
+    }
+  }
+
+  useEffect(() => {
+    if (toast && toastRef.current) toastRef.current.focus();
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  /* -----------------------------------
+     Render
+  ----------------------------------- */
   return (
     <div className="dashboard">
-      {/* Hamburger (mobile) */}
       <div className="main-content">
         <header className="page-header">
           <h1>Dashboard</h1>
@@ -465,16 +615,37 @@ export default function Dashboard() {
               className="search-input"
               placeholder="Search customers (name, account, phone, email, address)"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchOpen(true);
+              }}
               onFocus={() => setSearchOpen(true)}
+              onKeyDown={onSearchKey}
             />
-            <button className="btn" onClick={() => setBrowseOpen(true)} style={{ marginLeft: 8 }}>Browse All</button>
+            <button
+              className="btn"
+              onClick={() => setBrowseOpen(true)}
+              style={{ marginLeft: 8 }}
+            >
+              Browse All
+            </button>
             {searchOpen && searchQuery.trim() && (
               <div className="search-results">
-                {searchResults.map((r) => (
-                  <div key={r._id} className="search-item" onClick={() => openCustomerDetails(r)}>
-                    <div className="search-primary">{r.name || '-'} <span className="muted">({r.accountNumber || '-'})</span></div>
-                    <div className="search-secondary">{r.phone || ''}{r.email ? ` • ${r.email}` : ''}</div>
+                {searchResults.map((r, i) => (
+                  <div
+                    key={r._id}
+                    className={`search-item ${activeIndex === i ? "active" : ""}`}
+                    onClick={() => openCustomerDetails(r)}
+                    onMouseEnter={() => setActiveIndex(i)}
+                  >
+                    <div className="search-primary">
+                      {r.name || "-"}{" "}
+                      <span className="muted">({r.accountNumber || "-"})</span>
+                    </div>
+                    <div className="search-secondary">
+                      {r.phone || ""}
+                      {r.email ? ` • ${r.email}` : ""}
+                    </div>
                   </div>
                 ))}
                 {searchResults.length === 0 && (
@@ -496,7 +667,17 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <StatsCards stats={stats} />
+        {/* Stats skeleton while loading */}
+        {loading.stats ? (
+          <div className="skel-row" aria-hidden>
+            <div className="skel" style={{ height: 64 }} />
+            <div className="skel" style={{ height: 64 }} />
+            <div className="skel" style={{ height: 64 }} />
+            <div className="skel" style={{ height: 64 }} />
+          </div>
+        ) : (
+          <StatsCards stats={stats} />
+        )}
 
         <section className="quick-counters">
           <div className="counter">
@@ -517,10 +698,13 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Inline customer details panel (appears when a customer is chosen) */}
+        {/* Inline customer details panel */}
         {inlineCustomer && (
           <div ref={customersSectionRef} style={{ marginTop: 18 }}>
-            <CustomerDetailsPanel customer={inlineCustomer} onClose={() => setInlineCustomer(null)} />
+            <CustomerDetailsPanel
+              customer={inlineCustomer}
+              onClose={() => setInlineCustomer(null)}
+            />
           </div>
         )}
 
@@ -537,12 +721,38 @@ export default function Dashboard() {
               />
               Include Hotspot
             </label>
-            <button className="btn" onClick={() => setShowUsageModal(true)} style={{ marginLeft: 12 }}>
+            <button
+              className="btn"
+              onClick={() => setShowUsageModal(true)}
+              style={{ marginLeft: 12 }}
+            >
               Usage
+            </button>
+            <button className="btn" onClick={() => exportCSV(enrichedOnline)}>
+              Export CSV
             </button>
           </div>
 
-          <div className="table-wrapper">
+          {!loading.sessions && enrichedOnline.length === 0 && !errors.sessions && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "12px 14px",
+                border: "1px solid #e8ecf4",
+                borderRadius: 10,
+                background: "#fff",
+              }}
+            >
+              <strong>No users online.</strong>{" "}
+              Tip: check <em>MikroTik Connected</em> status, confirm PPPoE secrets, or{" "}
+              <button className="btn" onClick={loadSessions} style={{ padding: "2px 8px" }}>
+                Refresh
+              </button>
+              .
+            </div>
+          )}
+
+          <div className="table-wrapper" style={{ marginTop: 10 }}>
             <table>
               <thead>
                 <tr>
@@ -567,12 +777,27 @@ export default function Dashboard() {
                     <td>{u.phone}</td>
                     <td>{u.ip}</td>
                     <td>{u.uptime}</td>
-                    <td>{u.bytesIn.toLocaleString()}</td>
-                    <td>{u.bytesOut.toLocaleString()}</td>
+                    <td className="num">{u.bytesIn.toLocaleString()}</td>
+                    <td className="num">{u.bytesOut.toLocaleString()}</td>
                     <td>{u.planName}</td>
                     <td>
-                      {u.source === 'PPPoE' && u.accountNumber ? (
-                        <button className="btn" onClick={() => disableAccount(u.accountNumber)}>Disable</button>
+                      {u.source === "PPPoE" && u.accountNumber ? (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            className="btn"
+                            onClick={() => disableAccount(u.accountNumber)}
+                            disabled={!!acting[u.accountNumber]}
+                          >
+                            {acting[u.accountNumber] ? "Working…" : "Disable"}
+                          </button>
+                          <button
+                            className="btn"
+                            onClick={() => enableAccount(u.accountNumber)}
+                            disabled={!!acting[u.accountNumber]}
+                          >
+                            {acting[u.accountNumber] ? "…" : "Enable"}
+                          </button>
+                        </div>
                       ) : (
                         <span style={{ opacity: 0.5 }}>-</span>
                       )}
@@ -581,10 +806,10 @@ export default function Dashboard() {
                 ))}
                 {enrichedOnline.length === 0 && (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: "center" }}>
+                    <td colSpan={10} style={{ textAlign: "center" }}>
                       {errors.sessions
                         ? `Failed to load sessions: ${errors.sessions}`
-                        : (isAuthenticated && token && ispId)
+                        : isAuthenticated && token && ispId
                         ? "No users online"
                         : "Signing you in…"}
                     </td>
@@ -596,22 +821,40 @@ export default function Dashboard() {
                   <td colSpan={6} style={{ textAlign: "right", fontWeight: 600 }}>
                     Totals
                   </td>
-                  <td>{pageBytesIn.toLocaleString()}</td>
-                  <td>{pageBytesOut.toLocaleString()}</td>
+                  <td className="num">{pageBytesIn.toLocaleString()}</td>
+                  <td className="num">{pageBytesOut.toLocaleString()}</td>
+                  <td />
                   <td />
                 </tr>
               </tfoot>
             </table>
           </div>
+
           {enrichedOnline.length > pageSize && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <button className="btn" onClick={() => setOnlinePage((p) => Math.max(1, p - 1))} disabled={onlinePage === 1}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 8,
+              }}
+            >
+              <button
+                className="btn"
+                onClick={() => setOnlinePage((p) => Math.max(1, p - 1))}
+                disabled={onlinePage === 1}
+              >
                 Previous
               </button>
-              <div style={{ color: '#000' }}>
-                Page {onlinePage} of {onlineTotalPages} • Showing {onlinePageItems.length} of {enrichedOnline.length}
+              <div style={{ color: "#000" }}>
+                Page {onlinePage} of {onlineTotalPages} • Showing {onlinePageItems.length} of{" "}
+                {enrichedOnline.length}
               </div>
-              <button className="btn" onClick={() => setOnlinePage((p) => Math.min(onlineTotalPages, p + 1))} disabled={onlinePage === onlineTotalPages}>
+              <button
+                className="btn"
+                onClick={() => setOnlinePage((p) => Math.min(onlineTotalPages, p + 1))}
+                disabled={onlinePage === onlineTotalPages}
+              >
                 Next
               </button>
             </div>
@@ -638,7 +881,7 @@ export default function Dashboard() {
                     <td>{u.name}</td>
                     <td>{u.phone}</td>
                     <td>{formatDate(u.expiryDate)}</td>
-                    <td>{u.daysLeft}</td>
+                    <td className="num">{u.daysLeft}</td>
                   </tr>
                 ))}
                 {dueSoon.length === 0 && (
@@ -673,7 +916,7 @@ export default function Dashboard() {
                     <td>{u.name}</td>
                     <td>{u.phone}</td>
                     <td>{formatDate(u.expiryDate)}</td>
-                    <td>{u.daysAgo}</td>
+                    <td className="num">{u.daysAgo}</td>
                   </tr>
                 ))}
                 {expired.length === 0 && (
@@ -690,11 +933,18 @@ export default function Dashboard() {
 
         <section className="chart-container">
           <h2>Collections Trend</h2>
-          <Chart type="line" data={paymentsChart} />
+          <div style={{ height: 280 }}>
+            <Chart type="line" data={paymentsChart} options={paymentsOpts} />
+          </div>
         </section>
       </div>
+
       {!!toast && (
         <div
+          ref={toastRef}
+          tabIndex={-1}
+          role="status"
+          aria-live="polite"
           style={{
             position: "fixed",
             top: 16,
@@ -705,12 +955,15 @@ export default function Dashboard() {
             borderRadius: 8,
             boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
             zIndex: 1000,
+            outline: "none",
           }}
         >
           {toast.message}
         </div>
       )}
+
       <UsageModal isOpen={showUsageModal} onClose={() => setShowUsageModal(false)} />
+
       {/* Keep modal wiring available but unused now that inline panel exists */}
       <CustomerDetailsModal
         open={customerModal.open}
@@ -720,7 +973,12 @@ export default function Dashboard() {
       <CustomersBrowserModal
         open={browseOpen}
         onClose={() => setBrowseOpen(false)}
-        onSelect={(c) => { setBrowseOpen(false); setInlineCustomer(c); setCustomerModal({ open: false, customer: null }); setTimeout(scrollToCustomers, 0); }}
+        onSelect={(c) => {
+          setBrowseOpen(false);
+          setInlineCustomer(c);
+          setCustomerModal({ open: false, customer: null });
+          setTimeout(scrollToCustomers, 0);
+        }}
       />
     </div>
   );
