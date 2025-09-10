@@ -31,7 +31,6 @@ export default function StatsCards({
   const busy = usingProps ? !!loading : !!hookLoading;
 
   const items = [
-    { key: "totalCustomers", label: "Total Clients", value: data.totalCustomers ?? 0 },
     { key: "activePlans", label: "Active Plans", value: data.activePlans ?? 0 },
     { key: "pendingInvoices", label: "Pending Invoices", value: data.pendingInvoices ?? 0 },
   ];
