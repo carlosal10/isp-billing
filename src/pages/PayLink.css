@@ -1,0 +1,74 @@
+:root {
+  --pay-bg: #0a1f44;
+  --pay-green: #16a34a;
+  --pay-green-600: #15803d;
+  --pay-muted: #64748b;
+  --pay-card: #ffffff;
+  --pay-border: #e6eaf2;
+  --radius: 16px;
+  --shadow: 0 10px 28px rgba(2, 8, 23, 0.12);
+}
+
+.pay-wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(1200px 600px at 20% -10%, #e8f5ff 0%, #f5f7fb 40%, #f7f9ff 100%);
+}
+.pay-nav {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px; max-width: 1000px; margin: 0 auto; width: 100%;
+}
+.pay-brand{ font-weight: 800; color: var(--pay-bg); }
+.pay-secure{ color: var(--pay-muted); font-size: .9rem; }
+
+.pay-main{
+  flex:1; display:grid; align-items:center; justify-content:center;
+  grid-template-columns: 1.1fr .9fr; gap: 22px; padding: 18px 16px; max-width: 1000px; width: 100%; margin: 0 auto;
+}
+.pitch h1{ margin:0 0 8px; font-size: 2rem; color: var(--pay-bg);}
+.pitch p{ margin:0 0 12px; color: var(--pay-muted); font-size: 1.05rem;}
+.trust{ display:flex; gap:8px; align-items:center; color: var(--pay-muted); font-size:.9rem }
+.trust .dot{width:8px;height:8px;border-radius:50%; background: var(--pay-green)}
+
+.pay-card{
+  background: var(--pay-card);
+  border: 1px solid var(--pay-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.pay-card h2{ margin: 0 0 6px; color: var(--pay-bg); }
+.pay-card .sub{ color: var(--pay-muted); margin-bottom: 10px; }
+
+.plan-box{ border:1px solid var(--pay-border); border-radius: 12px; padding: 14px; }
+.plan-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.plan-name{ font-weight:800; color: var(--pay-bg) }
+.plan-desc{ color: var(--pay-muted); font-size:.95rem }
+.plan-price{ font-weight:800; font-size: 1.1rem; color: var(--pay-bg) }
+.plan-meta{ margin-top:6px; color: var(--pay-muted); font-size:.9rem }
+
+.pay-field{ margin: 12px 0 }
+.pay-field label{ display:block; font-size:.9rem; margin-bottom:6px; color: var(--pay-bg) }
+.pay-input{ width:100%; height:44px; padding:0 12px; border:1px solid var(--pay-border); border-radius: 10px; }
+.pay-input:focus{ outline:none; box-shadow:0 0 0 3px rgba(22,163,74,.18); border-color: var(--pay-green) }
+
+.pay-btn{ width:100%; height:46px; border:none; border-radius: 12px; background: var(--pay-green); color:#fff; font-weight:800; cursor:pointer }
+.pay-btn:hover{ background: var(--pay-green-600) }
+.msg-ok{ color:#065f46; margin-top:10px }
+.msg-err{ color:#c53030; margin-top:10px }
+
+.other{ margin-top: 18px }
+.other h3{ margin: 0 0 8px; color: var(--pay-bg) }
+.other-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px }
+.other-item{ border:1px solid var(--pay-border); border-radius: 12px; padding: 12px }
+.other-item .nm{ font-weight:700; color: var(--pay-bg) }
+.other-item .ds{ color: var(--pay-muted); font-size:.9rem }
+.other-item .pr{ margin-top:6px; font-weight:800 }
+
+.pay-footer{ text-align:center; color: var(--pay-muted); padding: 18px 16px }
+
+@media (max-width: 900px){
+  .pay-main{ grid-template-columns: 1fr; }
+}
+

@@ -5,6 +5,7 @@ import "./App.css";
 import { GiHamburgerMenu } from "react-icons/gi";
 
 import Dashboard from "./pages/Dashboard";
+import Landing from "./pages/Landing";
 import Sidebar from "./components/Sidebar";
 import Login from "./pages/Login";
 import PayLink from "./pages/PayLink";
@@ -52,7 +53,21 @@ export default function App() {
   const openModal = (modal) => { setActiveModal(modal); setSidebarOpen(false); };
   const closeModal = () => setActiveModal(null);
 
-  // Public shell
+  // Always render PayLink as a fully standalone public page (no sidebar/shell)
+  const isPayRoute =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/pay");
+  if (isPayRoute) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/pay" element={<PayLink />} />
+          <Route path="*" element={<Navigate to="/pay" replace />} />
+        </Routes>
+      </Router>
+    );
+  }
+
+  // Public shell (unauthenticated): land on Landing page first
   if (!isAuthed) {
     return (
       <Router>
@@ -62,7 +77,9 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/*" element={<Login />} />
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="*" element={<Landing />} />
         </Routes>
       </Router>
     );
