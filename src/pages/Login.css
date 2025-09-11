@@ -1,159 +1,145 @@
-:root{
-  --lg-primary: var(--ec-primary, #0B2545);
-  --lg-secondary: var(--ec-secondary, #E63946);
-  --lg-accent: var(--ec-accent, #F1C40F);
-  --lg-text: var(--ec-text, #1c2430);
-  --lg-muted: var(--ec-muted, #556270);
-  --lg-bg: var(--ec-bg, #f7f9fc);
-  --lg-white: var(--ec-white, #ffffff);
-
-  --shadow-soft: 0 8px 24px rgba(0,0,0,.08);
-  --shadow-card: 0 10px 30px rgba(0,0,0,.12);
-  --shadow-hover: 0 16px 40px rgba(0,0,0,.14);
-}
-
-/* Shell: two columns on desktop, stacked on mobile */
-.login-shell{
-  min-height: 100svh;
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  background: var(--lg-bg);
-  color: var(--lg-text);
-}
-@media (max-width: 980px){
-  .login-shell{ grid-template-columns: 1fr; }
-}
-
-/* Left: pitch */
-.login-left{
-  position: relative;
-  padding: 48px 6% 48px;
-  color: #fff;
-  
-  background-size: cover;
-  background-position: center;
-  overflow: hidden;
-}
-.login-left-inner{
-  max-width: 720px;
-  position: relative;
-  z-index: 1;
-}
-.login-chip{
-  display:inline-block;
-  background: rgba(241,196,15,.15);
-  border:1px solid rgba(241,196,15,.35);
-  padding:6px 12px; border-radius:999px; font-weight:800; backdrop-filter: blur(6px);
-}
-.login-title{
-  margin:10px 0 8px;
-  font-size: clamp(2rem, 4.4vw, 3rem);
-  font-weight: 800; letter-spacing: -.02em; color: var(--lg-accent);
-}
-.login-sub{
-  max-width: 60ch; color:#e7edf6; line-height:1.85;
-  font-size: clamp(1rem, 2.6vw, 1.1rem);
-}
-.login-benefits{
-  display:grid; gap:10px; margin:14px 0 14px; padding:0; list-style:none;
-}
-.login-benefits li{
-  display:flex; align-items:center; gap:10px;
-  background: rgba(255,255,255,.10);
-  border:1px solid rgba(255,255,255,.18);
-  padding:10px 12px; border-radius:12px; backdrop-filter: blur(6px);
-}
-.dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
-.dot-green{ background:#22c55e; }
-.dot-amber{ background:#f59e0b; }
-.dot-blue{ background:#3b82f6; }
-
-.login-badges{
-  display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;
-}
-.badge{
-  background: rgba(255,255,255,.10);
-  border:1px solid rgba(255,255,255,.18);
-  padding:10px 12px; border-radius:12px; backdrop-filter: blur(6px);
-  text-align:center; min-width: 110px;
-}
-.badge-num{ display:block; font-weight:800; color:#fff; }
-.badge-label{ color:#dbe7fb; font-size:.9rem; }
-
-.login-footlinks{ display:flex; gap:12px; margin-top:12px; flex-wrap:wrap; }
-.login-footlinks a{
-  color:#fff; text-decoration:underline; opacity:.95;
-}
-.login-footlinks a:hover{ opacity:1; }
-
-.login-ambient{
-  position:absolute; inset:-1px; z-index: 0;
-  background:
-    radial-gradient(580px 140px at -10% -10%, rgba(230,57,70,.12), transparent 60%),
-    radial-gradient(420px 120px at 110% 110%, rgba(241,196,15,.12), transparent 60%);
-  pointer-events:none;
-}
-
-/* Right: form */
-.login-right{
-  display:grid; place-items:center;
-  padding: 36px 6%;
-  background:#fff;
-}
-.login-form{
+/* --- FORM LAYOUT NORMALIZER -------------------------------------------- */
+.login-form,
+.register-form {
   width: 100%;
-  max-width: 440px;
-  background:#fff;
-  border:1px solid #eef1f6;
-  border-radius:16px;
-  padding:18px;
-  box-shadow: var(--shadow-card);
-}
-.helper-text{ font-size:.95rem; color:#6b7280; margin-bottom:8px; }
-.helper-text.err{ color:#b91c1c; font-weight:700; white-space:pre-wrap; }
-
-.label{ font-weight:700; color:#243149; margin-top:8px; display:block; }
-.input{
-  width:100%; padding:12px;
-  border:1px solid #e6e9f1; border-radius:10px; font:inherit; outline:none;
-  transition: border .15s, box-shadow .15s; background:#fff; margin-top:6px;
-}
-.input:focus{
-  border-color:#cdd7ff; box-shadow: 0 0 0 3px rgba(100,130,255,.15);
+  max-width: 560px;           /* a bit wider so two columns breathe */
+  background: #fff;
+  border: 1px solid #eef1f6;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow-card, 0 10px 30px rgba(0,0,0,.12));
 }
 
-.btn-primary{
-  width:100%; margin-top:12px;
-  background: linear-gradient(135deg, var(--lg-secondary), #c9303e);
-  color:#fff; border:none; border-radius:12px; padding:12px 16px; font-weight:800;
-  cursor:pointer; box-shadow: var(--shadow-card); transition:.2s ease transform, .2s ease filter;
+/* Field wrapper ensures consistent spacing and label/input alignment */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; /* prevent overflow in grid */
 }
-.btn-primary:hover{ filter: brightness(1.06); transform: translateY(-1px); }
-.btn-primary:disabled{ opacity:.65; cursor:not-allowed; transform:none; }
 
-.form-links{
-  display:flex; gap:10px; justify-content:center; margin-top:10px; flex-wrap:wrap;
+.field label {
+  font-weight: 700;
+  color: #243149;
+  font-size: .95rem;
+  line-height: 1.2;
 }
-.form-links a{ color: var(--lg-primary); font-weight:700; text-decoration: underline; }
-.sep{ opacity:.5; }
 
-.sso-row{
-  display:flex; align-items:center; gap:10px; margin: 12px 0 8px;
+/* Inputs (text, email, password, selects, textareas) */
+.field .input,
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  height: 44px;                 /* consistent height */
+  padding: 10px 12px;
+  border: 1px solid #e6e9f1;
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+  outline: none;
+  transition: border .15s, box-shadow .15s;
+  box-sizing: border-box;
 }
-.sso-line{ flex:1; height:1px; background:#e8ecf4; }
-.sso-label{ color:#6b7280; font-weight:700; }
 
-.btn-ghost{
-  width:100%;
-  background:#ffffff; color: var(--lg-primary);
-  border:1px solid #e7ecf5; border-radius:10px; padding:12px 16px; font-weight:800;
-  cursor:pointer; transition:.2s ease transform;
+.field textarea {
+  height: auto;
+  min-height: 100px;
+  resize: vertical;
 }
-.btn-ghost + .btn-ghost{ margin-top:8px; }
-.btn-ghost:hover{ transform: translateY(-1px); }
 
-/* Mobile spacing tweaks */
-@media (max-width: 640px){
-  .login-left{ padding: 36px 6% 28px; }
-  .login-right{ padding: 24px 6% 36px; }
+.field .input:focus,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: #cdd7ff;
+  box-shadow: 0 0 0 3px rgba(100,130,255,.15);
+}
+
+/* Grid for rows: 2 columns on desktop, 1 on mobile */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Full-width row (e.g., error bar, actions) */
+.form-row {
+  margin-top: 10px;
+}
+
+/* Submit + SSO buttons match field width */
+.btn-primary,
+.btn-ghost,
+.form-actions .btn {
+  width: 100%;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 800;
+}
+
+.form-actions {
+  display: grid;
+  gap: 10px;
+}
+
+/* Error / helper bars don’t break layout */
+.alert {
+  width: 100%;
+  border-radius: 10px;
+  padding: 12px 14px;
+  line-height: 1.45;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+.alert.error {
+  background: #f8d0d0;
+  color: #7a1b1b;
+  border: 1px solid #ef9a9a;
+}
+.alert.success {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+/* Tiny strength row stays neat and aligned */
+.password-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .85rem;
+  color: #6b7280;
+  min-height: 20px; /* reserves space, prevents jump */
+}
+
+/* SSO separator line */
+.sso-row { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; }
+.sso-line { flex: 1; height: 1px; background: #e8ecf4; }
+.sso-label { color: #6b7280; font-weight: 700; }
+
+/* Images inside the form (icons, previews) never overflow */
+.login-form img,
+.register-form img,
+.login-form svg,
+.register-form svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* --- RESPONSIVE (mobile-first adjustments) ------------------------------ */
+@media (max-width: 980px) {
+  .login-shell { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* Stack inputs to full-width and reduce padding so it doesn’t feel cramped */
+  .form-grid { grid-template-columns: 1fr; gap: 10px; }
+  .login-right { padding: 20px 5% 28px; }
+  .login-form, .register-form { max-width: 100%; padding: 16px; }
+
+  /* Ensure any left hero stays tidy */
+  .login-left { padding: 28px 6% 20px; }
+  .login-benefits li,
+  .badge { padding: 8px 10px; }
 }

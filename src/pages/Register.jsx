@@ -1,4 +1,3 @@
-// src/pages/Register.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -40,21 +39,19 @@ export default function Register() {
         if (!mounted) return;
         setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
       } catch (e) {
-        console.error("Health check failed:", e);
-        setApiHealth({
-          ok: false,
-          msg: e?.message || "API unreachable",
-        });
+        setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
       }
     })();
     return () => { mounted = false; };
   }, []);
 
   const pwScore = useMemo(() => scorePassword(form.password), [form.password]);
+  const emailValid = /\S+@\S+\.\S+/.test(form.email);
+
   const canSubmit =
     form.tenantName.trim().length > 0 &&
     form.displayName.trim().length > 0 &&
-    /\S+@\S+\.\S+/.test(form.email) &&
+    emailValid &&
     form.password.length >= 8 &&
     form.password === form.confirm &&
     !busy;
@@ -76,7 +73,6 @@ export default function Register() {
       });
       navigate("/", { replace: true });
     } catch (e2) {
-      console.error("Register error:", e2, e2?.__debug);
       setErr(e2?.message || "Registration failed");
     } finally {
       setBusy(false);
@@ -84,104 +80,182 @@ export default function Register() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3" aria-label="Create account">
-      <div className="helper-text" style={{ color: apiHealth.ok ? "#16a34a" : "#ef4444" }}>
-        {apiHealth.msg}
-      </div>
+    <main className="login-shell" aria-label="Register">
+      {/* Left: Brand + Pitch (same as Login for visual consistency) */}
+      <section
+        className="login-left"
+        aria-labelledby="register-title"
+        style={{
+          background:
+            "radial-gradient(1200px 380px at 80% -10%, rgba(230,57,70,.20), transparent 60%)," +
+            "radial-gradient(900px 320px at 0% 30%, rgba(241,196,15,.18), transparent 60%)," +
+            "linear-gradient(180deg, rgba(11,37,69,.93), rgba(11,37,69,.82))," +
+            "url('/images/login/hero.jpg')",
+        }}
+      >
+        <div className="login-left-inner">
+          <span className="login-chip">KT-SwiftBridge</span>
+          <h1 id="register-title" className="login-title">Bill smarter. Grow faster.</h1>
+          <p className="login-sub">
+            Create your account to manage plans, automate invoices, and collect payments with confidence.
+          </p>
+          <ul className="login-benefits">
+            <li><span className="dot dot-green" /> One-tap M-Pesa STK Push</li>
+            <li><span className="dot dot-amber" /> Automated SMS & email reminders</li>
+            <li><span className="dot dot-blue" /> Real-time analytics & collections</li>
+          </ul>
+          <div className="login-badges" aria-label="Trust and uptime">
+            <div className="badge"><span className="badge-num">99.9%</span><span className="badge-label">Uptime</span></div>
+            <div className="badge"><span className="badge-num">AES-256</span><span className="badge-label">Encryption</span></div>
+            <div className="badge"><span className="badge-num">24/7</span><span className="badge-label">Support</span></div>
+          </div>
+          <div className="login-footlinks">
+            <a href="/status">Status</a>
+            <a href="/docs">Docs</a>
+            <a href="/contact">Contact</a>
+          </div>
+        </div>
+        <div className="login-ambient" aria-hidden="true" />
+      </section>
 
-      <h2 style={{ margin: 0 }}>Create your account</h2>
-
-      <input
-        placeholder="Tenant / ISP name"
-        value={form.tenantName}
-        onChange={onChange("tenantName")}
-        required
-        autoComplete="organization"
-      />
-
-      <input
-        placeholder="Your full name"
-        value={form.displayName}
-        onChange={onChange("displayName")}
-        required
-        autoComplete="name"
-      />
-
-      <input
-        type="email"
-        placeholder="Email"
-        value={form.email}
-        onChange={onChange("email")}
-        required
-        autoComplete="email"
-      />
-
-      <div style={{ display: "grid", gap: "0.5rem" }}>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            type={showPw ? "text" : "password"}
-            placeholder="Password (min 8 chars)"
-            value={form.password}
-            onChange={onChange("password")}
-            required
-            autoComplete="new-password"
-            style={{ flex: 1 }}
-          />
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => setShowPw((v) => !v)}
-            aria-label={showPw ? "Hide password" : "Show password"}
+      {/* Right: Register form */}
+      <section className="login-right">
+        <form onSubmit={submit} className="login-form register-form" aria-label="Create account">
+          <div
+            className="helper-text"
+            style={{ color: apiHealth.ok ? "#16a34a" : apiHealth.ok === null ? "#6b7280" : "#ef4444" }}
+            aria-live="polite"
           >
-            {showPw ? "Hide" : "Show"}
-          </button>
-        </div>
+            {apiHealth.msg}
+          </div>
 
-        <div aria-label="password strength" className="helper-text">
-          Strength:
-          <span style={{ marginLeft: 8 }}>
-            {"■".repeat(pwScore)}
-            {"□".repeat(5 - pwScore)}
-          </span>
-          <span style={{ marginLeft: 8 }}>
-            {pwScore <= 2 ? "weak" : pwScore <= 3 ? "good" : "strong"}
-          </span>
-        </div>
+          <h2 style={{ margin: 0, color: "#0B2545" }}>Create your account</h2>
 
-        <input
-          type={showPw ? "text" : "password"}
-          placeholder="Confirm password"
-          value={form.confirm}
-          onChange={onChange("confirm")}
-          required
-          autoComplete="new-password"
-        />
-      </div>
+          {/* Row 1 */}
+          <div className="form-grid" style={{ marginTop: 12 }}>
+            <div className="field">
+              <label htmlFor="tenantName">Tenant / ISP name</label>
+              <input
+                id="tenantName"
+                className="input"
+                placeholder="Your ISP / tenant"
+                value={form.tenantName}
+                onChange={onChange("tenantName")}
+                required
+                autoComplete="organization"
+              />
+            </div>
 
-      {!/\S+@\S+\.\S+/.test(form.email) && form.email.length > 0 && (
-        <div className="helper-text" style={{ color: "#ef4444" }}>
-          Enter a valid email address.
-        </div>
-      )}
-      {form.password !== form.confirm && form.confirm.length > 0 && (
-        <div className="helper-text" style={{ color: "#ef4444" }}>
-          Passwords do not match.
-        </div>
-      )}
+            <div className="field">
+              <label htmlFor="displayName">Your full name</label>
+              <input
+                id="displayName"
+                className="input"
+                placeholder="e.g., Jane Doe"
+                value={form.displayName}
+                onChange={onChange("displayName")}
+                required
+                autoComplete="name"
+              />
+            </div>
+          </div>
 
-      <button type="submit" disabled={!canSubmit}>
-        {busy ? "Creating…" : "Create account"}
-      </button>
+          {/* Row 2 */}
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                className="input"
+                type="email"
+                placeholder="you@company.com"
+                value={form.email}
+                onChange={onChange("email")}
+                required
+                autoComplete="email"
+              />
+            </div>
 
-      {err && (
-        <div className="helper-text" style={{ color: "#ef4444", whiteSpace: "pre-wrap" }}>
-          {err}
-        </div>
-      )}
+            <div className="field">
+              <label htmlFor="password">Password (min 8 chars)</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="password"
+                  className="input"
+                  type={showPw ? "text" : "password"}
+                  placeholder="Create a password"
+                  value={form.password}
+                  onChange={onChange("password")}
+                  required
+                  autoComplete="new-password"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                  className="btn-ghost"
+                  style={{ width: "auto", padding: "10px 12px" }}
+                >
+                  {showPw ? "Hide" : "Show"}
+                </button>
+              </div>
+              <div className="password-meta" aria-label="password strength">
+                Strength:
+                <span style={{ marginLeft: 8 }}>
+                  {"■".repeat(pwScore)}
+                  {"□".repeat(5 - pwScore)}
+                </span>
+                <span style={{ marginLeft: 8 }}>
+                  {pwScore <= 2 ? "weak" : pwScore <= 3 ? "good" : "strong"}
+                </span>
+              </div>
+            </div>
+          </div>
 
-      <div className="helper-text">
-        Already have an account? <Link to="/login">Sign in</Link>
-      </div>
-    </form>
+          {/* Row 3 */}
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="confirm">Confirm password</label>
+              <input
+                id="confirm"
+                className="input"
+                type={showPw ? "text" : "password"}
+                placeholder="Re-enter password"
+                value={form.confirm}
+                onChange={onChange("confirm")}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="field">{/* spacer to keep grid balanced */}</div>
+          </div>
+
+          {/* Inline validation */}
+          {!emailValid && form.email.length > 0 && (
+            <div className="alert error">Enter a valid email address.</div>
+          )}
+          {form.password !== form.confirm && form.confirm.length > 0 && (
+            <div className="alert error">Passwords do not match.</div>
+          )}
+
+          <div className="form-actions">
+            <button type="submit" disabled={!canSubmit} className="btn-primary">
+              {busy ? "Creating…" : "Create account"}
+            </button>
+
+            {err && (
+              <div className="helper-text err" role="alert" aria-live="assertive">
+                {err}
+              </div>
+            )}
+
+            <div className="form-links">
+              Already have an account? <Link to="/login">Sign in</Link>
+            </div>
+          </div>
+        </form>
+      </section>
+    </main>
   );
 }
