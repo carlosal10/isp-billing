@@ -258,3 +258,15 @@ form.space-y-3 button{ height:46px; border-radius:12px; font-weight:800; }
 
 /* Ensure everything is sized consistently and doesn’t cause x-scroll */
 .login-shell *, .login-shell *::before, .login-shell *::after{ box-sizing: border-box; max-width: 100%; }
+
+/* Mobile override (placed late to win cascade) */
+@media (max-width: 980px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "upper"
+      "lower";
+  }
+  .login-left { grid-area: upper; }
+  .login-right { grid-area: lower; }
+}

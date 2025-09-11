@@ -210,6 +210,13 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("Add");
 
+  // Import tab state
+  const [detecting, setDetecting] = useState(false);
+  const [detected, setDetected] = useState([]); // [{accountNumber, ip, rateLimit, source, comment}]
+  const [selectedKeys, setSelectedKeys] = useState(new Set());
+  const [importing, setImporting] = useState(false);
+  const [importPlan, setImportPlan] = useState("");
+
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
     const detail =
@@ -299,7 +306,7 @@ export default function CustomersModal({ isOpen, onClose }) {
         {message && <p className="status-msg">{message}</p>}
 
         <div className="tabs">
-          {["Add", "Update", "Remove"].map((tab) => (
+          {["Add", "Update", "Remove", "Import"].map((tab) => (
             <button
               key={tab}
               className={`tab-btn ${activeTab === tab ? "active" : ""}`}
@@ -386,6 +393,129 @@ export default function CustomersModal({ isOpen, onClose }) {
                 <RiDeleteBinLine className="inline-icon" /> Remove Customer
               </button>
             </form>
+          )}
+
+          {activeTab === "Import" && (
+            <div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                <button
+                  onClick={async () => {
+                    setDetecting(true);
+                    try {
+                      const { data } = await api.get("/customers/detect-static");
+                      const list = Array.isArray(data?.candidates) ? data.candidates : [];
+                      setDetected(list);
+                      setSelectedKeys(new Set());
+                      setMessage(`${list.length} candidate(s) detected`);
+                    } catch (e) {
+                      console.error(e);
+                      setMessage("Failed to detect static clients");
+                    } finally {
+                      setDetecting(false);
+                    }
+                  }}
+                  disabled={detecting}
+                >
+                  {detecting ? "Detecting…" : "Detect Static Clients"}
+                </button>
+
+                <span style={{ marginLeft: 8, opacity: .8 }}>Assign Plan to imported:</span>
+                <select value={importPlan} onChange={(e) => setImportPlan(e.target.value)}>
+                  <option value="">No plan</option>
+                  {plans.map((p) => (
+                    <option key={p._id} value={p._id}>{p.name} {p.speed ? `(${p.speed})` : ""}</option>
+                  ))}
+                </select>
+              </div>
+
+              {detected.length > 0 ? (
+                <div style={{ maxHeight: 260, overflow: "auto", border: "1px solid #e6e9f1", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", padding: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys.size === detected.length && detected.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedKeys(new Set(detected.map((_, i) => String(i))));
+                              else setSelectedKeys(new Set());
+                            }}
+                          />
+                        </th>
+                        <th style={{ textAlign: "left", padding: 8 }}>Account</th>
+                        <th style={{ textAlign: "left", padding: 8 }}>IP</th>
+                        <th style={{ textAlign: "left", padding: 8 }}>Rate</th>
+                        <th style={{ textAlign: "left", padding: 8 }}>Source</th>
+                        <th style={{ textAlign: "left", padding: 8 }}>Comment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detected.map((row, idx) => {
+                        const key = String(idx);
+                        const checked = selectedKeys.has(key);
+                        return (
+                          <tr key={key} style={{ borderTop: "1px solid #eef1f6" }}>
+                            <td style={{ padding: 8 }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const next = new Set(selectedKeys);
+                                  if (e.target.checked) next.add(key);
+                                  else next.delete(key);
+                                  setSelectedKeys(next);
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: 8 }}>{row.accountNumber || <em style={{ opacity: .6 }}>none</em>}</td>
+                            <td style={{ padding: 8 }}>{row.ip}</td>
+                            <td style={{ padding: 8 }}>{row.rateLimit || ''}</td>
+                            <td style={{ padding: 8, opacity: .8 }}>{row.source}</td>
+                            <td style={{ padding: 8, opacity: .8 }}>{row.comment || ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p style={{ opacity: .7 }}>No candidates yet. Click Detect to fetch from MikroTik.</p>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <button
+                  onClick={async () => {
+                    const items = Array.from(selectedKeys).map((k) => detected[Number(k)]).filter(Boolean);
+                    if (!items.length) {
+                      setMessage("Select at least one row to import");
+                      return;
+                    }
+                    setImporting(true);
+                    try {
+                      const payload = { items: items.map((it) => ({
+                        accountNumber: it.accountNumber || it.ip.replace(/\./g, '-'),
+                        ip: it.ip,
+                        comment: it.comment || '',
+                        planId: importPlan || undefined,
+                      })) };
+                      const { data } = await api.post('/customers/import-static', payload);
+                      const okCount = Array.isArray(data?.results) ? data.results.filter((r) => r.ok).length : 0;
+                      setMessage(`Imported ${okCount} / ${items.length}`);
+                      await loadCustomers();
+                    } catch (e) {
+                      console.error(e);
+                      setMessage("Import failed");
+                    } finally {
+                      setImporting(false);
+                    }
+                  }}
+                  disabled={importing || selectedKeys.size === 0}
+                >
+                  {importing ? "Importing…" : `Import Selected (${selectedKeys.size})`}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

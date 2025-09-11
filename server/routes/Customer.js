@@ -15,6 +15,7 @@ const SmsTemplate = require('../models/SmsTemplate');
 const { createPayLink } = require('../utils/paylink');
 const { renderTemplate, formatDateISO } = require('../utils/template');
 const { sendSms } = require('../utils/sms');
+const mongoose = require('mongoose');
 
 // ----------------- Helpers -----------------
 function generateAccountNumber() {
@@ -116,6 +117,153 @@ router.get('/search', async (req, res) => {
   } catch (err) {
     console.error('customer search failed:', err);
     return res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// ----------------- Detect Static Clients on MikroTik -----------------
+// GET /api/customers/detect-static
+// Heuristic: find simple queues (name = accountNumber) with a single target IP (/32 preferred),
+// and any entries from STATIC_ALLOW/STATIC_BLOCK address-lists. Exclude existing customers.
+router.get('/detect-static', async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+
+    let queues = [];
+    let allowList = [];
+    let blockList = [];
+    try {
+      queues = await sendCommand('/queue/simple/print', [], { tenantId, timeoutMs: 12000 });
+    } catch (_) {}
+
+    try {
+      allowList = await sendCommand('/ip/firewall/address-list/print', ['?list=STATIC_ALLOW'], { tenantId, timeoutMs: 8000 });
+    } catch (_) {}
+    try {
+      blockList = await sendCommand('/ip/firewall/address-list/print', ['?list=STATIC_BLOCK'], { tenantId, timeoutMs: 8000 });
+    } catch (_) {}
+
+    // Build candidates from queues
+    const candidates = [];
+    function firstIpFromTarget(target) {
+      if (!target) return null;
+      const first = String(target).split(',')[0].trim();
+      const ip = first.split('/')[0].trim();
+      // very light validation
+      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) return ip;
+      return null;
+    }
+
+    for (const q of Array.isArray(queues) ? queues : []) {
+      const name = String(q?.name || '').trim();
+      const target = q?.target || q?.['target'] || '';
+      const ip = firstIpFromTarget(target);
+      if (!name || !ip) continue;
+      const rate = String(q?.['max-limit'] || q?.maxLimit || q?.rate || '').trim();
+      candidates.push({
+        source: 'queue',
+        accountNumber: name,
+        ip,
+        rateLimit: rate,
+        comment: String(q?.comment || '').trim() || null,
+      });
+    }
+
+    // Add from address-lists
+    function pushFromList(arr, source) {
+      for (const r of Array.isArray(arr) ? arr : []) {
+        const ip = String(r?.address || '').trim();
+        if (!ip) continue;
+        const comment = String(r?.comment || '').trim() || null;
+        // Try to infer accountNumber from comment if present
+        const accountFromComment = (comment && comment.match(/acct[:#\s]*([A-Za-z0-9_-]+)/i))?.[1] || null;
+        candidates.push({ source, accountNumber: accountFromComment, ip, rateLimit: '', comment });
+      }
+    }
+    pushFromList(allowList, 'address-list-allow');
+    pushFromList(blockList, 'address-list-block');
+
+    // Exclude existing customers for this tenant (by accountNumber or staticConfig.ip)
+    const existing = await Customer.find({ tenantId })
+      .select('accountNumber staticConfig.ip')
+      .lean();
+    const haveAcc = new Set(existing.map((c) => String(c.accountNumber || '').trim()).filter(Boolean));
+    const haveIp = new Set(
+      existing.map((c) => (c?.staticConfig?.ip ? String(c.staticConfig.ip).trim() : '')).filter(Boolean)
+    );
+
+    const uniqKey = (r) => `${r.accountNumber || ''}|${r.ip}`;
+    const seen = new Set();
+    const out = [];
+    for (const r of candidates) {
+      const key = uniqKey(r);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (haveAcc.has(String(r.accountNumber || '').trim())) continue;
+      if (haveIp.has(String(r.ip || '').trim())) continue;
+      out.push(r);
+    }
+
+    return res.json({ ok: true, count: out.length, candidates: out });
+  } catch (e) {
+    console.error('detect-static failed:', e?.message || e);
+    return res.status(500).json({ ok: false, error: 'Failed to detect static clients' });
+  }
+});
+
+// ----------------- Import Selected Static Clients -----------------
+// POST /api/customers/import-static
+// Body: { items: [{ accountNumber, ip, name?, phone?, address?, planId? }] }
+router.post('/import-static', async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ ok: false, error: 'items required' });
+
+    const results = [];
+    for (const raw of items) {
+      try {
+        const accountNumber = String(raw.accountNumber || '').trim();
+        const ip = String(raw.ip || '').trim();
+        if (!accountNumber || !ip) {
+          results.push({ ok: false, error: 'accountNumber and ip required', item: raw });
+          continue;
+        }
+
+        // skip if exists
+        const exists = await Customer.findOne({ tenantId, $or: [ { accountNumber }, { 'staticConfig.ip': ip } ] }).lean();
+        if (exists) {
+          results.push({ ok: false, error: 'exists', accountNumber, ip });
+          continue;
+        }
+
+        const doc = new Customer({
+          tenantId,
+          name: String(raw.name || raw.comment || accountNumber),
+          email: String(raw.email || ''),
+          phone: String(raw.phone || ''),
+          address: String(raw.address || ''),
+          accountNumber,
+          status: 'active',
+          connectionType: 'static',
+          staticConfig: { ip },
+        });
+
+        // Optional plan
+        if (raw.planId && mongoose.Types.ObjectId.isValid(String(raw.planId))) {
+          doc.plan = String(raw.planId);
+        }
+
+        await doc.save();
+        results.push({ ok: true, accountNumber, ip, _id: doc._id });
+      } catch (e) {
+        results.push({ ok: false, error: e?.message || 'save failed', item: raw });
+      }
+    }
+
+    return res.json({ ok: true, imported: results.filter((r) => r.ok).length, results });
+  } catch (e) {
+    console.error('import-static failed:', e?.message || e);
+    return res.status(500).json({ ok: false, error: 'Failed to import static clients' });
   }
 });
 
