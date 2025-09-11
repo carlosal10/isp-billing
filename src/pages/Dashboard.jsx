@@ -388,6 +388,8 @@ export default function Dashboard() {
         s.username || s.name || s.user || s.account || s.login || "";
       const acct = String(username || "").trim();
       const c = customerByAccount.get(acct);
+      const status = (c?.status || "").toString().toLowerCase();
+      const isDisabled = status && status !== "active";
       const toNum = (v) => {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
@@ -402,6 +404,7 @@ export default function Dashboard() {
         bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"]),
         planName: c?.plan?.name || s.plan || "-",
         source: s.source || "PPPoE",
+        isDisabled,
       };
     };
 
@@ -624,7 +627,7 @@ export default function Dashboard() {
             />
             <button
               className="btn"
-              onClick={() => setBrowseOpen(true)}
+              onClick={() => { setBrowseOpen(true); setTimeout(scrollToCustomers, 0); }}
               style={{ marginLeft: 8 }}
             >
               Browse All
@@ -721,16 +724,14 @@ export default function Dashboard() {
               />
               Include Hotspot
             </label>
-            <button
-              className="btn"
-              onClick={() => setShowUsageModal(true)}
-              style={{ marginLeft: 12 }}
-            >
-              Usage
-            </button>
-            <button className="btn" onClick={() => exportCSV(enrichedOnline)}>
-              Export CSV
-            </button>
+            <div className="section-actions">
+              <button className="btn" onClick={() => setShowUsageModal(true)}>
+                Usage
+              </button>
+              <button className="btn" onClick={() => exportCSV(enrichedOnline)}>
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {!loading.sessions && enrichedOnline.length === 0 && !errors.sessions && (
@@ -782,7 +783,7 @@ export default function Dashboard() {
                     <td>{u.planName}</td>
                     <td>
                       {u.source === "PPPoE" && u.accountNumber ? (
-                        <div style={{ display: "flex", gap: 6 }}>
+                        <div className="ppp-actions" data-disabled={u.isDisabled ? '1' : '0'} style={{ display: "flex", gap: 6 }}>
                           <button
                             className="btn"
                             onClick={() => disableAccount(u.accountNumber)}

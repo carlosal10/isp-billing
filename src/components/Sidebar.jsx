@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
 
 // Icons
-import { MdDashboard, MdLogout, MdPayments, MdTerminal, MdSettings, MdViewList, MdLan, MdHistory, MdCable, MdClose, MdSms } from "react-icons/md";
+import { MdDashboard, MdLogout, MdPayments, MdTerminal, MdSettings, MdViewList, MdLan, MdHistory, MdCable, MdClose, MdSms, MdSecurity } from "react-icons/md";
 import { FaUsers, FaWifi } from "react-icons/fa";
 import { RiLinksLine } from "react-icons/ri";
 
@@ -46,6 +46,11 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
           <Link to="/" onClick={toggleSidebar}>
             <MdDashboard /> Dashboard
           </Link>
+        </li>
+        <li>
+          <button onClick={() => onOpenModal(MODALS.STATIC_SETUP)}>
+            <MdSecurity /> Setup Static-IP
+          </button>
         </li>
         <li>
           <button onClick={() => onOpenModal(MODALS.SMS_SETTINGS)}>

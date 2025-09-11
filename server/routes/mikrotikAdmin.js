@@ -405,3 +405,190 @@ router.delete("/enforce/strict-internet", limiter, guardRole, async (req, res) =
     return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
   }
 });
+
+// ===== Static-IP + PPPoE Bootstrap =====
+// Creates STATIC_ALLOW/STATIC_BLOCK lists, forward rules, and disables DHCP on the bridge
+// Idempotent: finds existing objects by comment and only adds missing pieces.
+
+const STATIC_ALLOW = "STATIC_ALLOW";
+const STATIC_BLOCK = "STATIC_BLOCK";
+
+async function ensureAddressListByName(tenantId, name, comment, timeoutMs) {
+  const rows = await sendCommand("/ip/firewall/address-list/print", [qs("list", name)], { tenantId, timeoutMs });
+  if (Array.isArray(rows) && rows.length) return pickId(rows[0]);
+  const add = await sendCommand(
+    "/ip/firewall/address-list/add",
+    [w("list", name), w("comment", comment || name)],
+    { tenantId, timeoutMs }
+  );
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function findFilterIdByComment(tenantId, comment, timeoutMs) {
+  const rows = await sendCommand("/ip/firewall/filter/print", [qs("comment", comment)], { tenantId, timeoutMs });
+  return Array.isArray(rows) && rows[0] ? pickId(rows[0]) : null;
+}
+
+async function ensureFilterRule(tenantId, { chain, action, comment, matches = [] }, timeoutMs) {
+  const id = await findFilterIdByComment(tenantId, comment, timeoutMs);
+  if (id) return id;
+  const words = [w("chain", chain), w("action", action), w("comment", comment), ...matches];
+  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs });
+  return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
+}
+
+async function moveRule(tenantId, numbers, destination, timeoutMs) {
+  // destination can be index (0-based) or an id like *A
+  try {
+    await sendCommand("/ip/firewall/filter/move", [w("numbers", numbers), w("destination", destination)], {
+      tenantId,
+      timeoutMs,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+router.post("/bootstrap/static-ip", limiter, guardRole, async (req, res) => {
+  const tenantId = req.tenantId;
+  const bridge = String(req.body?.bridge || "bridge1");
+  const timeoutMs = 12000;
+  try {
+    const summary = { createdLists: [], ensuredRules: [], moved: [], dhcpDisabledOn: [] };
+
+    // Lists
+    await ensureAddressListByName(tenantId, STATIC_ALLOW, "Billing: allowed static clients", timeoutMs);
+    await ensureAddressListByName(tenantId, STATIC_BLOCK, "Billing: blocked static clients", timeoutMs);
+    summary.createdLists = [STATIC_ALLOW, STATIC_BLOCK];
+
+    // Rules (comments are used as stable identifiers)
+    const EST = "EST/REL";
+    const ALLOW_STATIC = "Allow paid static IPs";
+    const BLOCK_STATIC = "Block unpaid static IPs";
+    const DROP_UNKNOWN = "Drop unknown (non-PPPoE, non-Static) from customer bridge";
+
+    const estId = await ensureFilterRule(
+      tenantId,
+      { chain: "forward", action: "accept", comment: EST, matches: [w("connection-state", "established,related")] },
+      timeoutMs
+    );
+    const allowId = await ensureFilterRule(
+      tenantId,
+      { chain: "forward", action: "accept", comment: ALLOW_STATIC, matches: [w("src-address-list", STATIC_ALLOW)] },
+      timeoutMs
+    );
+    const blockId = await ensureFilterRule(
+      tenantId,
+      { chain: "forward", action: "drop", comment: BLOCK_STATIC, matches: [w("src-address-list", STATIC_BLOCK)] },
+      timeoutMs
+    );
+    const dropUnknownId = await ensureFilterRule(
+      tenantId,
+      { chain: "forward", action: "drop", comment: DROP_UNKNOWN, matches: [w("in-interface", bridge)] },
+      timeoutMs
+    );
+    summary.ensuredRules = [String(estId), String(allowId), String(blockId), String(dropUnknownId)];
+
+    // Order: EST -> Allow -> Block -> DropUnknown
+    await moveRule(tenantId, estId, 0, timeoutMs);
+    const estAgain = await findFilterIdByComment(tenantId, EST, timeoutMs);
+    const allowAgain = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs);
+    const blockAgain = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs);
+    const dropAgain = await findFilterIdByComment(tenantId, DROP_UNKNOWN, timeoutMs);
+    // Move allow after EST
+    if (estAgain && allowAgain) await moveRule(tenantId, allowAgain, estAgain, timeoutMs);
+    const allowPos = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs);
+    if (allowPos && blockAgain) await moveRule(tenantId, blockAgain, allowPos, timeoutMs);
+    const blockPos = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs);
+    if (blockPos && dropAgain) await moveRule(tenantId, dropAgain, blockPos, timeoutMs);
+
+    // Disable DHCP servers bound to this bridge
+    const dhcp = await sendCommand("/ip/dhcp-server/print", [qs("disabled", "no"), qs("interface", bridge)], {
+      tenantId,
+      timeoutMs,
+    });
+    if (Array.isArray(dhcp)) {
+      for (const row of dhcp) {
+        const id = pickId(row);
+        if (!id) continue;
+        await sendCommand("/ip/dhcp-server/disable", [w("numbers", id)], { tenantId, timeoutMs });
+        summary.dhcpDisabledOn.push({ id, name: row.name, interface: row.interface });
+      }
+    }
+
+    return res.json({ ok: true, bridge, summary });
+  } catch (e) {
+    const msg = e?.message || "Bootstrap failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});
+
+// Convenience endpoints to manage static customers in address-lists
+router.post("/static/allow", limiter, guardRole, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { address, comment } = req.body || {};
+    if (!address) return res.status(400).json({ ok: false, error: "address required" });
+    const add = await sendCommand(
+      "/ip/firewall/address-list/add",
+      [w("list", STATIC_ALLOW), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
+      { tenantId, timeoutMs: 8000 }
+    );
+    return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
+  } catch (e) {
+    const msg = e?.message || "Add allow failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});
+
+router.post("/static/block", limiter, guardRole, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { address, comment } = req.body || {};
+    if (!address) return res.status(400).json({ ok: false, error: "address required" });
+    const add = await sendCommand(
+      "/ip/firewall/address-list/add",
+      [w("list", STATIC_BLOCK), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
+      { tenantId, timeoutMs: 8000 }
+    );
+    return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
+  } catch (e) {
+    const msg = e?.message || "Add block failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});
+
+router.post("/static/renew", limiter, guardRole, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { address, comment } = req.body || {};
+    if (!address) return res.status(400).json({ ok: false, error: "address required" });
+    // remove from block
+    const blocked = await sendCommand(
+      "/ip/firewall/address-list/print",
+      [qs("list", STATIC_BLOCK), qs("address", String(address))],
+      { tenantId, timeoutMs: 8000 }
+    );
+    if (Array.isArray(blocked)) {
+      for (const r of blocked) {
+        const id = pickId(r);
+        if (id) await sendCommand("/ip/firewall/address-list/remove", [w("numbers", id)], { tenantId, timeoutMs: 8000 });
+      }
+    }
+    // add back to allow
+    const add = await sendCommand(
+      "/ip/firewall/address-list/add",
+      [w("list", STATIC_ALLOW), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
+      { tenantId, timeoutMs: 8000 }
+    );
+    return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
+  } catch (e) {
+    const msg = e?.message || "Renew failed";
+    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
+    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+  }
+});

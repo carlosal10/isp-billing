@@ -18,6 +18,7 @@ import ConnectMikrotikModal from "./components/ConnectMikrotik";
 import MessagingModal from "./components/MessagingModal";
 import SmsSettingsModal from "./components/SmsSettingsModal";
 import PaymentsModal from "./components/PaymentsModal";
+import StaticIpSetupModal from "./components/StaticIpSetupModal";
 import MikrotikTerminalModal from "./components/MikrotikTerminalModal";
 
 import MODALS from "./constants/modals";
@@ -128,6 +129,7 @@ export default function App() {
         <MessagingModal isOpen={activeModal === MODALS.MESSAGING} onClose={closeModal} />
         <SmsSettingsModal isOpen={activeModal === MODALS.SMS_SETTINGS} onClose={closeModal} />
         <PaymentsModal isOpen={activeModal === MODALS.PAYMENTS} onClose={closeModal} />
+        <StaticIpSetupModal isOpen={activeModal === MODALS.STATIC_SETUP} onClose={closeModal} />
         <MikrotikTerminalModal
           isOpen={activeModal === MODALS.MIKROTIK_TERMINAL}
           onClose={closeModal}

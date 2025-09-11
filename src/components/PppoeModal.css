@@ -1,146 +1,150 @@
-/* PPPoE Modal Styling */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+/* =========================
+   PPPoE Modal — Premium UI
+   Palette aligned with app
+   ========================= */
+:root{
+  --ec-primary:#0B2545;      /* deep navy */
+  --ec-secondary:#E63946;    /* coral */
+  --ec-accent:#F1C40F;       /* gold */
+  --ec-text:#1c2430;         /* body */
+  --ec-muted:#556270;        /* muted */
+  --ec-bg:#ffffff;           /* white */
+  --ec-line:#eef1f6;         /* borders */
+  --shadow-soft:0 10px 26px rgba(0,0,0,.10);
+  --shadow-hard:0 18px 48px rgba(0,0,0,.16);
 }
 
-.modal-content {
-  background: #f1f1f1; /* cream */
-  padding: 2rem;
-  width: 100%;
-  max-width: 550px;
-  border-radius: 16px;
-  position: relative;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
-  animation: fadeIn 0.3s ease-in-out;
+/* Overlay */
+.modal-overlay{
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(11,37,69,.55);
+  backdrop-filter:blur(2px);
+  display:flex; align-items:stretch; justify-content:center;
+}
+
+/* Shell */
+.modal-content{
+  background:var(--ec-bg); color:var(--ec-text);
+  width:min(920px, 94vw);
+  max-height:92vh; margin:auto;
+  border-radius:18px; overflow:auto;
+  border:1px solid var(--ec-line);
+  box-shadow:var(--shadow-hard);
+  position:relative; display:flex; flex-direction:column;
+  padding:16px 16px 18px;
+  animation:pppoe-pop .22s ease;
+}
+@keyframes pppoe-pop{ from{ transform:scale(.985); opacity:.86 } to{ transform:scale(1); opacity:1 } }
+
+/* Full-screen on mobile */
+@media (max-width: 720px){
+  .modal-content{ width:100%; height:100%; max-height:100vh; border-radius:0; padding:14px 12px 18px; }
 }
 
 /* Close button */
-.close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  cursor: pointer;
-  font-size: 20px;
-  color: #333;
-  transition: color 0.2s ease-in-out;
+.modal-content .close{
+  position:absolute; top:12px; right:12px;
+  display:grid; place-items:center; width:40px; height:40px;
+  border-radius:12px; cursor:pointer;
+  color:#6b778c; background:#fff; border:1px solid var(--ec-line);
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+  transition: transform .18s, box-shadow .18s, color .18s, background .18s;
 }
-.close:hover {
-  color: #d9534f;
-}
-
-/* Title */
-.modal-content h2 {
-  font-size: 1.4rem;
-  margin-bottom: 1.5rem;
-  color: #000;
-  text-align: center;
-  font-weight: 600;
+.modal-content .close:hover{
+  transform:translateY(-1px);
+  box-shadow:var(--shadow-soft);
+  color:#d03a45; background:#fff;
 }
 
-/* Forms inside modal */
-.modal-content form {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: #f1f1f1; /* light cream */
-  border-radius: 12px;
+/* Headings & status */
+.modal-content h2{
+  margin:6px 4px 8px 4px;
+  color:var(--ec-primary);
+  font-weight:800;
+  font-size: clamp(1.15rem, 2.6vw, 1.45rem);
+}
+.status-msg{
+  margin:0 4px 12px 4px; padding:10px 12px; border-radius:12px; font-weight:600;
+  background:#fff8e1; border:1px solid #ffe8a6; color:#7a5a00;
 }
 
-.modal-content input,
-.modal-content select {
-  margin-bottom: 12px;
-  padding: 0.8rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border 0.2s ease-in-out;
+/* Forms */
+form{
+  background:#fff;
+  border:1px solid var(--ec-line);
+  border-radius:16px;
+  padding:14px;
+  box-shadow:var(--shadow-soft);
+  margin:10px 0;
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
 }
+form#updateUserForm, form#removeUserForm{ grid-template-columns:repeat(2, 1fr); }
+form#removeUserForm{ grid-template-columns:1fr auto; }
 
-.modal-content input:focus,
-.modal-content select:focus {
-  border-color: #007bff;
+form input, form select{
+  width:100%;
+  background:#fff; color:#0f172a;
+  border:1px solid #e6e9f1; border-radius:12px; padding:12px 12px;
+  outline:none; font:inherit;
+  transition:border-color .15s, box-shadow .15s;
+}
+form input:focus, form select:focus{
+  border-color:#cdd7ff; box-shadow:0 0 0 4px rgba(100,130,255,.14);
 }
 
 /* Buttons */
-.modal-content button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0.8rem 1rem;
-  border: none;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.25s ease-in-out, transform 0.15s;
+form button{
+  grid-column: span 3;
+  appearance:none; border:none; cursor:pointer;
+  background:linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color:#fff; font-weight:800; padding:12px 16px; border-radius:12px;
+  box-shadow:0 12px 26px rgba(230,57,70,.24);
+  display:inline-flex; align-items:center; gap:8px; justify-content:center;
+  transition:filter .18s, transform .18s, box-shadow .18s;
+}
+form#updateUserForm button{ grid-column: span 2; }
+form#removeUserForm button{ grid-column:auto; }
+
+form button:hover{ filter:brightness(1.06); transform:translateY(-1px); }
+.inline-icon{ font-size:1rem; }
+
+/* Remove button (destructive) */
+.remove-btn{
+  background:#fff !important;
+  color:#b91c1c !important;
+  border:1px solid #fecaca !important;
+  box-shadow:0 10px 22px rgba(185,28,28,.08) !important;
+}
+.remove-btn:hover{ background:#fff5f5 !important; transform:translateY(-1px); }
+
+/* Helpers */
+.help, .error{ font-size:.9rem; margin-top:-4px; }
+.help{ color:var(--ec-muted); }
+.error{ color:#b91c1c; }
+
+/* Responsive */
+@media (max-width: 1040px){
+  form{ grid-template-columns:1fr 1fr; }
+  form button{ grid-column: span 2; }
+}
+@media (max-width: 720px){
+  form{ grid-template-columns:1fr; gap:10px; padding:12px; }
+  form button{ grid-column:1; }
+  .modal-content h2{ margin-top:44px; } /* since close btn is near top */
 }
 
-.modal-content button:hover {
-  transform: translateY(-2px);
+/* Focus-visible for keyboard users */
+button:focus-visible,
+.modal-content .close:focus-visible,
+form input:focus-visible,
+form select:focus-visible{
+  outline:2px solid var(--ec-accent);
+  outline-offset:2px;
 }
 
-/* Specific button styles */
-.modal-content button[type="submit"] {
-  background: #16a34a; /* green */
-  color: #fff;
+/* Scrollbar (subtle) */
+.modal-content::-webkit-scrollbar{ width:10px; height:10px; }
+.modal-content::-webkit-scrollbar-thumb{
+  background:#dfe7f2; border-radius:999px; border:2px solid #f6f9ff;
 }
-
-.modal-content .remove-btn {
-  background: #d9534f;
-  color: #fff;
-}
-
-.modal-content .remove-btn:hover { background: #c9302c; }
-
-/* Inline icons */
-.inline-icon {
-  font-size: 1.1rem;
-}
-
-/* Animation */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-15px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive (Mobile first) */
-@media (max-width: 600px) {
-  .modal-content {
-    width: 100vw;
-    height: 100vh;
-    max-width: 100vw;
-    max-height: 100vh;
-    padding: 16px;
-    border-radius: 0;
-  }
-
-  .modal-content h2 {
-    font-size: 1.2rem;
-  }
-
-  .modal-content input,
-  .modal-content select,
-  .modal-content button {
-    font-size: 0.9rem;
-    padding: 0.7rem;
-  }
-}
-
+.modal-content::-webkit-scrollbar-track{ background:transparent; }

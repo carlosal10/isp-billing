@@ -1,95 +1,197 @@
-/* PaymentsModal.css */
-
-/* Overlay */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 60;
+:root{
+  --ec-primary:#0B2545;      /* deep navy */
+  --ec-secondary:#E63946;    /* coral red (CTAs) */
+  --ec-accent:#F1C40F;       /* gold accent */
+  --ec-text:#1c2430;         /* body */
+  --ec-muted:#556270;        /* muted text */
+  --ec-bg:#ffffff;           /* plain white surfaces */
+  --ec-line:#eef1f6;         /* borders */
+  --shadow-soft:0 12px 30px rgba(0,0,0,.10);
+  --shadow-hard:0 18px 50px rgba(0,0,0,.16);
 }
 
-/* Container */
-.modal-content.large {
-  background: #f1f1f1; /* cream */
-  color: #000;
-  width: 92%;
-  max-width: 840px;
-  border-radius: 12px;
-  padding: 18px;
-  position: relative;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+/* ============= OVERLAY ============= */
+.modal-overlay{
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(11,37,69,.55); backdrop-filter:blur(2px);
+  display:flex; align-items:stretch; justify-content:center;
 }
 
-/* Close button (make clearly visible) */
-.modal-content .close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  border: none;
-  background: transparent;
-  color: #4b5563; /* gray-600 */
-  font-size: 1.25rem;
-  cursor: pointer;
-}
-.modal-content .close:hover { color: #ef4444; }
-
-/* Tabs */
-.tabs { display: flex; gap: 10px; border-bottom: 2px solid #e5e7eb; margin-bottom: 12px; }
-.tabs button {
-  background: transparent !important;
-  border: none;
-  color: #163E72; /* navy */
-  padding: 8px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tabs button.active {
-  color: #16a34a; /* green */
-  border-bottom: 2px solid #16a34a;
+/* ============= SHELL ============= */
+.modal-content{
+  background:var(--ec-bg); color:var(--ec-text);
+  width:100%; height:auto; max-height:92vh;
+  margin:auto; border-radius:18px; overflow:hidden;
+  box-shadow:var(--shadow-hard); border:1px solid var(--ec-line);
+  position:relative; display:flex; flex-direction:column;
+  padding:0; /* we’ll pad inner sections */
 }
 
-/* Tables */
-.table-wrapper{ overflow:auto; border-radius: 10px; }
-.data-table{ width: 100%; border-collapse: separate; border-spacing: 0; min-width: 760px; }
-.data-table thead th{ text-align:left; padding: 10px 12px; background: #fbfcff; color:#000; border-bottom:1px solid #e6eaf2; font-weight: 700; }
-.data-table tbody td{ padding: 10px 12px; color:#163E72; }
-.data-table tbody tr:hover{ background:#f6fbf8; }
+/* Payments modal is “large” by class; center on desktop */
+.modal-content.large{ width:min(1020px, 94vw); }
 
-/* Form */
-.stacked-form{ display:flex; flex-direction:column; gap:10px; margin-top: 12px; }
-.stacked-form .field input,
-.stacked-form .field select{
-  width:100%; height: 42px; padding: 10px 12px; border:1px solid #d1d5db; border-radius: 10px;
-  background: #fff; color:#0A1F44; outline: none;
+/* Full-screen on small devices */
+@media (max-width: 720px){
+  .modal-content{ width:100%; height:100%; max-height:100vh; border-radius:0; }
 }
-.stacked-form .field input:focus,
-.stacked-form .field select:focus{ border-color:#16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,.2); }
 
+/* Close button */
+.modal-content .close{
+  position:absolute; top:14px; right:14px; cursor:pointer;
+  display:grid; place-items:center; width:40px; height:40px;
+  border-radius:12px; color:#6b778c; background:#fff; border:1px solid var(--ec-line);
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+  transition: transform .2s ease, box-shadow .2s ease, color .2s ease;
+}
+.modal-content .close:hover{ transform:translateY(-1px); box-shadow:var(--shadow-soft); color:#d03a45; }
+
+/* ============= TABS ============= */
+.tabs{
+  display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--ec-line);
+  background:#fff; position:sticky; top:0; z-index:2;
+  flex-wrap:wrap;
+}
+.tabs button{
+  border:1px solid var(--ec-line); background:#fff; color:#334155;
+  font-weight:800; padding:10px 14px; border-radius:12px; cursor:pointer;
+  transition:background .18s, box-shadow .18s, transform .18s, color .18s;
+}
+.tabs button:hover{ box-shadow:var(--shadow-soft); transform:translateY(-1px); }
+.tabs .active{
+  background:linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  border-color:transparent; color:#fff; box-shadow:0 12px 28px rgba(230,57,70,.28);
+}
+
+/* ============= SECTION TITLES ============= */
+.modal-content h2{
+  margin:14px 16px 6px; color:var(--ec-primary);
+  font-weight:800; font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+}
+.modal-content h3{
+  margin:14px 16px 8px; color:#0f172a; font-weight:800; font-size:1.05rem;
+}
+
+/* ============= TABLES ============= */
+.table-wrapper{
+  padding:10px 16px 16px;
+  overflow:auto;
+}
+.data-table{
+  width:100%; border-collapse:separate; border-spacing:0; background:#fff;
+  border:1px solid var(--ec-line); border-radius:14px; overflow:hidden;
+  box-shadow:0 10px 26px rgba(0,0,0,.06);
+}
+.data-table thead th{
+  background:#f9fbff; color:#0b2545; font-weight:800;
+  text-align:left; padding:12px; border-bottom:1px solid var(--ec-line);
+  font-size:.92rem;
+}
+.data-table tbody td{
+  padding:12px; border-bottom:1px solid #f1f4fa; color:#1f2937;
+  font-size:.95rem;
+}
+.data-table tbody tr:nth-child(odd){ background:#fff; }
+.data-table tbody tr:nth-child(even){ background:#fbfdff; }
+.data-table tbody tr:hover{ background:#fef7f7; }
+.data-table tfoot td{
+  padding:12px; background:#fbfbfb; border-top:1px solid var(--ec-line);
+}
+.actions button{
+  margin-right:8px; padding:8px 10px; border-radius:10px; border:1px solid var(--ec-line);
+  background:#fff; color:#0b2545; font-weight:700; cursor:pointer;
+  transition:transform .18s, box-shadow .18s, background .18s;
+}
+.actions button:hover{ transform:translateY(-1px); box-shadow:var(--shadow-soft); }
+.actions button:last-child{ margin-right:0; }
+
+/* ============= STACKED FORM (Manual Validation) ============= */
+.stacked-form{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
+  padding:10px 16px 18px;
+}
+.stacked-form .field{ position:relative; display:flex; flex-direction:column; }
+.stacked-form input,
+.stacked-form select{
+  width:100%; background:#fff; color:#0f172a;
+  border:1px solid #e6e9f1; border-radius:12px; padding:12px 12px;
+  outline:none; font:inherit;
+  transition:border-color .15s, box-shadow .15s, transform .05s;
+}
+.stacked-form input:focus,
+.stacked-form select:focus{
+  border-color:#cdd7ff; box-shadow:0 0 0 4px rgba(100,130,255,.14);
+}
 .stacked-form .primary{
-  align-self: flex-start;
-  background: #16a34a; color:#fff; border:none; border-radius: 10px; padding: 10px 14px; font-weight:700;
+  grid-column: span 3;
+  appearance:none; border:none; cursor:pointer;
+  background:linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color:#fff; font-weight:800; padding:12px 16px; border-radius:12px;
+  box-shadow:0 12px 26px rgba(230,57,70,.24);
+  display:inline-flex; align-items:center; gap:8px; justify-content:center;
+  transition:filter .18s, transform .18s, box-shadow .18s;
 }
-.stacked-form .primary:hover{ background:#15803d }
+.stacked-form .primary:hover{ filter:brightness(1.06); transform:translateY(-1px); }
 
-/* Search dropdown */
-.search-dropdown{ position:absolute; z-index:10; background:#fff; color:#0A1F44; border:1px solid #e6eaf2; border-radius:10px; margin-top:6px; width:100%; max-height:220px; overflow:auto; }
-.search-dropdown li{ padding:8px 10px; cursor:pointer; }
-.search-dropdown li:hover{ background:#fbfcff }
-.search-empty{ margin-top:6px; color:#6b7280; font-size:.9rem }
+.inline-icon{ font-size:1rem; }
 
-@media (max-width: 640px){
-  .modal-overlay { padding: 0 !important; }
-  .modal-content.large{
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    padding: 16px !important;
-  }
+/* Helper texts */
+.help-text{ color:#64748b; font-size:.85rem; margin-top:6px; }
+.error-text{ color:#b91c1c; font-size:.85rem; margin-top:6px; }
+
+/* ============= SEARCH DROPDOWN ============= */
+.search-dropdown{
+  position:absolute; top:100%; left:0; right:0; z-index:5;
+  background:#fff; border:1px solid var(--ec-line); border-radius:12px;
+  margin-top:6px; box-shadow:var(--shadow-soft); max-height:240px; overflow:auto;
+}
+.search-dropdown li{
+  padding:10px 12px; cursor:pointer; color:#0b2545;
+  border-bottom:1px solid #f2f5fb;
+  transition:background .15s, color .15s;
+}
+.search-dropdown li:last-child{ border-bottom:none; }
+.search-dropdown li:hover{ background:#f7fafe; color:#0a1e3a; }
+.search-empty{
+  margin-top:6px; background:#fff7f7; border:1px solid #ffe1e1;
+  padding:10px 12px; border-radius:12px; color:#8a1c1c;
 }
 
+/* ============= RESPONSIVE ============= */
+@media (max-width: 960px){
+  .stacked-form{ grid-template-columns:1fr 1fr; }
+  .stacked-form .primary{ grid-column: span 2; }
+}
+
+@media (max-width: 720px){
+  /* Full-bleed look, less padding, everything full width */
+  .tabs{ padding:12px 12px; }
+  .modal-content h2, .modal-content h3{ margin:12px 12px 6px; }
+  .table-wrapper{ padding:8px 12px 12px; }
+  .stacked-form{ grid-template-columns:1fr; gap:10px; padding:8px 12px 14px; }
+  .stacked-form .primary{ grid-column:1; }
+  .actions button{ width:100%; margin-right:0; margin-bottom:8px; }
+  .actions{ display:grid; grid-template-columns:1fr; gap:8px; }
+}
+
+/* ============= FOCUS VISIBLE (keyboard) ============= */
+button:focus-visible,
+.tabs button:focus-visible,
+.stacked-form input:focus-visible,
+.stacked-form select:focus-visible{
+  outline:2px solid var(--ec-accent);
+  outline-offset:2px;
+}
+
+/* ============= SCROLLBARS (subtle) ============= */
+.table-wrapper::-webkit-scrollbar,
+.search-dropdown::-webkit-scrollbar{
+  height:10px; width:10px;
+}
+.table-wrapper::-webkit-scrollbar-thumb,
+.search-dropdown::-webkit-scrollbar-thumb{
+  background:#dfe7f2; border-radius:999px; border:2px solid #f6f9ff;
+}
+.table-wrapper::-webkit-scrollbar-track,
+.search-dropdown::-webkit-scrollbar-track{
+  background:transparent;
+}

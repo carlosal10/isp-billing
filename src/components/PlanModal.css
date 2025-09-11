@@ -1,102 +1,176 @@
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
+/* ========= Design tokens ========= */
+:root{
+  --ec-primary:#0B2545;      /* deep navy */
+  --ec-secondary:#E63946;    /* coral red */
+  --ec-accent:#F1C40F;       /* gold */
+  --ec-text:#1c2430;         /* body text */
+  --ec-muted:#556270;        /* muted text */
+  --ec-bg:#ffffff;           /* white surfaces */
+  --ec-line:#eef1f6;         /* borders */
+  --shadow-soft:0 12px 30px rgba(0,0,0,.10);
+  --shadow-hard:0 18px 50px rgba(0,0,0,.16);
 }
 
-.modal-content {
-  background: #f1f1f1; /* cream */
-  padding: 2rem;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
+/* ========= Overlay ========= */
+.modal-overlay{
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(11,37,69,.55);
+  backdrop-filter:blur(2px);
+  display:flex; align-items:stretch; justify-content:center;
 }
 
-.close {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  cursor: pointer;
-  font-size: 1.4rem;
+/* ========= Modal Shell ========= */
+.modal-content.plan-modal{
+  background:var(--ec-bg); color:var(--ec-text);
+  width:min(980px, 94vw);
+  max-height:92vh; margin:auto;
+  border-radius:18px; overflow:hidden;
+  border:1px solid var(--ec-line);
+  box-shadow:var(--shadow-hard);
+  position:relative; display:flex; flex-direction:column;
+  animation:pm-pop .22s ease;
+}
+@keyframes pm-pop{ from{ transform:scale(.985); opacity:.85 } to{ transform:scale(1); opacity:1 } }
+
+/* Full-screen on small screens */
+@media (max-width: 720px){
+  .modal-content.plan-modal{ width:100%; height:100%; max-height:100vh; border-radius:0; }
 }
 
-h2, h3 {
-  text-align: center;
-  margin-bottom: 1rem;
-  color: #000;
+/* Close */
+.modal-content.plan-modal .close{
+  position:absolute; top:14px; right:14px; cursor:pointer;
+  display:grid; place-items:center; width:40px; height:40px;
+  border-radius:12px; color:#6b778c; background:#fff; border:1px solid var(--ec-line);
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+  transition: transform .18s, box-shadow .18s, color .18s;
+}
+.modal-content.plan-modal .close:hover{ transform:translateY(-1px); box-shadow:var(--shadow-soft); color:#d03a45; }
+
+/* Headings & status */
+.modal-content.plan-modal h2{
+  margin:16px 16px 8px; color:var(--ec-primary);
+  font-weight:800; font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+}
+.modal-content.plan-modal h3{
+  margin:12px 16px 8px; color:#0f172a;
+  font-weight:800; font-size:1.05rem;
+}
+.status-msg{
+  margin:0 16px 10px; padding:10px 12px; border-radius:12px; font-weight:600;
+  background:#fff8e1; border:1px solid #ffe8a6; color:#7a5a00;
 }
 
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin-bottom: 1.5rem;
+/* ========= Tabs ========= */
+.tabs{
+  display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--ec-line);
+  background:#fff; position:sticky; top:0; z-index:2; flex-wrap:wrap;
+}
+.tab-btn{
+  border:1px solid var(--ec-line); background:#fff; color:#334155;
+  font-weight:800; padding:10px 14px; border-radius:12px; cursor:pointer;
+  transition:background .18s, box-shadow .18s, transform .18s, color .18s;
+}
+.tab-btn:hover{ box-shadow:var(--shadow-soft); transform:translateY(-1px); }
+.tab-btn.active{
+  background:linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  border-color:transparent; color:#fff; box-shadow:0 12px 28px rgba(230,57,70,.28);
 }
 
-form input {
-  padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+/* ========= Forms ========= */
+.tab-content{
+  padding:12px 16px 4px;
+  display:grid; gap:12px;
 }
 
-form button {
-  background: #16a34a; /* green */
-  color: #fff;
-  padding: 0.8rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.3s;
+/* unified inputs/selects */
+.tab-content form input,
+.tab-content form select{
+  width:100%; background:#fff; color:#0f172a;
+  border:1px solid #e6e9f1; border-radius:12px; padding:12px 12px;
+  outline:none; font:inherit;
+  transition:border-color .15s, box-shadow .15s;
+}
+.tab-content form input:focus,
+.tab-content form select:focus{
+  border-color:#cdd7ff; box-shadow:0 0 0 4px rgba(100,130,255,.14);
 }
 
-form button:hover {
-  background: #15803d;
+/* form layout */
+.tab-content form{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
+}
+.tab-content form button{
+  grid-column: span 3;
+  appearance:none; border:none; cursor:pointer;
+  background:linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color:#fff; font-weight:800; padding:12px 16px; border-radius:12px;
+  box-shadow:0 12px 26px rgba(230,57,70,.24);
+  display:inline-flex; align-items:center; gap:8px; justify-content:center;
+  transition:filter .18s, transform .18s, box-shadow .18s;
+}
+.tab-content form button:hover{ filter:brightness(1.06); transform:translateY(-1px); }
+.inline-icon{ font-size:1rem; }
+
+/* Remove button style */
+.remove-btn{
+  background:#fff; color:#b91c1c !important; border:1px solid #fecaca !important;
+  box-shadow:0 10px 22px rgba(185,28,28,.08) !important;
+}
+.remove-btn:hover{ background:#fff5f5 !important; transform:translateY(-1px); }
+
+/* selects outside grids (the single selectors above each form) */
+.tab-content > select{
+  width:100%; background:#fff; color:#0f172a;
+  border:1px solid #e6e9f1; border-radius:12px; padding:12px;
+  outline:none; font:inherit; transition:border-color .15s, box-shadow .15s;
+  margin-bottom:4px;
+}
+.tab-content > select:focus{ border-color:#cdd7ff; box-shadow:0 0 0 4px rgba(100,130,255,.14); }
+
+/* ========= Plans list ========= */
+.plan-list{
+  list-style:none; padding:0 16px 16px; margin:0; display:grid; gap:10px;
+}
+.plan-list li{
+  background:#fff; border:1px solid var(--ec-line); border-radius:14px;
+  padding:12px 14px; color:#0b2545; display:flex; align-items:center; gap:10px;
+  box-shadow:0 10px 20px rgba(0,0,0,.06);
+}
+.plan-list li strong{ color:#0b2545; }
+
+/* ========= Table-esque helper if needed later ========= */
+.table-like{
+  width:100%; border:1px solid var(--ec-line); border-radius:14px;
+  overflow:hidden; background:#fff; box-shadow:0 10px 26px rgba(0,0,0,.06);
 }
 
-.remove-btn {
-  background: #e63946 !important;
+/* ========= Responsive ========= */
+@media (max-width: 1040px){
+  .tab-content form{ grid-template-columns:1fr 1fr; }
+  .tab-content form button{ grid-column: span 2; }
+}
+@media (max-width: 720px){
+  .tabs{ padding:12px 12px; }
+  .modal-content.plan-modal h2, .modal-content.plan-modal h3{ margin:12px 12px 6px; }
+  .tab-content{ padding:10px 12px 4px; }
+  .tab-content form{ grid-template-columns:1fr; gap:10px; }
+  .tab-content form button{ grid-column:1; }
+  .plan-list{ padding:0 12px 14px; }
 }
 
-.plan-list {
-  list-style: none;
-  padding: 0;
+/* ========= Focus visible (keyboard) ========= */
+button:focus-visible,
+.tab-btn:focus-visible,
+.tab-content form input:focus-visible,
+.tab-content form select:focus-visible{
+  outline:2px solid var(--ec-accent);
+  outline-offset:2px;
 }
 
-.plan-list li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #eee;
+/* ========= Subtle scrollbars where needed ========= */
+.tab-content::-webkit-scrollbar{ height:10px; width:10px; }
+.tab-content::-webkit-scrollbar-thumb{
+  background:#dfe7f2; border-radius:999px; border:2px solid #f6f9ff;
 }
-
-/* 🔹 Mobile Responsive */
-@media (max-width: 768px) {
-  .modal-content {
-    width: 95%;
-    padding: 1.2rem;
-  }
-
-  form input, form button {
-    font-size: 0.9rem;
-    padding: 0.6rem;
-  }
-}
-
-/* Fullscreen on small phones */
-@media (max-width: 640px) {
-  .modal-overlay { padding: 0 !important; }
-  .modal-content {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    padding: 16px !important;
-  }
-}
-
+.tab-content::-webkit-scrollbar-track{ background:transparent; }

@@ -68,7 +68,7 @@ export default function Login() {
             Built for ISPs that value speed, clarity, and reliability.
           </p>
 
-          <ul className="login-benefits" role="list">
+          <ul className="login-benefits">
             <li><span className="dot dot-green" /> One-tap M-Pesa STK Push</li>
             <li><span className="dot dot-amber" /> Automated SMS & email reminders</li>
             <li><span className="dot dot-blue" /> Real-time analytics & collections</li>

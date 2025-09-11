@@ -228,6 +228,16 @@ tfoot td {
   color: var(--ds-primary);
 }
 
+/* ---------- Section head + actions ---------- */
+.section-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.section-head h2{margin:0}
+.section-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+@media (max-width:640px){.section-actions{width:100%;justify-content:flex-end}}
+
+/* Only one PPPoE action visible depending on disabled state */
+.ppp-actions[data-disabled="1"] > button:first-child{display:none}
+.ppp-actions[data-disabled="0"] > button:last-child{display:none}
+
 /* ---------- Toast ---------- */
 [role="status"] {
   border-radius: var(--radius-sm);

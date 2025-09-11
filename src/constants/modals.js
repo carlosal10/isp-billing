@@ -11,6 +11,7 @@ const MODALS = {
   MESSAGING: "messaging",
   SMS_SETTINGS: "smsSettings",
   MIKROTIK_TERMINAL: "mikrotikTerminal",
+  STATIC_SETUP: "staticSetup",
   
 };
 
