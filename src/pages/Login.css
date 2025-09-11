@@ -2,13 +2,17 @@
 .login-form,
 .register-form {
   width: 100%;
-  max-width: 560px;           /* a bit wider so two columns breathe */
+  /* Enlarge forms so inputs aren’t cramped */
+  max-width: 640px;
   background: #fff;
   border: 1px solid #eef1f6;
   border-radius: 16px;
-  padding: 20px;
+  padding: 24px;
   box-shadow: var(--shadow-card, 0 10px 30px rgba(0,0,0,.12));
 }
+
+/* Registration often has two columns; give it extra room */
+.register-form { max-width: 760px; }
 
 /* Field wrapper ensures consistent spacing and label/input alignment */
 .field {
@@ -25,13 +29,27 @@
   line-height: 1.2;
 }
 
+/* Make bare labels inside auth forms align and span full width */
+.login-form label,
+.register-form label,
+.login-form .label,
+.register-form .label{
+  display: block;
+  font-weight: 700;
+  color: #243149;
+  margin-bottom: 6px;
+}
+
 /* Inputs (text, email, password, selects, textareas) */
 .field .input,
 .field input,
 .field select,
-.field textarea {
+.field textarea,
+/* Also normalize inputs that aren’t wrapped in .field (e.g., Login.jsx) */
+.login-form .input,
+.register-form .input {
   width: 100%;
-  height: 44px;                 /* consistent height */
+  height: 46px;                 /* consistent height */
   padding: 10px 12px;
   border: 1px solid #e6e9f1;
   border-radius: 10px;
@@ -51,7 +69,9 @@
 .field .input:focus,
 .field input:focus,
 .field select:focus,
-.field textarea:focus {
+.field textarea:focus,
+.login-form .input:focus,
+.register-form .input:focus {
   border-color: #cdd7ff;
   box-shadow: 0 0 0 3px rgba(100,130,255,.15);
 }
@@ -60,7 +80,7 @@
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px; /* a touch more breathing room */
 }
 
 /* Full-width row (e.g., error bar, actions) */
@@ -129,7 +149,15 @@
 
 /* --- RESPONSIVE (mobile-first adjustments) ------------------------------ */
 @media (max-width: 980px) {
-  .login-shell { grid-template-columns: 1fr; }
+  /* Stack vertically: upper (hero) then lower (form) */
+  .login-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "upper"
+      "lower";
+  }
+  .login-left { grid-area: upper; }
+  .login-right { grid-area: lower; }
 }
 
 @media (max-width: 640px) {
@@ -149,6 +177,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 1fr; /* equal columns */
+  grid-template-areas: "left right";
   align-items: stretch;
   background: #f6f9ff;
   overflow-x: hidden;
@@ -161,6 +190,7 @@
   align-items: center;
   background-size: cover;
   background-position: center;
+  grid-area: left;
 }
 .login-left-inner{ width: min(620px, 92%); padding: 28px 0 32px; margin-left: clamp(16px, 6vw, 48px); }
 .login-chip{ display:inline-block; padding:6px 12px; border:1px solid rgba(255,255,255,.35); border-radius:999px; font-weight:800; backdrop-filter:blur(4px); }
@@ -179,6 +209,7 @@
 .login-footlinks a{ color:#e2e8f0; text-decoration:none }
 .login-right{ display:flex; align-items:center; justify-content:center; padding: 32px 6%; }
 .login-right .login-form{ margin: 0 auto; }
+.login-right{ grid-area: right; }
 .btn-primary{ background:#0B2545; color:#fff; border:none; cursor:pointer; box-shadow:0 8px 20px rgba(11,37,69,.18) }
 .btn-primary:hover{ filter:brightness(1.05) }
 .btn-ghost{ background:#fff; color:#0B2545; border:1px solid #e6e9f1; cursor:pointer }
