@@ -3,6 +3,7 @@ const express = require("express");
 const rateLimit = require("express-rate-limit");
 const { z } = require("zod");
 const { sendCommand } = require("../utils/mikrotikConnectionManager");
+const Membership = require("../models/Membership");
 
 const router = express.Router();
 
@@ -13,12 +14,21 @@ const DEFAULT_PORTS = ["22", "8291", "8728"]; // + "8729" for api-ssl if used
 const STRICT_LIST = "ALLOWED-WAN";
 
 // ----- RBAC (FIXED precedence) -----
-function guardRole(req, res, next) {
-  const role = req.user?.role ?? (req.user?.isAdmin ? "admin" : "user");
-  if (role !== "admin" && role !== "owner" && !req.user?.isAdmin) {
+async function guardRole(req, res, next) {
+  try {
+    // Prefer tenant membership role when available
+    const userId = req.user?.sub;
+    const tenantId = req.tenantId;
+    let role = req.user?.role ?? (req.user?.isAdmin ? "admin" : null);
+    if (!role && userId && tenantId) {
+      const m = await Membership.findOne({ user: userId, tenant: tenantId }).lean();
+      role = m?.role || null; // owner | admin | operator
+    }
+    if (role === "owner" || role === "admin" || req.user?.isAdmin) return next();
     return res.status(403).json({ ok: false, error: "Insufficient privileges" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || "Role check failed" });
   }
-  next();
 }
 
 // ----- Validation -----
