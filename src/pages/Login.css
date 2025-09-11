@@ -148,7 +148,7 @@
 .login-shell{
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 1.15fr .85fr;
+  grid-template-columns: 1fr 1fr; /* equal columns */
   align-items: stretch;
   background: #f6f9ff;
   overflow-x: hidden;
@@ -187,6 +187,37 @@
 .form-links{ display:flex; justify-content:center; gap:8px; align-items:center; margin-top:8px }
 .form-links .sep{ opacity:.5 }
 .sso-actions{ display:grid; grid-template-columns:1fr 1fr; gap:10px }
+
+/* Ensure consistent control sizes across all auth forms */
+.login-form input,
+.login-form select,
+.login-form textarea,
+.register-form input,
+.register-form select,
+.register-form textarea,
+form.space-y-3 input,
+form.space-y-3 select,
+form.space-y-3 textarea{
+  width:100%; height:46px; padding:10px 12px; border:1px solid #e6e9f1; border-radius:10px;
+  font: inherit; background:#fff; outline:none; box-sizing:border-box; transition:border .15s, box-shadow .15s;
+}
+.login-form textarea,
+.register-form textarea,
+form.space-y-3 textarea{ height:auto; min-height:110px; resize:vertical }
+.login-form input:focus,
+.login-form select:focus,
+.login-form textarea:focus,
+.register-form input:focus,
+.register-form select:focus,
+.register-form textarea:focus,
+form.space-y-3 input:focus,
+form.space-y-3 select:focus,
+form.space-y-3 textarea:focus{ border-color:#cdd7ff; box-shadow:0 0 0 3px rgba(100,130,255,.15) }
+
+/* Buttons */
+.login-form button,
+.register-form button,
+form.space-y-3 button{ height:46px; border-radius:12px; font-weight:800; }
 
 @media (max-width:980px){ .login-right{ padding: 24px 5% 32px; } }
 @media (max-width:640px){
