@@ -499,7 +499,7 @@ export default function CustomersModal({ isOpen, onClose }) {
                         comment: it.comment || '',
                         planId: importPlan || undefined,
                       })) };
-                      const { data } = await api.post('/customers/import-static', payload);
+                      const { data } = await api.post('/customers/import-static', payload, { timeout: 60000 });
                       const okCount = Array.isArray(data?.results) ? data.results.filter((r) => r.ok).length : 0;
                       setMessage(`Imported ${okCount} / ${items.length}`);
                       await loadCustomers();

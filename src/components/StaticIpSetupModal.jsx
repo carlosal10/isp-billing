@@ -1,84 +1,266 @@
 // src/components/StaticIpSetupModal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import { MdSecurity, MdBolt } from "react-icons/md";
+import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./PppoeModal.css"; // reuse modal styles
 
 export default function StaticIpSetupModal({ isOpen, onClose }) {
-  const [bridge, setBridge] = useState("bridge1");
+  const [segments, setSegments] = useState([]); // from /static/detect
+  const [segment, setSegment] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-  const [summary, setSummary] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [unknown, setUnknown] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [snapshot, setSnapshot] = useState(null);
+  const [seeding, setSeeding] = useState(false);
+  const [enforcing, setEnforcing] = useState(false);
+
+  const unknownCount = unknown.length;
 
   useEffect(() => {
     if (!isOpen) return;
     setMsg("");
-    setSummary(null);
+    setPreview(null);
+    refreshAll();
   }, [isOpen]);
+
+  const refreshAll = async () => {
+    await Promise.all([loadDetect(), loadUnknown(), loadCustomers()]);
+  };
+
+  const loadDetect = async () => {
+    try {
+      const { data } = await api.get("/static/detect");
+      if (data?.ok) {
+        setSnapshot(data.snapshot || null);
+        const segs = Array.isArray(data.snapshot?.segments) ? data.snapshot.segments : [];
+        setSegments(segs);
+        if (!segment && segs[0]?.name) setSegment(segs[0].name);
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const loadUnknown = async () => {
+    try {
+      const { data } = await api.get("/static/unknown-sources");
+      setUnknown(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) { setUnknown([]); }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const { data } = await api.get("/customers");
+      setCustomers(Array.isArray(data) ? data.filter((c) => c.connectionType === 'static') : []);
+    } catch (e) {}
+  };
+
+  const byIp = useMemo(() => {
+    const lists = snapshot?.lists || {};
+    const allow = new Set((lists.STATIC_ALLOW || []).map((x) => x.address));
+    const block = new Set((lists.STATIC_BLOCK || []).map((x) => x.address));
+    const arpMap = new Map((snapshot?.arpBindings || []).map((a) => [a.address, a]));
+    function firstIpFromTarget(t) { if (!t) return null; const first = String(t).split(',')[0].trim(); const ip = first.split('/')[0].trim(); return ip; }
+    const qSet = new Set((snapshot?.simpleQueues || []).map((q) => firstIpFromTarget(q.target)).filter(Boolean));
+    return { allow, block, arpMap, qSet };
+  }, [snapshot]);
 
   if (!isOpen) return null;
 
-  async function runBootstrap(e) {
-    e?.preventDefault?.();
-    setLoading(true); setMsg(""); setSummary(null);
+  async function doPreviewBootstrap() {
+    setLoading(true); setMsg(""); setPreview(null);
     try {
-      const { data } = await api.post("/mikrotik/admin/bootstrap/static-ip", { bridge });
+      const { data } = await api.post("/static/bootstrap", { segment: segment || 'bridge', dryRun: true });
+      if (!data?.ok) throw new Error(data?.error || "Preview failed");
+      setPreview({ lists: data.toCreate?.lists || [], rules: data.toCreate?.rules || [] });
+      setMsg("Preview ready");
+    } catch (e) { setMsg(e?.message || "Preview failed"); }
+    finally { setLoading(false); }
+  }
+
+  async function doBootstrap() {
+    setLoading(true); setMsg("");
+    try {
+      const { data } = await api.post("/static/bootstrap", { segment: segment || 'bridge', dryRun: false });
       if (!data?.ok) throw new Error(data?.error || "Bootstrap failed");
-      setSummary(data.summary || {});
-      setMsg("Setup complete");
-    } catch (e) {
-      setMsg(e?.message || "Failed to run setup");
-    } finally {
-      setLoading(false);
-    }
+      setMsg("Bootstrap complete");
+      await loadDetect();
+    } catch (e) { setMsg(e?.message || "Bootstrap failed"); }
+    finally { setLoading(false); }
+  }
+
+  async function doSeed() {
+    setSeeding(true); setMsg("");
+    try {
+      const { data } = await api.post("/static/seed-allow", {});
+      if (!data?.ok) throw new Error(data?.error || "Seed failed");
+      setMsg(`Seeded ${data.addedCount} IPs to STATIC_ALLOW`);
+      await loadDetect();
+    } catch (e) { setMsg(e?.message || "Seed failed"); }
+    finally { setSeeding(false); }
+  }
+
+  async function doEnforce() {
+    setEnforcing(true); setMsg("");
+    try {
+      const { data } = await api.post("/static/enforce", { segment: segment || 'bridge' });
+      if (!data?.ok) throw new Error(data?.error || "Enforce failed");
+      setMsg("Enforcement enabled");
+      await loadDetect();
+    } catch (e) { setMsg(e?.message || "Enforce failed"); }
+    finally { setEnforcing(false); }
+  }
+
+  async function adopt(ip, createQueue) {
+    try {
+      await api.post("/static/adopt", { ip, comment: 'adopted-via-ui', createQueue: !!createQueue });
+      await Promise.all([loadUnknown(), loadDetect()]);
+    } catch {}
   }
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div className="modal-content" style={{ maxWidth: 980 }}>
         <button className="close" onClick={onClose} aria-label="Close"><FaTimes /></button>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <MdSecurity /> Setup Static‑IP Policy
+          <MdSecurity /> Static IP Control
         </h2>
+
         {msg && (
-          <div className="status-msg" style={{ background: msg.includes("complete") ? "#ecfdf5" : undefined, borderColor: msg.includes("complete") ? "#bbf7d0" : undefined, color: msg.includes("complete") ? "#065f46" : undefined }}>
+          <div className="status-msg" style={{ background: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#ecfdf5" : undefined, borderColor: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#bbf7d0" : undefined, color: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#065f46" : undefined }}>
             {msg}
           </div>
         )}
 
-        <form onSubmit={runBootstrap} style={{ gridTemplateColumns: '1fr auto auto' }}>
-          <input
-            placeholder="Bridge name (e.g. bridge1)"
-            value={bridge}
-            onChange={(e) => setBridge(e.target.value)}
-            required
-          />
-          <button type="submit" disabled={loading}>
-            <MdBolt className="inline-icon" /> {loading ? "Running..." : "Run Setup"}
-          </button>
-          <button type="button" className="remove-btn" onClick={onClose}>Close</button>
-        </form>
-
-        <div className="help" style={{ marginTop: 6 }}>
-          This will:
-          <ul>
-            <li>Create address‑lists <b>STATIC_ALLOW</b> and <b>STATIC_BLOCK</b></li>
-            <li>Add forward rules (EST/REL, allow paid statics, block unpaid statics, drop unknown from bridge)</li>
-            <li>Disable DHCP servers bound to the bridge (PPPoE unaffected)</li>
-          </ul>
+        {/* Actions */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: 8, marginTop: 8 }}>
+          <select value={segment} onChange={(e) => setSegment(e.target.value)}>
+            {segments.map((s) => (
+              <option key={s.name} value={s.name}>{s.name} {s.lanCidr ? `(${s.lanCidr})` : ''}</option>
+            ))}
+            {segments.length === 0 && <option value="bridge">bridge</option>}
+          </select>
+          <button onClick={doPreviewBootstrap} disabled={loading}><MdPreview className="inline-icon" /> Preview Bootstrap</button>
+          <button onClick={doBootstrap} disabled={loading}><MdBolt className="inline-icon" /> Bootstrap</button>
+          <button onClick={doSeed} disabled={seeding}><MdDownloadDone className="inline-icon" /> Seed Allow</button>
+          <button onClick={doEnforce} disabled={enforcing}><MdRule className="inline-icon" /> Enable Enforcement</button>
+          <button onClick={refreshAll}><MdRefresh className="inline-icon" /> Refresh</button>
         </div>
 
-        {summary && (
-          <div style={{ marginTop: 10 }}>
-            <div className="help">Summary</div>
-            <pre style={{ background: '#f8fafc', border: '1px solid #eef1f6', padding: 12, borderRadius: 12, maxHeight: 280, overflow: 'auto' }}>
-{JSON.stringify(summary, null, 2)}
-            </pre>
+        {/* Dry-run Preview */}
+        {preview && (
+          <div style={{ marginTop: 10, border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>
+            <div className="help" style={{ marginBottom: 6 }}>Bootstrap Preview</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Lists to create</div>
+                {preview.lists.length ? (
+                  <ul>{preview.lists.map((l) => (<li key={l}>{l}</li>))}</ul>
+                ) : (<div style={{ opacity: .7 }}>No lists need creation</div>)}
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Rules to add</div>
+                {preview.rules.length ? (
+                  <ul>{preview.rules.map((r) => (<li key={r}>{r}</li>))}</ul>
+                ) : (<div style={{ opacity: .7 }}>No rules need creation</div>)}
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Monitor banner */}
+        <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0f172a' }}>Monitor mode</div>
+            <div style={{ color: '#334155' }}>{unknownCount} unknown sources observed</div>
+          </div>
+          <div>
+            <button onClick={loadUnknown}><MdRefresh className="inline-icon" /> Refresh</button>
+          </div>
+        </div>
+
+        {/* Unknown sources table */}
+        <div style={{ marginTop: 10 }}>
+          <div className="help">Unknown Sources</div>
+          <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: 8 }}>IP</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Segment</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Queue?</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>ARP Perm?</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>DHCP Lease?</th>
+                  <th style={{ textAlign: 'right', padding: 8 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unknown.map((u) => (
+                  <tr key={u.address} style={{ borderTop: '1px solid #eef1f6' }}>
+                    <td style={{ padding: 8 }}>{u.address}</td>
+                    <td style={{ padding: 8 }}>{u.segment || '-'}</td>
+                    <td style={{ padding: 8 }}>{u.hasQueue ? 'Yes' : 'No'}</td>
+                    <td style={{ padding: 8 }}>{u.inArpPermanent ? 'Yes' : 'No'}</td>
+                    <td style={{ padding: 8 }}>{u.hasDhcpLease ? 'Yes' : 'No'}</td>
+                    <td style={{ padding: 8, textAlign: 'right' }}>
+                      <button onClick={() => adopt(u.address, false)}><MdDone className="inline-icon" /> Adopt</button>
+                    </td>
+                  </tr>
+                ))}
+                {unknown.length === 0 && (
+                  <tr><td colSpan="6" style={{ padding: 8, opacity: .7 }}>No unknown sources yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Static clients summary */}
+        <div style={{ marginTop: 14 }}>
+          <div className="help">Static Clients</div>
+          <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Account</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>IP</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Badges</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Segment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => {
+                  const ip = c?.staticConfig?.ip || '';
+                  const badges = [];
+                  if (byIp.allow.has(ip)) badges.push('allow-list');
+                  if (byIp.block.has(ip)) badges.push('block-list');
+                  if (byIp.qSet.has(ip)) badges.push('queue');
+                  if (byIp.arpMap.has(ip)) badges.push('arp');
+                  const seg = byIp.arpMap.get(ip)?.interface || '-';
+                  return (
+                    <tr key={c._id} style={{ borderTop: '1px solid #eef1f6' }}>
+                      <td style={{ padding: 8 }}>{c.name || '-'}</td>
+                      <td style={{ padding: 8 }}>{c.accountNumber || '-'}</td>
+                      <td style={{ padding: 8 }}>{ip || '-'}</td>
+                      <td style={{ padding: 8 }}>
+                        {badges.length ? badges.map((b, i) => (
+                          <span key={i} style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 999, border: '1px solid #e6eaf2', background: '#f1f5f9', marginRight: 6 }}>{b}</span>
+                        )) : <span style={{ opacity: .6 }}>none</span>}
+                      </td>
+                      <td style={{ padding: 8 }}>{seg}</td>
+                    </tr>
+                  );
+                })}
+                {customers.length === 0 && (
+                  <tr><td colSpan="5" style={{ padding: 8, opacity: .7 }}>No static customers yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-

@@ -219,48 +219,79 @@ router.post('/import-static', async (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) return res.status(400).json({ ok: false, error: 'items required' });
 
-    const results = [];
+    // Normalize + dedupe incoming items
+    const normalized = [];
+    const seen = new Set();
     for (const raw of items) {
+      const accountNumber = String(raw?.accountNumber || '').trim();
+      const ip = String(raw?.ip || '').trim();
+      if (!accountNumber || !ip) continue;
+      const key = `${accountNumber}|${ip}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push({ raw, accountNumber, ip });
+    }
+    if (!normalized.length) return res.status(400).json({ ok: false, error: 'No valid items' });
+
+    // Fetch existing customers in a single query by accountNumber or staticConfig.ip
+    const wantAcc = normalized.map(x => x.accountNumber);
+    const wantIp = normalized.map(x => x.ip);
+    const existing = await Customer.find({
+      tenantId,
+      $or: [
+        { accountNumber: { $in: wantAcc } },
+        { 'staticConfig.ip': { $in: wantIp } },
+      ],
+    }).select('accountNumber staticConfig.ip').lean();
+    const haveAcc = new Set(existing.map(e => String(e.accountNumber || '').trim()).filter(Boolean));
+    const haveIp = new Set(existing.map(e => String(e?.staticConfig?.ip || '').trim()).filter(Boolean));
+
+    // Build docs to insert
+    const docs = [];
+    const results = [];
+    for (const { raw, accountNumber, ip } of normalized) {
+      if (haveAcc.has(accountNumber) || haveIp.has(ip)) {
+        results.push({ ok: false, error: 'exists', accountNumber, ip });
+        continue;
+      }
+
+      const doc = {
+        tenantId,
+        name: String(raw.name || raw.comment || accountNumber),
+        email: String(raw.email || ''),
+        phone: String(raw.phone || ''),
+        address: String(raw.address || ''),
+        accountNumber,
+        status: 'active',
+        connectionType: 'static',
+        staticConfig: { ip },
+      };
+      if (raw.planId && mongoose.Types.ObjectId.isValid(String(raw.planId))) {
+        doc.plan = String(raw.planId);
+      }
+      docs.push(doc);
+    }
+
+    let inserted = [];
+    if (docs.length) {
       try {
-        const accountNumber = String(raw.accountNumber || '').trim();
-        const ip = String(raw.ip || '').trim();
-        if (!accountNumber || !ip) {
-          results.push({ ok: false, error: 'accountNumber and ip required', item: raw });
-          continue;
-        }
-
-        // skip if exists
-        const exists = await Customer.findOne({ tenantId, $or: [ { accountNumber }, { 'staticConfig.ip': ip } ] }).lean();
-        if (exists) {
-          results.push({ ok: false, error: 'exists', accountNumber, ip });
-          continue;
-        }
-
-        const doc = new Customer({
-          tenantId,
-          name: String(raw.name || raw.comment || accountNumber),
-          email: String(raw.email || ''),
-          phone: String(raw.phone || ''),
-          address: String(raw.address || ''),
-          accountNumber,
-          status: 'active',
-          connectionType: 'static',
-          staticConfig: { ip },
-        });
-
-        // Optional plan
-        if (raw.planId && mongoose.Types.ObjectId.isValid(String(raw.planId))) {
-          doc.plan = String(raw.planId);
-        }
-
-        await doc.save();
-        results.push({ ok: true, accountNumber, ip, _id: doc._id });
+        inserted = await Customer.insertMany(docs, { ordered: false });
       } catch (e) {
-        results.push({ ok: false, error: e?.message || 'save failed', item: raw });
+        // insertMany with ordered:false returns partial success; continue to build results
+        // e.writeErrors may contain duplicates; we'll still compute results below
+        console.warn('insertMany issues:', e?.message || e);
       }
     }
 
-    return res.json({ ok: true, imported: results.filter((r) => r.ok).length, results });
+    // Map successful inserts by accountNumber+ip
+    const okSet = new Set((inserted || []).map(d => `${String(d.accountNumber)}|${String(d?.staticConfig?.ip || '')}`));
+    for (const { accountNumber, ip } of docs) {
+      const key = `${accountNumber}|${ip}`;
+      if (okSet.has(key)) results.push({ ok: true, accountNumber, ip });
+      else if (![...results].some(r => r.accountNumber === accountNumber && r.ip === ip)) results.push({ ok: false, accountNumber, ip, error: 'not inserted' });
+    }
+
+    return res.json({ ok: true, imported: results.filter(r => r.ok).length, results });
   } catch (e) {
     console.error('import-static failed:', e?.message || e);
     return res.status(500).json({ ok: false, error: 'Failed to import static clients' });
@@ -574,19 +605,27 @@ router.get('/health/:accountNumber', async (req, res) => {
       return res.json(out);
     }
 
-    // Static IP: reflect queue status if present
+    // Static IP: reflect queue status if present and approximate online via ARP
     if (customer.connectionType === 'static') {
+      const ip = customer?.staticConfig?.ip || null;
       let queues = [];
+      let arp = [];
       try {
         queues = await sendCommand('/queue/simple/print', [`?name=${accountNumber}`], { tenantId, timeoutMs: 8000 });
       } catch (_) {}
+      try {
+        if (ip) arp = await sendCommand('/ip/arp/print', [`?address=${ip}`], { tenantId, timeoutMs: 6000 });
+      } catch (_) {}
+
       const q0 = Array.isArray(queues) ? queues[0] : null;
       const qDisabledVal = q0?.disabled ?? 'no';
       const disabled = isYes(qDisabledVal);
+      const arpHit = Array.isArray(arp) && arp.length > 0;
+
       out.disabled = disabled;
       out.status = disabled ? 'inactive' : 'active';
-      out.online = null; // not directly measurable here
-      out.deviceCount = null; // not measurable from ISP router without deeper telemetry
+      out.online = !!arpHit; // approximate: present in ARP table
+      out.deviceCount = arpHit ? 1 : 0;
       return res.json(out);
     }
 

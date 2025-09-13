@@ -119,6 +119,7 @@ const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
 const mikrotikRoutes = require("./routes/mikrotik");
 const mikrotikTerminalRoutes = require("./routes/mikrotikTerminal");
 const mikrotikAdminRoutes = require("./routes/mikrotikAdmin");
+const staticControlRoutes = require("./routes/staticControl");
 
 // Hotspot
 const hotspotPlansRoutes = require("./routes/hotspotPlans");
@@ -181,6 +182,8 @@ app.use(
 
 // Admin Mikrotik ops (whitelist, connection upsert/test)
 app.use("/api/mikrotik/admin", authenticate, requireTenant, mikrotikAdminRoutes);
+// Static-IP migration & enforcement (monitor -> enforce)
+app.use("/api/static", authenticate, requireTenant, staticControlRoutes);
 
 // Hotspot
 app.use("/api/hotspot-plans", authenticate, requireTenant, hotspotPlansRoutes);
