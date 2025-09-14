@@ -120,19 +120,21 @@ router.get("/hotspot/active", limiter, async (req, res) => {
   res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
 });
 
+// ---------- helper: private + LAN interface detection ----------
+function isPrivateIPv4(ip) {
+  try {
+    const o = ip.split('.').map(Number);
+    if (o[0] === 10) return true;
+    if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+    if (o[0] === 192 && o[1] === 168) return true;
+    return false;
+  } catch { return false; }
+}
+
 // GET /api/mikrotik/queues/simple
 router.get("/mikrotik/queues/simple", limiter, async (req, res) => {
   const tenantId = req.tenantId;
   const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
-  function isPrivate(ip) {
-    try {
-      const o = ip.split('.').map(Number);
-      if (o[0] === 10) return true;
-      if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
-      if (o[0] === 192 && o[1] === 168) return true;
-      return false;
-    } catch { return false; }
-  }
   try {
     const rows = await rosPrint(tenantId, "/queue/simple/print");
     const mapped = (Array.isArray(rows) ? rows : []).map((q) => {
@@ -145,7 +147,7 @@ router.get("/mikrotik/queues/simple", limiter, async (req, res) => {
         comment: s(q?.comment),
         maxLimit: s(q?.["max-limit"] || q?.maxLimit || ""),
       };
-    }).filter((r) => r.ip && (!privateOnly || isPrivate(r.ip)));
+    }).filter((r) => r.ip && (!privateOnly || isPrivateIPv4(r.ip)));
     return res.json({ ok: true, count: mapped.length, queues: mapped });
   } catch (e) {
     // Degrade gracefully so UI doesn't loop
@@ -158,15 +160,6 @@ router.get("/queues/simple", limiter, async (req, res) => {
   // Just proxy by invoking the same logic as above via rosPrint
   const tenantId = req.tenantId;
   const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
-  function isPrivate(ip) {
-    try {
-      const o = ip.split('.').map(Number);
-      if (o[0] === 10) return true;
-      if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
-      if (o[0] === 192 && o[1] === 168) return true;
-      return false;
-    } catch { return false; }
-  }
   try {
     const rows = await rosPrint(tenantId, "/queue/simple/print");
     const mapped = (Array.isArray(rows) ? rows : []).map((q) => {
@@ -179,11 +172,59 @@ router.get("/queues/simple", limiter, async (req, res) => {
         comment: s(q?.comment),
         maxLimit: s(q?.["max-limit"] || q?.maxLimit || ""),
       };
-    }).filter((r) => r.ip && (!privateOnly || isPrivate(r.ip)));
+    }).filter((r) => r.ip && (!privateOnly || isPrivateIPv4(r.ip)));
     return res.json({ ok: true, count: mapped.length, queues: mapped });
   } catch (e) {
     return res.json({ ok: false, count: 0, queues: [], error: e?.message || 'Failed to load queues' });
   }
+});
+
+// GET /api/mikrotik/arp (with filters)
+// query: lanOnly=true, privateOnly=true, permanentOnly=true
+router.get("/mikrotik/arp", limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  const lanOnly = String(req.query?.lanOnly || 'true').toLowerCase() !== 'false';
+  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
+  const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
+  try {
+    const [arps, bridges, vlans] = await Promise.all([
+      rosPrint(tenantId, "/ip/arp/print"),
+      lanOnly ? rosPrint(tenantId, "/interface/bridge/print") : Promise.resolve([]),
+      lanOnly ? rosPrint(tenantId, "/interface/vlan/print") : Promise.resolve([]),
+    ]);
+    const lanIf = new Set([
+      ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
+      ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
+    ]);
+    const mapped = (Array.isArray(arps) ? arps : []).map((a) => ({
+      address: s(a?.address),
+      interface: s(a?.interface),
+      mac: s(a?.['mac-address']),
+      type: s(a?.type),
+      dynamic: s(a?.dynamic),
+      comment: s(a?.comment),
+    })).filter((r) => {
+      if (!r.address) return false;
+      if (privateOnly && !isPrivateIPv4(r.address)) return false;
+      if (lanOnly && r.interface && lanIf.size && !lanIf.has(r.interface)) return false;
+      if (permanentOnly) {
+        const dyn = String(r.dynamic || 'no').toLowerCase() === 'yes';
+        const type = String(r.type || '').toLowerCase();
+        if (dyn && type !== 'static') return false;
+      }
+      return true;
+    });
+    return res.json({ ok: true, count: mapped.length, arps: mapped });
+  } catch (e) {
+    return res.json({ ok: false, count: 0, arps: [], error: e?.message || 'Failed to load ARP' });
+  }
+});
+
+// Alias
+router.get("/arp", limiter, async (req, res) => {
+  const q = new URLSearchParams(req.query).toString();
+  req.url = "/mikrotik/arp" + (q ? ("?" + q) : "");
+  return router.handle(req, res);
 });
 
 // GET /api/mikrotik/static/active

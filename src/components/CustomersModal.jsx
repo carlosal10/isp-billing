@@ -74,6 +74,10 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [queueOpts, setQueueOpts] = useState([]);
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
   const [useQueueIp, setUseQueueIp] = useState(false);
+  const [useArpIp, setUseArpIp] = useState(false);
+  const [arpLoading, setArpLoading] = useState(false);
+  const [arpOpts, setArpOpts] = useState([]);
+  const [selectedArpIp, setSelectedArpIp] = useState("");
 
   const [queueTried, setQueueTried] = useState(false);
 
@@ -107,6 +111,34 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       loadQueues();
     }
   }, [networkType, useQueueIp, queueLoading, queueTried, queueOpts.length, loadQueues]);
+
+  const loadArps = useCallback(async () => {
+    try {
+      setArpLoading(true);
+      const { data } = await api.get('/arp', { params: { lanOnly: true, privateOnly: true, permanentOnly: true } });
+      const list = Array.isArray(data?.arps) ? data.arps : [];
+      const seen = new Set();
+      const opts = [];
+      for (const a of list) {
+        const ip = String(a?.address || '').trim();
+        if (!ip || seen.has(ip)) continue;
+        seen.add(ip);
+        const label = `${ip} ${a.interface ? '— ' + a.interface : ''} ${a.comment ? '— ' + a.comment : ''}`;
+        opts.push({ ip, label });
+      }
+      setArpOpts(opts);
+    } catch (e) {
+      setArpOpts([]);
+    } finally {
+      setArpLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (networkType === 'static' && useArpIp && !arpLoading && arpOpts.length === 0) {
+      loadArps();
+    }
+  }, [networkType, useArpIp, arpLoading, arpOpts.length, loadArps]);
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
@@ -200,6 +232,10 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                 <input type="checkbox" checked={useQueueIp} onChange={() => setUseQueueIp(v => !v)} />
                 Pick IP from router queues (existing configs)
               </label>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginBottom: 6, marginLeft: 8 }}>
+                <input type="checkbox" checked={useArpIp} onChange={() => setUseArpIp(v => !v)} />
+                Pick IP from ARP table (LAN)
+              </label>
               {useQueueIp && (
                 <select
                   value={selectedQueueIp}
@@ -214,6 +250,24 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                     {queueLoading ? 'Loading router queues…' : (queueOpts.length ? 'Select IP from queues…' : 'No queue IPs found')}
                   </option>
                   {queueOpts.map((o) => (
+                    <option key={o.ip} value={o.ip}>{o.label}</option>
+                  ))}
+                </select>
+              )}
+              {useArpIp && (
+                <select
+                  value={selectedArpIp}
+                  onChange={(e) => {
+                    const ip = e.target.value;
+                    setSelectedArpIp(ip);
+                    if (ip) setStaticConfig((s) => ({ ...s, ip }));
+                  }}
+                  disabled={arpLoading}
+                >
+                  <option value="">
+                    {arpLoading ? 'Loading ARP…' : (arpOpts.length ? 'Select IP from ARP…' : 'No ARP IPs found')}
+                  </option>
+                  {arpOpts.map((o) => (
                     <option key={o.ip} value={o.ip}>{o.label}</option>
                   ))}
                 </select>
