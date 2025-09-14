@@ -146,16 +146,44 @@ router.get("/mikrotik/queues/simple", limiter, async (req, res) => {
         maxLimit: s(q?.["max-limit"] || q?.maxLimit || ""),
       };
     }).filter((r) => r.ip && (!privateOnly || isPrivate(r.ip)));
-    res.json({ ok: true, count: mapped.length, queues: mapped });
+    return res.json({ ok: true, count: mapped.length, queues: mapped });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to load queues' });
+    // Degrade gracefully so UI doesn't loop
+    return res.json({ ok: false, count: 0, queues: [], error: e?.message || 'Failed to load queues' });
   }
 });
 
-// Alias
+// Alias (directly call handler logic by duplicating call)
 router.get("/queues/simple", limiter, async (req, res) => {
-  req.url = "/mikrotik/queues/simple";
-  return router.handle(req, res);
+  // Just proxy by invoking the same logic as above via rosPrint
+  const tenantId = req.tenantId;
+  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
+  function isPrivate(ip) {
+    try {
+      const o = ip.split('.').map(Number);
+      if (o[0] === 10) return true;
+      if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+      if (o[0] === 192 && o[1] === 168) return true;
+      return false;
+    } catch { return false; }
+  }
+  try {
+    const rows = await rosPrint(tenantId, "/queue/simple/print");
+    const mapped = (Array.isArray(rows) ? rows : []).map((q) => {
+      const target = s(q?.target || q?.["target"] || "");
+      const ip = firstIpFromTarget(target);
+      return {
+        name: s(q?.name),
+        target,
+        ip,
+        comment: s(q?.comment),
+        maxLimit: s(q?.["max-limit"] || q?.maxLimit || ""),
+      };
+    }).filter((r) => r.ip && (!privateOnly || isPrivate(r.ip)));
+    return res.json({ ok: true, count: mapped.length, queues: mapped });
+  } catch (e) {
+    return res.json({ ok: false, count: 0, queues: [], error: e?.message || 'Failed to load queues' });
+  }
 });
 
 // GET /api/mikrotik/static/active

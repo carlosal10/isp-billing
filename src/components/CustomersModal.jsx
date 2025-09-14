@@ -75,6 +75,8 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
   const [useQueueIp, setUseQueueIp] = useState(false);
 
+  const [queueTried, setQueueTried] = useState(false);
+
   const loadQueues = useCallback(async () => {
     try {
       setQueueLoading(true);
@@ -95,15 +97,16 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       setQueueOpts([]);
     } finally {
       setQueueLoading(false);
+      setQueueTried(true);
     }
   }, []);
 
   // Auto-load queues when switching to Static
   useEffect(() => {
-    if (networkType === 'static' && useQueueIp && !queueLoading && queueOpts.length === 0) {
+    if (networkType === 'static' && useQueueIp && !queueLoading && !queueTried && queueOpts.length === 0) {
       loadQueues();
     }
-  }, [networkType, useQueueIp, queueLoading, queueOpts.length, loadQueues]);
+  }, [networkType, useQueueIp, queueLoading, queueTried, queueOpts.length, loadQueues]);
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
