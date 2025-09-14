@@ -9,7 +9,8 @@ const customerSchema = new mongoose.Schema({
   address: String,
   routerIp: { type: String, default: null },
   status: { type: String, default: 'active' },
-  accountNumber: { type: String, unique: true },
+  // Unique per-tenant (not globally unique)
+  accountNumber: { type: String },
 
   // Link to plan
   plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan' },
@@ -30,5 +31,14 @@ const customerSchema = new mongoose.Schema({
     dns: { type: String }
   }
 });
+
+// Indexes (must be declared before compiling the model)
+// Ensure uniqueness by tenant for account numbers
+customerSchema.index({ tenantId: 1, accountNumber: 1 }, { unique: true });
+// Ensure static IPs are unique per-tenant (allow null/missing)
+customerSchema.index(
+  { tenantId: 1, 'staticConfig.ip': 1 },
+  { unique: true, partialFilterExpression: { 'staticConfig.ip': { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('Customer', customerSchema);

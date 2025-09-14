@@ -1,9 +1,10 @@
 // src/components/StaticIpSetupModal.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone } from "react-icons/md";
+import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone, MdHistory } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./PppoeModal.css"; // reuse modal styles
+import "./StaticIpSetupModal.css";
 
 export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [segments, setSegments] = useState([]); // from /static/detect
@@ -16,6 +17,8 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [snapshot, setSnapshot] = useState(null);
   const [seeding, setSeeding] = useState(false);
   const [enforcing, setEnforcing] = useState(false);
+  const [rollbacking, setRollbacking] = useState(false);
+  const [rollbackPreview, setRollbackPreview] = useState(null);
 
   const unknownCount = unknown.length;
 
@@ -119,9 +122,32 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
     } catch {}
   }
 
+  async function doRollbackPreview() {
+    setRollbacking(true); setMsg(""); setRollbackPreview(null);
+    try {
+      const { data } = await api.post("/static/rollback", { dryRun: true });
+      if (!data?.ok) throw new Error(data?.error || "Rollback preview failed");
+      setRollbackPreview(data);
+      setMsg("Rollback preview ready");
+    } catch (e) { setMsg(e?.message || "Rollback preview failed"); }
+    finally { setRollbacking(false); }
+  }
+
+  async function doRollback(removeRules = false) {
+    setRollbacking(true); setMsg("");
+    try {
+      const { data } = await api.post("/static/rollback", { removeRules: !!removeRules });
+      if (!data?.ok) throw new Error(data?.error || "Rollback failed");
+      setMsg("Rollback applied");
+      setRollbackPreview(null);
+      await loadDetect();
+    } catch (e) { setMsg(e?.message || "Rollback failed"); }
+    finally { setRollbacking(false); }
+  }
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: 980 }}>
+      <div className="modal-content staticip-modal" style={{ maxWidth: 980 }}>
         <button className="close" onClick={onClose} aria-label="Close"><FaTimes /></button>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <MdSecurity /> Static IP Control
@@ -170,7 +196,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
         )}
 
         {/* Monitor banner */}
-        <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="stack-sm" style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div>
             <div style={{ fontWeight: 800, color: '#0f172a' }}>Monitor mode</div>
             <div style={{ color: '#334155' }}>{unknownCount} unknown sources observed</div>
@@ -183,7 +209,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
         {/* Unknown sources table */}
         <div style={{ marginTop: 10 }}>
           <div className="help">Unknown Sources</div>
-          <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
+          <div className="table-responsive" style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
@@ -219,7 +245,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
         {/* Static clients summary */}
         <div style={{ marginTop: 14 }}>
           <div className="help">Static Clients</div>
-          <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
+          <div className="table-responsive" style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
@@ -258,6 +284,29 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Rollback section */}
+        <div style={{ marginTop: 14 }}>
+          <div className="help">Rollback</div>
+          <div className="stack-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={doRollbackPreview} disabled={rollbacking}>
+              <MdHistory className="inline-icon" /> {rollbacking ? 'Preparing…' : 'Preview Rollback'}
+            </button>
+            {rollbackPreview && (
+              <>
+                <span style={{ opacity: .8 }}>
+                  addAllow {rollbackPreview.addAllow}, delAllow {rollbackPreview.delAllow}, addBlock {rollbackPreview.addBlock}, delBlock {rollbackPreview.delBlock}, rules {rollbackPreview.rules?.length || 0}
+                </span>
+                <button onClick={() => doRollback(false)} disabled={rollbacking}>
+                  Disable Rules + Restore Lists
+                </button>
+                <button onClick={() => doRollback(true)} disabled={rollbacking}>
+                  Remove Rules + Restore Lists
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

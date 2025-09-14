@@ -1,0 +1,59 @@
+.staticip-modal .table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.staticip-modal table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.staticip-modal th, .staticip-modal td {
+  padding: 10px 12px;
+}
+
+/* Compact tables and wrap controls on smaller screens */
+@media (max-width: 720px) {
+  .staticip-modal {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 12px 10px 16px !important;
+  }
+
+  .staticip-modal .stack-sm {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .staticip-modal .table-responsive {
+    border-radius: 10px;
+  }
+
+  .staticip-modal table {
+    min-width: 640px; /* enable horizontal scroll */
+    font-size: 0.92rem;
+  }
+
+  .staticip-modal th, .staticip-modal td {
+    padding: 8px 10px;
+  }
+
+  .staticip-modal button {
+    padding: 8px 12px;
+    border-radius: 10px;
+  }
+}
+
+/* Very small devices */
+@media (max-width: 420px) {
+  .staticip-modal table {
+    min-width: 560px;
+    font-size: 0.88rem;
+  }
+  .staticip-modal th, .staticip-modal td {
+    padding: 6px 8px;
+  }
+}
+

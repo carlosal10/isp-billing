@@ -3,7 +3,8 @@
 .mikrotik-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(11, 37, 69, 0.55);
+  backdrop-filter: blur(2px);
   display: grid;
   place-items: center;
   z-index: 1000;
@@ -46,7 +47,7 @@
 /* Title */
 .modal-title {
   margin: 6px 32px 4px 2px; /* leave room for close btn */
-  font-size: 1.25rem;
+  font-size: clamp(1.05rem, 2.6vw, 1.25rem);
   font-weight: 800;
   letter-spacing: .2px;
   color: #0B2545; /* brand navy */
@@ -117,6 +118,7 @@
 @media (max-width: 640px) {
   .mikrotik-overlay {
     background: #fff; /* remove dark overlay feel */
+    overflow: auto;   /* allow scroll if keyboard covers */
   }
   .mikrotik-modal {
     width: 100%;
@@ -128,6 +130,7 @@
     box-shadow: none;
     padding: 16px 14px;
     grid-template-rows: auto 1fr auto;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Make header sticky for quick close on phones */
@@ -148,6 +151,7 @@
   .modal-form {
     padding: 10px 2px 6px 2px;
     gap: 14px;
+    -webkit-overflow-scrolling: touch;
   }
   .modal-form input[type="text"],
   .modal-form input[type="number"],
@@ -167,6 +171,14 @@
   /* Keep the bottom messages visible above iOS bars */
   .response-msg {
     margin-bottom: env(safe-area-inset-bottom, 8px);
+    word-break: break-word;
+  }
+}
+
+/* Fallback for browsers without dynamic viewport units */
+@supports not (height: 100dvh) {
+  @media (max-width: 640px) {
+    .mikrotik-modal { height: 100vh; }
   }
 }
 

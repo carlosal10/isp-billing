@@ -441,6 +441,43 @@ router.put('/:id', async (req, res) => {
     const plan = await Plan.findOne({ _id: (planId || customer.plan), tenantId: req.tenantId });
     if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
 
+    // Detect account rename and propagate to MikroTik (PPP secret / simple queue)
+    const prevAccount = String(customer.accountNumber || '').trim();
+    const nextAccount = String(req.body?.accountNumber || prevAccount).trim();
+    const nextName = String(req.body?.name || customer.name || nextAccount);
+    const tenantId = req.tenantId;
+    if (prevAccount && nextAccount && prevAccount !== nextAccount) {
+      // Rename PPP secret if present
+      try {
+        const list = await sendCommand('/ppp/secret/print', [`?name=${prevAccount}`], { tenantId, timeoutMs: 10000 });
+        if (Array.isArray(list) && list[0]) {
+          const id = list[0]['.id'] || list[0].id || list[0].numbers;
+          await sendCommand('/ppp/secret/set', [
+            `=numbers=${id}`,
+            `=name=${nextAccount}`,
+            `=comment=Customer: ${nextName}`,
+          ], { tenantId, timeoutMs: 10000 });
+        }
+      } catch (e) {
+        console.warn('PPP secret rename failed:', e?.message || e);
+      }
+
+      // Rename Static queue if present
+      try {
+        const q = await sendCommand('/queue/simple/print', [`?name=${prevAccount}`], { tenantId, timeoutMs: 8000 });
+        if (Array.isArray(q) && q[0]) {
+          const qid = q[0]['.id'] || q[0].id || q[0].numbers;
+          await sendCommand('/queue/simple/set', [
+            `=numbers=${qid}`,
+            `=name=${nextAccount}`,
+            `=comment=Customer: ${nextName}`,
+          ], { tenantId, timeoutMs: 8000 });
+        }
+      } catch (e) {
+        console.warn('Queue rename failed:', e?.message || e);
+      }
+    }
+
     // Apply basic updates
     Object.assign(customer, req.body);
 
@@ -453,10 +490,20 @@ router.put('/:id', async (req, res) => {
         rateLimit: `${plan.speed}M/0M`,
       };
 
-      const tenantId = req.tenantId;
-      const words = [`=numbers=${customer.accountNumber}`, `=profile=${pppoeConfig.profile}`];
+      // Update PPP secret on MikroTik: find by name (accountNumber), fallback to previous, then set by .id
       try {
-        await sendCommand('/ppp/secret/set', words, { tenantId, timeoutMs: 10000 });
+        let list = await sendCommand('/ppp/secret/print', [`?name=${customer.accountNumber}`], { tenantId, timeoutMs: 10000 });
+        if (!Array.isArray(list) || !list[0]) {
+          list = await sendCommand('/ppp/secret/print', [`?name=${prevAccount}`], { tenantId, timeoutMs: 10000 });
+        }
+        if (!Array.isArray(list) || !list[0]) return res.status(404).json({ message: 'PPPoE secret not found on MikroTik for this account' });
+        const id = list[0]['.id'] || list[0].id || list[0].numbers;
+        const setWords = [
+          `=numbers=${id}`,
+          `=profile=${pppoeConfig.profile}`,
+          `=comment=Customer: ${customer.name || customer.accountNumber}`,
+        ];
+        await sendCommand('/ppp/secret/set', setWords, { tenantId, timeoutMs: 10000 });
       } catch (e) {
         return res.status(500).json({ message: 'Failed to update PPPoE secret: ' + (e?.message || e) });
       }

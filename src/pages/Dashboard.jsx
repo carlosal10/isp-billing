@@ -122,6 +122,7 @@ export default function Dashboard() {
   const [payments, setPayments] = useState([]);
   const [pppoeSessions, setPppoeSessions] = useState([]);
   const [hotspotSessions, setHotspotSessions] = useState([]);
+  const [staticSessions, setStaticSessions] = useState([]);
 
   // ui state
   const [loading, setLoading] = useState({
@@ -141,6 +142,7 @@ export default function Dashboard() {
   const [inlineCustomer, setInlineCustomer] = useState(null);
 
   const [showHotspot, setShowHotspot] = useState(false);
+  const [showStatic, setShowStatic] = useState(true);
   const [didMount, setDidMount] = useState(false);
 
   // search
@@ -242,13 +244,23 @@ export default function Dashboard() {
         hs = [];
       }
 
+      let st = [];
+      try {
+        const { data } = await api.get("/static/active");
+        st = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+      } catch {
+        st = [];
+      }
+
       setPppoeSessions(pppoe);
       setHotspotSessions(hs);
+      setStaticSessions(st);
       setErrors((e) => ({ ...e, sessions: null }));
     } catch (e) {
       setErrors((er) => ({ ...er, sessions: e.message }));
       setPppoeSessions([]);
       setHotspotSessions([]);
+      setStaticSessions([]);
     } finally {
       setLoading((l) => ({ ...l, sessions: false }));
     }
@@ -382,12 +394,25 @@ export default function Dashboard() {
     return map;
   }, [customers]);
 
+  const customerByStaticIp = useMemo(() => {
+    const map = new Map();
+    for (const c of customers) {
+      const ip = c?.staticConfig?.ip;
+      if (ip) map.set(String(ip), c);
+    }
+    return map;
+  }, [customers]);
+
   const enrichedOnline = useMemo(() => {
     const mapSession = (s) => {
       const username =
         s.username || s.name || s.user || s.account || s.login || "";
       const acct = String(username || "").trim();
-      const c = customerByAccount.get(acct);
+      let c = customerByAccount.get(acct);
+      if (!c) {
+        const ipKey = String(s.address || s.ip || s.ipAddress || "");
+        if (ipKey) c = customerByStaticIp.get(ipKey);
+      }
       const status = (c?.status || "").toString().toLowerCase();
       const isDisabled = status && status !== "active";
       const toNum = (v) => {
@@ -418,8 +443,14 @@ export default function Dashboard() {
           source: "Hotspot",
         }))
       : [];
-    return [...ppp, ...hs];
-  }, [pppoeSessions, hotspotSessions, showHotspot, customerByAccount]);
+    const st = showStatic
+      ? (Array.isArray(staticSessions) ? staticSessions : []).map((s) => ({
+          ...mapSession(s),
+          source: "Static",
+        }))
+      : [];
+    return [...ppp, ...hs, ...st];
+  }, [pppoeSessions, hotspotSessions, staticSessions, showHotspot, showStatic, customerByAccount, customerByStaticIp]);
 
   const onlineTotalPages = useMemo(
     () => Math.max(1, Math.ceil(enrichedOnline.length / pageSize)),
@@ -723,6 +754,14 @@ export default function Dashboard() {
                 onChange={() => setShowHotspot((v) => !v)}
               />
               Include Hotspot
+            </label>
+            <label className="toggle" style={{ marginLeft: 12 }}>
+              <input
+                type="checkbox"
+                checked={showStatic}
+                onChange={() => setShowStatic((v) => !v)}
+              />
+              Include Static
             </label>
             <div className="section-actions">
               <button className="btn" onClick={() => setShowUsageModal(true)}>

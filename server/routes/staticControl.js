@@ -373,3 +373,143 @@ router.post('/adopt', limiter, async (req, res) => {
 });
 
 module.exports = router;
+ 
+// ---- Rollback: restore lists and remove/disable rules created by bootstrap/enforce ----
+// POST /api/static/rollback
+// Body: { dryRun?: boolean, removeRules?: boolean }
+// - Restores STATIC_ALLOW/STATIC_BLOCK contents to the last /detect snapshot
+// - Disables or removes rules with comments created by bootstrap/enforce:
+//   EST/REL (billing), Allow paid static IPs, Block unpaid static IPs,
+//   MONITOR unknown on <seg>, Drop unknown on <seg>
+router.post('/rollback', limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  const timeoutMs = 12000;
+  const { dryRun = false, removeRules = false } = req.body || {};
+  try {
+    // Load last snapshot captured by /static/detect
+    const snap = await DiscoverSnapshot.findOne({ tenantId }).sort({ createdAt: -1 }).lean();
+    if (!snap?.payload) return res.status(400).json({ ok: false, error: 'No snapshot available for rollback' });
+
+    const wantAllow = new Map((snap.payload?.lists?.STATIC_ALLOW || []).map((r) => [String(r.address), String(r.comment || '')]));
+    const wantBlock = new Map((snap.payload?.lists?.STATIC_BLOCK || []).map((r) => [String(r.address), String(r.comment || '')]));
+
+    // Fetch current lists and firewall rules
+    const [currLists, currFilters] = await Promise.all([
+      sendCommand('/ip/firewall/address-list/print', [], { tenantId, timeoutMs }).catch(() => []),
+      sendCommand('/ip/firewall/filter/print', [], { tenantId, timeoutMs }).catch(() => []),
+    ]);
+
+    const byList = currLists.reduce((acc, r) => {
+      const L = String(r?.list || '');
+      if (!L) return acc;
+      (acc[L] ||= []).push(r);
+      return acc;
+    }, {});
+
+    const currAllow = new Map(((byList['STATIC_ALLOW'] || [])).map((r) => [String(r.address), r]));
+    const currBlock = new Map(((byList['STATIC_BLOCK'] || [])).map((r) => [String(r.address), r]));
+
+    const addAllow = [];
+    const delAllow = [];
+    const addBlock = [];
+    const delBlock = [];
+
+    // Compute deltas for allow
+    for (const [addr, row] of currAllow) {
+      if (!wantAllow.has(addr)) delAllow.push(row);
+    }
+    for (const [addr, comment] of wantAllow) {
+      if (!currAllow.has(addr)) addAllow.push({ address: addr, comment });
+    }
+    // Compute deltas for block
+    for (const [addr, row] of currBlock) {
+      if (!wantBlock.has(addr)) delBlock.push(row);
+    }
+    for (const [addr, comment] of wantBlock) {
+      if (!currBlock.has(addr)) addBlock.push({ address: addr, comment });
+    }
+
+    // Identify rules to remove/disable by stable comments
+    const rulesToTouch = [];
+    for (const f of Array.isArray(currFilters) ? currFilters : []) {
+      const c = String(f?.comment || '');
+      if (!c) continue;
+      if (
+        c === COMMENTS.EST_REL ||
+        c === COMMENTS.ALLOW ||
+        c === COMMENTS.BLOCK ||
+        c.startsWith('MONITOR unknown on ') ||
+        c.startsWith('Drop unknown on ')
+      ) {
+        rulesToTouch.push(f);
+      }
+    }
+
+    if (dryRun) {
+      return res.json({
+        ok: true,
+        dryRun: true,
+        addAllow: addAllow.length,
+        delAllow: delAllow.length,
+        addBlock: addBlock.length,
+        delBlock: delBlock.length,
+        rules: rulesToTouch.map((r) => ({ id: idOf(r), comment: r.comment })),
+      });
+    }
+
+    // Ensure lists exist
+    await Promise.all([
+      ensureList(tenantId, 'STATIC_ALLOW', timeoutMs),
+      ensureList(tenantId, 'STATIC_BLOCK', timeoutMs),
+    ]);
+
+    // Apply list removals first, then additions
+    for (const r of delAllow) {
+      try { await sendCommand('/ip/firewall/address-list/remove', [w('numbers', idOf(r))], { tenantId, timeoutMs }); } catch {}
+    }
+    for (const r of delBlock) {
+      try { await sendCommand('/ip/firewall/address-list/remove', [w('numbers', idOf(r))], { tenantId, timeoutMs }); } catch {}
+    }
+    for (const a of addAllow) {
+      const words = [w('list', 'STATIC_ALLOW'), w('address', a.address)];
+      if (a.comment) words.push(w('comment', a.comment));
+      try { await sendCommand('/ip/firewall/address-list/add', words, { tenantId, timeoutMs }); } catch {}
+    }
+    for (const a of addBlock) {
+      const words = [w('list', 'STATIC_BLOCK'), w('address', a.address)];
+      if (a.comment) words.push(w('comment', a.comment));
+      try { await sendCommand('/ip/firewall/address-list/add', words, { tenantId, timeoutMs }); } catch {}
+    }
+
+    // Optionally clear UNKNOWN_SOURCES list (monitor-only; safe to wipe)
+    const unknownRows = byList['UNKNOWN_SOURCES'] || [];
+    for (const r of unknownRows) {
+      try { await sendCommand('/ip/firewall/address-list/remove', [w('numbers', idOf(r))], { tenantId, timeoutMs }); } catch {}
+    }
+
+    // Remove or disable rules created by bootstrap/enforce
+    for (const r of rulesToTouch) {
+      const id = idOf(r);
+      if (!id) continue;
+      try {
+        if (removeRules) {
+          await sendCommand('/ip/firewall/filter/remove', [w('numbers', id)], { tenantId, timeoutMs });
+        } else {
+          await sendCommand('/ip/firewall/filter/set', [w('numbers', id), w('disabled', 'yes')], { tenantId, timeoutMs });
+        }
+      } catch {}
+    }
+
+    await audit(req, 'static.rollback', {
+      addAllow: addAllow.length,
+      delAllow: delAllow.length,
+      addBlock: addBlock.length,
+      delBlock: delBlock.length,
+      rulesTouched: rulesToTouch.length,
+      removeRules,
+    });
+    return res.json({ ok: true, addAllow: addAllow.length, delAllow: delAllow.length, addBlock: addBlock.length, delBlock: delBlock.length, clearedUnknown: unknownRows.length, rulesTouched: rulesToTouch.length, removeRules });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'Rollback failed' });
+  }
+});

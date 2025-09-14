@@ -5,6 +5,7 @@ const rateLimit = require("express-rate-limit");
 
 // Uses your pooled, tenant-scoped manager
 const { sendCommand } = require("../utils/mikrotikConnectionManager");
+const Customer = require("../models/customers");
 
 // ---------- helpers ----------
 const n = (v, d = 0) => {
@@ -46,6 +47,13 @@ async function rosPrint(tenantId, path, words = [], timeoutMs = 10000) {
     console.warn(`[MikroTik] print failed ${path}:`, e?.message || e);
     return [];
   }
+}
+
+function firstIpFromTarget(target) {
+  if (!target) return "";
+  const first = String(target).split(",")[0].trim();
+  const ip = first.split("/")[0].trim();
+  return ip;
 }
 
 // Rate limit to protect the router from UI spam
@@ -110,6 +118,108 @@ router.get("/pppoe/active", limiter, async (req, res) => {
 router.get("/hotspot/active", limiter, async (req, res) => {
   const rows = await rosPrint(req.tenantId, "/ip/hotspot/active/print");
   res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
+});
+
+// GET /api/mikrotik/static/active
+router.get("/mikrotik/static/active", limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    const [queues, lists, arps] = await Promise.all([
+      rosPrint(tenantId, "/queue/simple/print"),
+      rosPrint(tenantId, "/ip/firewall/address-list/print"),
+      rosPrint(tenantId, "/ip/arp/print"),
+    ]);
+
+    // Build candidates from queues (prefer /32 targets)
+    const ips = new Map(); // ip -> accountName (queue name) | null
+    for (const q of Array.isArray(queues) ? queues : []) {
+      const name = s(q?.name);
+      const ip = firstIpFromTarget(q?.target || q?.["target"] || "");
+      if (!ip) continue;
+      if (!ips.has(ip)) ips.set(ip, name || null);
+    }
+    // Add from STATIC_ALLOW list if not already present
+    for (const r of Array.isArray(lists) ? lists : []) {
+      if (s(r?.list) !== "STATIC_ALLOW") continue;
+      const ip = s(r?.address);
+      if (ip && !ips.has(ip)) ips.set(ip, null);
+    }
+
+    const arpMap = new Map((Array.isArray(arps) ? arps : []).map((a) => [s(a?.address), a]));
+
+    // Fill in account numbers from DB where possible
+    const wantIps = [...ips.keys()];
+    const customers = await Customer.find({
+      tenantId,
+      connectionType: 'static',
+      'staticConfig.ip': { $in: wantIps },
+    }).select('accountNumber staticConfig.ip').lean();
+    const ipToAcct = new Map(customers.map((c) => [s(c?.staticConfig?.ip), s(c?.accountNumber)]));
+
+    const users = [];
+    for (const [ip, qName] of ips) {
+      const a = arpMap.get(ip);
+      if (!a) continue; // Only include online (present in ARP)
+      const username = qName || ipToAcct.get(ip) || ip.replace(/\./g, '-');
+      users.push({
+        username,
+        address: ip,
+        uptime: s(a?.['last-seen'] || a?.uptime || ''),
+        'bytes-in': 0,
+        'bytes-out': 0,
+        _raw: { source: 'static', arp: a },
+      });
+    }
+
+    return res.json({ ok: true, count: users.length, users });
+  } catch (e) {
+    console.warn('[MikroTik] static/active failed:', e?.message || e);
+    return res.json({ ok: true, count: 0, users: [] });
+  }
+});
+
+// Alias route
+router.get("/static/active", limiter, async (req, res) => {
+  const { data } = { data: null };
+  // Delegate by calling the above logic (we can't call router handler directly), so just duplicate minimal call
+  const tenantId = req.tenantId;
+  try {
+    const [queues, lists, arps] = await Promise.all([
+      rosPrint(tenantId, "/queue/simple/print"),
+      rosPrint(tenantId, "/ip/firewall/address-list/print"),
+      rosPrint(tenantId, "/ip/arp/print"),
+    ]);
+    const ips = new Map();
+    for (const q of Array.isArray(queues) ? queues : []) {
+      const name = s(q?.name);
+      const ip = firstIpFromTarget(q?.target || q?.["target"] || "");
+      if (!ip) continue;
+      if (!ips.has(ip)) ips.set(ip, name || null);
+    }
+    for (const r of Array.isArray(lists) ? lists : []) {
+      if (s(r?.list) !== "STATIC_ALLOW") continue;
+      const ip = s(r?.address);
+      if (ip && !ips.has(ip)) ips.set(ip, null);
+    }
+    const arpMap = new Map((Array.isArray(arps) ? arps : []).map((a) => [s(a?.address), a]));
+    const wantIps = [...ips.keys()];
+    const customers = await Customer.find({
+      tenantId,
+      connectionType: 'static',
+      'staticConfig.ip': { $in: wantIps },
+    }).select('accountNumber staticConfig.ip').lean();
+    const ipToAcct = new Map(customers.map((c) => [s(c?.staticConfig?.ip), s(c?.accountNumber)]));
+    const users = [];
+    for (const [ip, qName] of ips) {
+      const a = arpMap.get(ip);
+      if (!a) continue;
+      const username = qName || ipToAcct.get(ip) || ip.replace(/\./g, '-');
+      users.push({ username, address: ip, uptime: s(a?.['last-seen'] || a?.uptime || ''), 'bytes-in': 0, 'bytes-out': 0 });
+    }
+    return res.json({ ok: true, count: users.length, users });
+  } catch (_e) {
+    return res.json({ ok: true, count: 0, users: [] });
+  }
 });
 
 // ----- Manual control: enable/disable/disconnect PPPoE user by accountNumber -----
