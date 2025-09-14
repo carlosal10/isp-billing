@@ -1,5 +1,5 @@
 // src/components/CustomersModal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
@@ -73,8 +73,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueOpts, setQueueOpts] = useState([]);
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
+  const [useQueueIp, setUseQueueIp] = useState(false);
 
-  async function loadQueues() {
+  const loadQueues = useCallback(async () => {
     try {
       setQueueLoading(true);
       const { data } = await api.get('/queues/simple');
@@ -95,7 +96,14 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
     } finally {
       setQueueLoading(false);
     }
-  }
+  }, []);
+
+  // Auto-load queues when switching to Static
+  useEffect(() => {
+    if (networkType === 'static' && useQueueIp && !queueLoading && queueOpts.length === 0) {
+      loadQueues();
+    }
+  }, [networkType, useQueueIp, queueLoading, queueOpts.length, loadQueues]);
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
@@ -185,32 +193,34 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
 
           {networkType === "static" && (
             <div className="static-config">
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginBottom: 6 }}>
+                <input type="checkbox" checked={useQueueIp} onChange={() => setUseQueueIp(v => !v)} />
+                Pick IP from router queues (existing configs)
+              </label>
+              {useQueueIp && (
+                <select
+                  value={selectedQueueIp}
+                  onChange={(e) => {
+                    const ip = e.target.value;
+                    setSelectedQueueIp(ip);
+                    if (ip) setStaticConfig((s) => ({ ...s, ip }));
+                  }}
+                  disabled={queueLoading}
+                >
+                  <option value="">
+                    {queueLoading ? 'Loading router queues…' : (queueOpts.length ? 'Select IP from queues…' : 'No queue IPs found')}
+                  </option>
+                  {queueOpts.map((o) => (
+                    <option key={o.ip} value={o.ip}>{o.label}</option>
+                  ))}
+                </select>
+              )}
               <input
                 value={staticConfig.ip}
                 onChange={(e) => setStaticConfig({ ...staticConfig, ip: e.target.value })}
-                placeholder="IP Address"
+                placeholder="IP Address (or pick from list)"
                 required
               />
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button type="button" className="btn" onClick={loadQueues} disabled={queueLoading}>
-                  {queueLoading ? 'Loading…' : 'Load from Router'}
-                </button>
-                {queueOpts.length > 0 && (
-                  <select
-                    value={selectedQueueIp}
-                    onChange={(e) => {
-                      const ip = e.target.value;
-                      setSelectedQueueIp(ip);
-                      if (ip) setStaticConfig((s) => ({ ...s, ip }));
-                    }}
-                  >
-                    <option value="">Select IP from queues…</option>
-                    {queueOpts.map((o) => (
-                      <option key={o.ip} value={o.ip}>{o.label}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
               <input
                 value={staticConfig.gateway}
                 onChange={(e) => setStaticConfig({ ...staticConfig, gateway: e.target.value })}
