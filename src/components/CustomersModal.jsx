@@ -78,6 +78,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [arpLoading, setArpLoading] = useState(false);
   const [arpOpts, setArpOpts] = useState([]);
   const [selectedArpIp, setSelectedArpIp] = useState("");
+  const [arpLanOnly, setArpLanOnly] = useState(true);
+  const [arpPrivateOnly, setArpPrivateOnly] = useState(true);
+  const [arpPermanentOnly, setArpPermanentOnly] = useState(true);
 
   const [queueTried, setQueueTried] = useState(false);
 
@@ -115,7 +118,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const loadArps = useCallback(async () => {
     try {
       setArpLoading(true);
-      const { data } = await api.get('/arp', { params: { lanOnly: true, privateOnly: true, permanentOnly: true } });
+      const { data } = await api.get('/arp', { params: { lanOnly: !!arpLanOnly, privateOnly: !!arpPrivateOnly, permanentOnly: !!arpPermanentOnly } });
       const list = Array.isArray(data?.arps) ? data.arps : [];
       const seen = new Set();
       const opts = [];
@@ -132,13 +135,13 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
     } finally {
       setArpLoading(false);
     }
-  }, []);
+  }, [arpLanOnly, arpPrivateOnly, arpPermanentOnly]);
 
   useEffect(() => {
-    if (networkType === 'static' && useArpIp && !arpLoading && arpOpts.length === 0) {
+    if (networkType === 'static' && useArpIp && !arpLoading) {
       loadArps();
     }
-  }, [networkType, useArpIp, arpLoading, arpOpts.length, loadArps]);
+  }, [networkType, useArpIp, arpLoading, loadArps]);
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
@@ -271,6 +274,19 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                     <option key={o.ip} value={o.ip}>{o.label}</option>
                   ))}
                 </select>
+              )}
+              {useArpIp && (
+                <div style={{ display:'flex', gap:12, marginTop:6 }}>
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <input type="checkbox" checked={arpLanOnly} onChange={() => setArpLanOnly(v => !v)} /> LAN only
+                  </label>
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <input type="checkbox" checked={arpPrivateOnly} onChange={() => setArpPrivateOnly(v => !v)} /> Private only
+                  </label>
+                  <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <input type="checkbox" checked={arpPermanentOnly} onChange={() => setArpPermanentOnly(v => !v)} /> Permanent only
+                  </label>
+                </div>
               )}
               <input
                 value={staticConfig.ip}
