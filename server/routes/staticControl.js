@@ -206,10 +206,12 @@ router.post('/bootstrap', limiter, async (req, res) => {
 router.post('/seed-allow', limiter, async (req, res) => {
   const tenantId = req.tenantId;
   const timeoutMs = 12000;
-  const { include = ['queues', 'arp'] } = req.body || {};
+  const { include = ['queues', 'arp'], limitToDb = true } = req.body || {};
   try {
     const queues = include.includes('queues') ? await sendCommand('/queue/simple/print', [], { tenantId, timeoutMs }).catch(() => []) : [];
     const arps = include.includes('arp') ? await sendCommand('/ip/arp/print', [], { tenantId, timeoutMs }).catch(() => []) : [];
+    const bridges = include.includes('arp') ? await sendCommand('/interface/bridge/print', [], { tenantId, timeoutMs }).catch(() => []) : [];
+    const vlans = include.includes('arp') ? await sendCommand('/interface/vlan/print', [], { tenantId, timeoutMs }).catch(() => []) : [];
 
     const ipSet = new Map();
     function firstIpFromTarget(t) {
@@ -218,19 +220,35 @@ router.post('/seed-allow', limiter, async (req, res) => {
       const ip = first.split('/')[0].trim();
       return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) ? ip : null;
     }
+    function isPrivate(ip) {
+      try {
+        const o = ip.split('.').map(Number);
+        if (o[0] === 10) return true;
+        if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+        if (o[0] === 192 && o[1] === 168) return true;
+        return false;
+      } catch { return false; }
+    }
+    const lanIfSet = new Set([
+      ...((Array.isArray(bridges) ? bridges : []).map((b) => String(b?.name || '').trim()).filter(Boolean)),
+      ...((Array.isArray(vlans) ? vlans : []).map((v) => String(v?.name || v?.interface || '').trim()).filter(Boolean)),
+    ]);
     for (const q of queues || []) {
       const ip = firstIpFromTarget(q?.target);
       if (!ip) continue;
+      if (!isPrivate(ip)) continue; // only private ranges
       const label = String(q?.name || '').trim();
-      if (!ipSet.has(ip)) ipSet.set(ip, { source: 'queue', comment: label ? `import-queue:${label}` : 'import-queue' });
+      if (!ipSet.has(ip)) ipSet.set(ip, { source: 'queue', qname: label, comment: label ? `import-queue:${label}` : 'import-queue' });
     }
     for (const a of arps || []) {
       const ip = String(a?.address || '').trim();
-      if (!ip) continue;
+      if (!ip || !isPrivate(ip)) continue; // only private ranges
       const isDyn = String(a?.dynamic || 'no') === 'yes';
       const type = String(a?.type || '').toLowerCase();
       const permanent = !isDyn || type === 'static';
       if (!permanent) continue; // only whitelisted ARP entries
+      const iface = String(a?.interface || '').trim();
+      if (lanIfSet.size && iface && !lanIfSet.has(iface)) continue; // restrict to LAN bridges/vlans
       const label = String(a?.comment || a?.['mac-address'] || '').trim();
       if (!ipSet.has(ip)) ipSet.set(ip, { source: 'arp', comment: label ? `import-arp:${label}` : 'import-arp' });
     }
@@ -238,9 +256,29 @@ router.post('/seed-allow', limiter, async (req, res) => {
     // Ensure STATIC_ALLOW list exists
     await ensureList(tenantId, 'STATIC_ALLOW', timeoutMs);
 
+    // Only seed IPs that are part of your configured customers or queues named after accounts (when limitToDb)
+    let dbAcc = new Set();
+    let dbIps = new Set();
+    if (limitToDb) {
+      try {
+        const Customer = require('../models/customers');
+        const docs = await Customer.find({ tenantId, $or: [ { connectionType: 'static' }, { accountNumber: { $exists: true } } ] })
+          .select('accountNumber staticConfig.ip')
+          .lean();
+        dbAcc = new Set(docs.map((d) => String(d?.accountNumber || '').trim()).filter(Boolean));
+        dbIps = new Set(docs.map((d) => String(d?.staticConfig?.ip || '').trim()).filter(Boolean));
+      } catch {}
+    }
+
     // Add if missing
     const added = [];
     for (const [ip, meta] of ipSet.entries()) {
+      if (limitToDb) {
+        // Guard: only allow if ip is a configured static IP, or queue name matches a known account
+        const allowByDbIp = dbIps.has(ip);
+        const allowByQueueName = meta.source === 'queue' && meta.qname && dbAcc.has(String(meta.qname));
+        if (!allowByDbIp && !allowByQueueName) continue;
+      }
       const exists = await sendCommand('/ip/firewall/address-list/print', [qs('list', 'STATIC_ALLOW'), qs('address', ip)], { tenantId, timeoutMs }).catch(() => []);
       if (Array.isArray(exists) && exists.length) continue;
       const words = [w('list', 'STATIC_ALLOW'), w('address', ip)];

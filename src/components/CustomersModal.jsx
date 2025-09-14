@@ -216,6 +216,7 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [importing, setImporting] = useState(false);
   const [importPlan, setImportPlan] = useState("");
+  const [autoAcc, setAutoAcc] = useState(true);
 
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
@@ -426,6 +427,9 @@ export default function CustomersModal({ isOpen, onClose }) {
                     <option key={p._id} value={p._id}>{p.name} {p.speed ? `(${p.speed})` : ""}</option>
                   ))}
                 </select>
+                <label style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={autoAcc} onChange={() => setAutoAcc(v => !v)} /> Auto-generate account numbers
+                </label>
               </div>
 
               {detected.length > 0 ? (
@@ -493,12 +497,15 @@ export default function CustomersModal({ isOpen, onClose }) {
                     }
                     setImporting(true);
                     try {
-                      const payload = { items: items.map((it) => ({
-                        accountNumber: it.accountNumber || it.ip.replace(/\./g, '-'),
-                        ip: it.ip,
-                        comment: it.comment || '',
-                        planId: importPlan || undefined,
-                      })) };
+                      const payload = { 
+                        autoAccount: !!autoAcc,
+                        items: items.map((it) => ({
+                          ...(autoAcc ? {} : { accountNumber: it.accountNumber || it.ip.replace(/\./g, '-') }),
+                          ip: it.ip,
+                          comment: it.comment || '',
+                          planId: importPlan || undefined,
+                        })) 
+                      };
                       const { data } = await api.post('/customers/import-static', payload, { timeout: 60000 });
                       const okCount = Array.isArray(data?.results) ? data.results.filter((r) => r.ok).length : 0;
                       setMessage(`Imported ${okCount} / ${items.length}`);

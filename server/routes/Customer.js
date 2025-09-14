@@ -162,6 +162,15 @@ router.get('/detect-static', async (req, res) => {
       if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) return ip;
       return null;
     }
+    function isPrivate(ip) {
+      try {
+        const o = ip.split('.').map(Number);
+        if (o[0] === 10) return true;
+        if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+        if (o[0] === 192 && o[1] === 168) return true;
+        return false;
+      } catch { return false; }
+    }
 
     // Build a set of active PPPoE IPs (remote-address/address)
     const pppIpSet = new Set(
@@ -181,6 +190,7 @@ router.get('/detect-static', async (req, res) => {
       const target = q?.target || q?.['target'] || '';
       const ip = firstIpFromTarget(target);
       if (!name || !ip) continue;
+      if (!isPrivate(ip)) continue;
       // Skip queues whose target IP belongs to an active PPPoE session or is assigned to a PPP secret
       if (pppIpSet.has(ip) || pppSecretIpSet.has(ip)) continue;
       const rate = String(q?.['max-limit'] || q?.maxLimit || q?.rate || '').trim();
@@ -197,11 +207,12 @@ router.get('/detect-static', async (req, res) => {
     function pushFromList(arr, source) {
       for (const r of Array.isArray(arr) ? arr : []) {
         const ip = String(r?.address || '').trim();
-        if (!ip) continue;
+        if (!ip || !isPrivate(ip)) continue;
         if (pppIpSet.has(ip) || pppSecretIpSet.has(ip)) continue; // exclude PPPoE-related IPs
         const comment = String(r?.comment || '').trim() || null;
         // Try to infer accountNumber from comment if present
         const accountFromComment = (comment && comment.match(/acct[:#\s]*([A-Za-z0-9_-]+)/i))?.[1] || null;
+        if (!accountFromComment) continue; // require account marker
         candidates.push({ source, accountNumber: accountFromComment, ip, rateLimit: '', comment });
       }
     }
@@ -243,6 +254,7 @@ router.post('/import-static', async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const autoAccount = Boolean(req.body?.autoAccount);
     if (!items.length) return res.status(400).json({ ok: false, error: 'items required' });
 
     // Normalize + dedupe incoming items
@@ -251,8 +263,8 @@ router.post('/import-static', async (req, res) => {
     for (const raw of items) {
       const accountNumber = String(raw?.accountNumber || '').trim();
       const ip = String(raw?.ip || '').trim();
-      if (!accountNumber || !ip) continue;
-      const key = `${accountNumber}|${ip}`;
+      if (!ip) continue;
+      const key = `${accountNumber || ''}|${ip}`;
       if (seen.has(key)) continue;
       seen.add(key);
       normalized.push({ raw, accountNumber, ip });
@@ -275,10 +287,29 @@ router.post('/import-static', async (req, res) => {
     // Build docs to insert
     const docs = [];
     const results = [];
+    const usedAcc = new Set(haveAcc);
+    function genUniqueAccount() {
+      // reuse helper from above scope
+      let acc;
+      let tries = 0;
+      do {
+        acc = generateAccountNumber();
+        tries++;
+      } while ((usedAcc.has(acc)) && tries < 20);
+      usedAcc.add(acc);
+      return acc;
+    }
+
     for (const { raw, accountNumber, ip } of normalized) {
-      if (haveAcc.has(accountNumber) || haveIp.has(ip)) {
-        results.push({ ok: false, error: 'exists', accountNumber, ip });
+      if (haveIp.has(ip)) {
+        results.push({ ok: false, error: 'ip_exists', accountNumber, ip });
         continue;
+      }
+
+      // Choose account number
+      let acct = accountNumber;
+      if (autoAccount || !acct || usedAcc.has(acct)) {
+        acct = genUniqueAccount();
       }
 
       const doc = {
@@ -287,7 +318,7 @@ router.post('/import-static', async (req, res) => {
         email: String(raw.email || ''),
         phone: String(raw.phone || ''),
         address: String(raw.address || ''),
-        accountNumber,
+        accountNumber: acct,
         status: 'active',
         connectionType: 'static',
         staticConfig: { ip },
@@ -311,7 +342,8 @@ router.post('/import-static', async (req, res) => {
 
     // Map successful inserts by accountNumber+ip
     const okSet = new Set((inserted || []).map(d => `${String(d.accountNumber)}|${String(d?.staticConfig?.ip || '')}`));
-    for (const { accountNumber, ip } of docs) {
+    for (const { accountNumber, staticConfig } of docs) {
+      const ip = String(staticConfig?.ip || '');
       const key = `${accountNumber}|${ip}`;
       if (okSet.has(key)) results.push({ ok: true, accountNumber, ip });
       else if (![...results].some(r => r.accountNumber === accountNumber && r.ip === ip)) results.push({ ok: false, accountNumber, ip, error: 'not inserted' });

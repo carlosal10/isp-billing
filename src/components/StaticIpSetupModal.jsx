@@ -17,6 +17,31 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [snapshot, setSnapshot] = useState(null);
   const [seeding, setSeeding] = useState(false);
   const [enforcing, setEnforcing] = useState(false);
+  const [seedFromQueues, setSeedFromQueues] = useState(true);
+  const [seedFromArp, setSeedFromArp] = useState(false);
+  const [seedLimitToDb, setSeedLimitToDb] = useState(true);
+
+  // Persist seed options between sessions
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('static.seed.opts');
+      if (raw) {
+        const opts = JSON.parse(raw);
+        if (typeof opts.q === 'boolean') setSeedFromQueues(opts.q);
+        if (typeof opts.a === 'boolean') setSeedFromArp(opts.a);
+        if (typeof opts.limit === 'boolean') setSeedLimitToDb(opts.limit);
+      }
+    } catch {}
+    // load once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      const data = JSON.stringify({ q: !!seedFromQueues, a: !!seedFromArp, limit: !!seedLimitToDb });
+      localStorage.setItem('static.seed.opts', data);
+    } catch {}
+  }, [seedFromQueues, seedFromArp, seedLimitToDb]);
   const [rollbacking, setRollbacking] = useState(false);
   const [rollbackPreview, setRollbackPreview] = useState(null);
   const [cleaning, setCleaning] = useState(false);
@@ -100,7 +125,9 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   async function doSeed() {
     setSeeding(true); setMsg("");
     try {
-      const { data } = await api.post("/static/seed-allow", {});
+      const include = [seedFromQueues && 'queues', seedFromArp && 'arp'].filter(Boolean);
+      const body = { include: include.length ? include : ['queues'], limitToDb: !!seedLimitToDb };
+      const { data } = await api.post("/static/seed-allow", body);
       if (!data?.ok) throw new Error(data?.error || "Seed failed");
       setMsg(`Seeded ${data.addedCount} IPs to STATIC_ALLOW`);
       await loadDetect();
@@ -230,6 +257,23 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
           </div>
           <div>
             <button onClick={loadUnknown}><MdRefresh className="inline-icon" /> Refresh</button>
+          </div>
+        </div>
+
+        {/* Seed options */}
+        <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#fff' }}>
+          <div className="help" style={{ marginBottom: 8 }}>Seed Options</div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 12 }}>
+            <input type="checkbox" checked={seedFromQueues} onChange={() => setSeedFromQueues(v => !v)} /> From Queues
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 12 }}>
+            <input type="checkbox" checked={seedFromArp} onChange={() => setSeedFromArp(v => !v)} /> From ARP (LAN only)
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={seedLimitToDb} onChange={() => setSeedLimitToDb(v => !v)} /> Limit to DB accounts only
+          </label>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={doSeed} disabled={seeding}>{seeding ? 'Seeding…' : 'Seed Allowed IPs'}</button>
           </div>
         </div>
 
