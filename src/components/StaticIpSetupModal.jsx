@@ -1,5 +1,5 @@
 // src/components/StaticIpSetupModal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone, MdHistory } from "react-icons/md";
 import { api } from "../lib/apiClient";
@@ -24,18 +24,9 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
 
   const unknownCount = unknown.length;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setMsg("");
-    setPreview(null);
-    refreshAll();
-  }, [isOpen]);
+  
 
-  const refreshAll = async () => {
-    await Promise.all([loadDetect(), loadUnknown(), loadCustomers()]);
-  };
-
-  const loadDetect = async () => {
+  const loadDetect = useCallback(async () => {
     try {
       const { data } = await api.get("/static/detect");
       if (data?.ok) {
@@ -45,21 +36,32 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
         if (!segment && segs[0]?.name) setSegment(segs[0].name);
       }
     } catch (e) { /* ignore */ }
-  };
+  }, [segment]);
 
-  const loadUnknown = async () => {
+  const loadUnknown = useCallback(async () => {
     try {
       const { data } = await api.get("/static/unknown-sources");
       setUnknown(Array.isArray(data?.items) ? data.items : []);
     } catch (e) { setUnknown([]); }
-  };
+  }, []);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     try {
       const { data } = await api.get("/customers");
       setCustomers(Array.isArray(data) ? data.filter((c) => c.connectionType === 'static') : []);
     } catch (e) {}
-  };
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadDetect(), loadUnknown(), loadCustomers()]);
+  }, [loadDetect, loadUnknown, loadCustomers]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMsg("");
+    setPreview(null);
+    refreshAll();
+  }, [isOpen, refreshAll]);
 
   const byIp = useMemo(() => {
     const lists = snapshot?.lists || {};

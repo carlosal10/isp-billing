@@ -646,38 +646,7 @@ export default function Dashboard() {
     []
   );
 
-  /* -----------------------------------
-     Actions
-  ----------------------------------- */
-  const [acting, setActing] = useState({});
-  async function enableAccount(acct) {
-    try {
-      setActing((a) => ({ ...a, [acct]: true }));
-      await api.post(`/pppoe/${encodeURIComponent(acct)}/enable`);
-      loadSessions();
-      setToast({ type: "success", message: `Enabled ${acct}` });
-    } catch (e) {
-      setErrors((er) => ({ ...er, sessions: e.message }));
-      setToast({ type: "error", message: `Enable failed: ${e.message}` });
-    } finally {
-      setActing((a) => ({ ...a, [acct]: false }));
-    }
-  }
-  async function disableAccount(acct) {
-    try {
-      setActing((a) => ({ ...a, [acct]: true }));
-      await api.post(`/pppoe/${encodeURIComponent(acct)}/disable`, null, {
-        params: { disconnect: true },
-      });
-      loadSessions();
-      setToast({ type: "success", message: `Disabled ${acct}` });
-    } catch (e) {
-      setErrors((er) => ({ ...er, sessions: e.message }));
-      setToast({ type: "error", message: `Disable failed: ${e.message}` });
-    } finally {
-      setActing((a) => ({ ...a, [acct]: false }));
-    }
-  }
+  
 
   useEffect(() => {
     if (toast && toastRef.current) toastRef.current.focus();

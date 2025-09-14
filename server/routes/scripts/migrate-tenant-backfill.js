@@ -5,15 +5,15 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 
-const Tenant = require('../models/Tenant');
-const Customer = require('../models/customers');
-const Plan = require('../models/plan');
-const Invoice = require('../models/Invoice');
-const Payment = require('../models/Payment');
+const Tenant = require('../../models/Tenant');
+const Customer = require('../../models/customers');
+const Plan = require('../../models/plan');
+const Invoice = require('../../models/Invoice');
+const Payment = require('../../models/Payment');
 
 // Optional configs that historically keyed by `ispId` string
 let PaymentConfig;
-try { PaymentConfig = require('../models/PaymentConfig'); } catch {}
+try { PaymentConfig = require('../../models/PaymentConfig'); } catch {}
 
 function parseArgs(argv) {
   const args = { dryRun: false, force: false };
