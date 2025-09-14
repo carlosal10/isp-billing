@@ -513,3 +513,67 @@ router.post('/rollback', limiter, async (req, res) => {
     return res.status(500).json({ ok: false, error: e?.message || 'Rollback failed' });
   }
 });
+
+// ---- Clean lists: remove STATIC_ALLOW/BLOCK entries not in DB static IPs and not present in ARP ----
+// POST /api/static/clean-lists
+// Body: { dryRun?: boolean }
+router.post('/clean-lists', limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  const timeoutMs = 12000;
+  const { dryRun = false } = req.body || {};
+  try {
+    // Load current address-lists and ARP bindings
+    const [lists, arps] = await Promise.all([
+      sendCommand('/ip/firewall/address-list/print', [], { tenantId, timeoutMs }).catch(() => []),
+      sendCommand('/ip/arp/print', [], { tenantId, timeoutMs }).catch(() => []),
+    ]);
+
+    // Load DB static IPs
+    let dbIps = [];
+    try {
+      const Customer = require('../models/customers');
+      const docs = await Customer.find({ tenantId, connectionType: 'static' }).select('staticConfig.ip').lean();
+      dbIps = (docs || []).map((d) => String(d?.staticConfig?.ip || '').trim()).filter(Boolean);
+    } catch (_) { dbIps = []; }
+
+    const dbSet = new Set(dbIps);
+    const arpSet = new Set(((Array.isArray(arps) ? arps : []).map((a) => String(a?.address || '').trim()).filter(Boolean)));
+
+    const byList = (Array.isArray(lists) ? lists : []).reduce((acc, r) => {
+      const L = String(r?.list || '');
+      if (!L) return acc;
+      (acc[L] ||= []).push(r);
+      return acc;
+    }, {});
+
+    const allowRows = byList['STATIC_ALLOW'] || [];
+    const blockRows = byList['STATIC_BLOCK'] || [];
+
+    const shouldRemove = (row) => {
+      const ip = String(row?.address || '').trim();
+      if (!ip) return false;
+      // Remove only if NOT in DB and NOT present in ARP (conservative)
+      return !dbSet.has(ip) && !arpSet.has(ip);
+    };
+
+    const rmAllow = allowRows.filter(shouldRemove);
+    const rmBlock = blockRows.filter(shouldRemove);
+
+    if (dryRun) {
+      return res.json({ ok: true, dryRun: true, removeAllow: rmAllow.length, removeBlock: rmBlock.length });
+    }
+
+    let removed = 0;
+    for (const r of [...rmAllow, ...rmBlock]) {
+      try {
+        await sendCommand('/ip/firewall/address-list/remove', [w('numbers', idOf(r))], { tenantId, timeoutMs });
+        removed += 1;
+      } catch {}
+    }
+
+    await audit(req, 'static.clean-lists', { removed, removeAllow: rmAllow.length, removeBlock: rmBlock.length });
+    return res.json({ ok: true, removed, removeAllow: rmAllow.length, removeBlock: rmBlock.length });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'Clean lists failed' });
+  }
+});

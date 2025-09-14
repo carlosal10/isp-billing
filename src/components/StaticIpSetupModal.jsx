@@ -19,6 +19,8 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [enforcing, setEnforcing] = useState(false);
   const [rollbacking, setRollbacking] = useState(false);
   const [rollbackPreview, setRollbackPreview] = useState(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanPreview, setCleanPreview] = useState(null);
 
   const unknownCount = unknown.length;
 
@@ -143,6 +145,29 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
       await loadDetect();
     } catch (e) { setMsg(e?.message || "Rollback failed"); }
     finally { setRollbacking(false); }
+  }
+
+  async function doCleanPreview() {
+    setCleaning(true); setMsg(""); setCleanPreview(null);
+    try {
+      const { data } = await api.post("/static/clean-lists", { dryRun: true });
+      if (!data?.ok) throw new Error(data?.error || "Clean preview failed");
+      setCleanPreview(data);
+      setMsg("Clean preview ready");
+    } catch (e) { setMsg(e?.message || "Clean preview failed"); }
+    finally { setCleaning(false); }
+  }
+
+  async function doCleanApply() {
+    setCleaning(true); setMsg("");
+    try {
+      const { data } = await api.post("/static/clean-lists", {});
+      if (!data?.ok) throw new Error(data?.error || "Clean failed");
+      setMsg(`Removed ${data.removed} stale entries`);
+      setCleanPreview(null);
+      await loadDetect();
+    } catch (e) { setMsg(e?.message || "Clean failed"); }
+    finally { setCleaning(false); }
   }
 
   return (
@@ -304,6 +329,26 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
                 </button>
                 <button onClick={() => doRollback(true)} disabled={rollbacking}>
                   Remove Rules + Restore Lists
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Clean lists section */}
+        <div style={{ marginTop: 10 }}>
+          <div className="help">Clean Lists</div>
+          <div className="stack-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={doCleanPreview} disabled={cleaning}>
+              {cleaning ? 'Calculating…' : 'Preview Clean'}
+            </button>
+            {cleanPreview && (
+              <>
+                <span style={{ opacity: .8 }}>
+                  removeAllow {cleanPreview.removeAllow}, removeBlock {cleanPreview.removeBlock}
+                </span>
+                <button onClick={doCleanApply} disabled={cleaning}>
+                  Apply Clean
                 </button>
               </>
             )}

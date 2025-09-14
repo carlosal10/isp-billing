@@ -266,6 +266,57 @@ export default function Dashboard() {
     }
   };
 
+  // ---- Actions: PPPoE + Static ----
+  const [acting, setActing] = useState({});
+
+  async function enableAccount(account) {
+    try {
+      setActing((a) => ({ ...a, [account]: true }));
+      await api.post(`/pppoe/${encodeURIComponent(account)}/enable`);
+      await loadSessions();
+    } catch (e) {
+      setToast({ type: 'error', message: e?.message || 'Enable failed' });
+    } finally {
+      setActing((a) => ({ ...a, [account]: false }));
+    }
+  }
+
+  async function disableAccount(account) {
+    try {
+      setActing((a) => ({ ...a, [account]: true }));
+      await api.post(`/pppoe/${encodeURIComponent(account)}/disable`);
+      await loadSessions();
+    } catch (e) {
+      setToast({ type: 'error', message: e?.message || 'Disable failed' });
+    } finally {
+      setActing((a) => ({ ...a, [account]: false }));
+    }
+  }
+
+  async function enableStaticQueue(account) {
+    try {
+      setActing((a) => ({ ...a, [account]: true }));
+      await api.post(`/static/${encodeURIComponent(account)}/enable-queue`);
+      await loadSessions();
+    } catch (e) {
+      setToast({ type: 'error', message: e?.message || 'Enable queue failed' });
+    } finally {
+      setActing((a) => ({ ...a, [account]: false }));
+    }
+  }
+
+  async function disableStaticQueue(account) {
+    try {
+      setActing((a) => ({ ...a, [account]: true }));
+      await api.post(`/static/${encodeURIComponent(account)}/disable-queue`);
+      await loadSessions();
+    } catch (e) {
+      setToast({ type: 'error', message: e?.message || 'Disable queue failed' });
+    } finally {
+      setActing((a) => ({ ...a, [account]: false }));
+    }
+  }
+
   /* -----------------------------------
      Lifecycle
   ----------------------------------- */
@@ -821,6 +872,24 @@ export default function Dashboard() {
                     <td className="num">{u.bytesOut.toLocaleString()}</td>
                     <td>{u.planName}</td>
                     <td>
+                      {u.source === 'Static' && u.accountNumber && (
+                        <div className="static-actions" style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                          <button
+                            className="btn"
+                            onClick={() => disableStaticQueue(u.accountNumber)}
+                            disabled={!!acting[u.accountNumber]}
+                          >
+                            {acting[u.accountNumber] ? 'Working…' : 'Disable Queue'}
+                          </button>
+                          <button
+                            className="btn"
+                            onClick={() => enableStaticQueue(u.accountNumber)}
+                            disabled={!!acting[u.accountNumber]}
+                          >
+                            {acting[u.accountNumber] ? '…' : 'Enable Queue'}
+                          </button>
+                        </div>
+                      )}
                       {u.source === "PPPoE" && u.accountNumber ? (
                         <div className="ppp-actions" data-disabled={u.isDisabled ? '1' : '0'} style={{ display: "flex", gap: 6 }}>
                           <button
@@ -838,7 +907,7 @@ export default function Dashboard() {
                             {acting[u.accountNumber] ? "…" : "Enable"}
                           </button>
                         </div>
-                      ) : (
+                      ) : u.source === 'Static' ? (null) : (
                         <span style={{ opacity: 0.5 }}>-</span>
                       )}
                     </td>

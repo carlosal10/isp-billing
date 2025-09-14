@@ -131,8 +131,14 @@ router.get('/detect-static', async (req, res) => {
     let queues = [];
     let allowList = [];
     let blockList = [];
+    let pppActive = [];
+    let pppSecrets = [];
     try {
       queues = await sendCommand('/queue/simple/print', [], { tenantId, timeoutMs: 12000 });
+    } catch (_) {}
+    try {
+      // Also load PPP secrets to avoid misclassifying their assigned remote-address as static even when offline
+      pppSecrets = await sendCommand('/ppp/secret/print', [], { tenantId, timeoutMs: 10000 });
     } catch (_) {}
 
     try {
@@ -140,6 +146,10 @@ router.get('/detect-static', async (req, res) => {
     } catch (_) {}
     try {
       blockList = await sendCommand('/ip/firewall/address-list/print', ['?list=STATIC_BLOCK'], { tenantId, timeoutMs: 8000 });
+    } catch (_) {}
+    try {
+      // Use active PPP sessions to avoid misclassifying PPPoE IPs as static
+      pppActive = await sendCommand('/ppp/active/print', [], { tenantId, timeoutMs: 8000 });
     } catch (_) {}
 
     // Build candidates from queues
@@ -153,11 +163,26 @@ router.get('/detect-static', async (req, res) => {
       return null;
     }
 
+    // Build a set of active PPPoE IPs (remote-address/address)
+    const pppIpSet = new Set(
+      (Array.isArray(pppActive) ? pppActive : [])
+        .map((r) => String(r?.['remote-address'] || r?.address || r?.['ip-address'] || '').trim())
+        .filter(Boolean)
+    );
+
+    const pppSecretIpSet = new Set(
+      (Array.isArray(pppSecrets) ? pppSecrets : [])
+        .map((r) => String(r?.['remote-address'] || '').trim())
+        .filter(Boolean)
+    );
+
     for (const q of Array.isArray(queues) ? queues : []) {
       const name = String(q?.name || '').trim();
       const target = q?.target || q?.['target'] || '';
       const ip = firstIpFromTarget(target);
       if (!name || !ip) continue;
+      // Skip queues whose target IP belongs to an active PPPoE session or is assigned to a PPP secret
+      if (pppIpSet.has(ip) || pppSecretIpSet.has(ip)) continue;
       const rate = String(q?.['max-limit'] || q?.maxLimit || q?.rate || '').trim();
       candidates.push({
         source: 'queue',
@@ -173,6 +198,7 @@ router.get('/detect-static', async (req, res) => {
       for (const r of Array.isArray(arr) ? arr : []) {
         const ip = String(r?.address || '').trim();
         if (!ip) continue;
+        if (pppIpSet.has(ip) || pppSecretIpSet.has(ip)) continue; // exclude PPPoE-related IPs
         const comment = String(r?.comment || '').trim() || null;
         // Try to infer accountNumber from comment if present
         const accountFromComment = (comment && comment.match(/acct[:#\s]*([A-Za-z0-9_-]+)/i))?.[1] || null;
