@@ -70,6 +70,32 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [staticConfig, setStaticConfig] = useState(
     customer?.staticConfig || { ip: "", gateway: "", dns: "" }
   );
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueOpts, setQueueOpts] = useState([]);
+  const [selectedQueueIp, setSelectedQueueIp] = useState("");
+
+  async function loadQueues() {
+    try {
+      setQueueLoading(true);
+      const { data } = await api.get('/queues/simple');
+      const list = Array.isArray(data?.queues) ? data.queues : [];
+      const seen = new Set();
+      const opts = [];
+      for (const q of list) {
+        const ip = String(q?.ip || '').trim();
+        if (!ip || seen.has(ip)) continue;
+        seen.add(ip);
+        const label = `${ip} ${q.comment ? '— ' + q.comment : q.name ? '— ' + q.name : ''}`;
+        opts.push({ ip, label });
+      }
+      setQueueOpts(opts);
+    } catch (e) {
+      // ignore
+      setQueueOpts([]);
+    } finally {
+      setQueueLoading(false);
+    }
+  }
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
@@ -165,6 +191,26 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                 placeholder="IP Address"
                 required
               />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button type="button" className="btn" onClick={loadQueues} disabled={queueLoading}>
+                  {queueLoading ? 'Loading…' : 'Load from Router'}
+                </button>
+                {queueOpts.length > 0 && (
+                  <select
+                    value={selectedQueueIp}
+                    onChange={(e) => {
+                      const ip = e.target.value;
+                      setSelectedQueueIp(ip);
+                      if (ip) setStaticConfig((s) => ({ ...s, ip }));
+                    }}
+                  >
+                    <option value="">Select IP from queues…</option>
+                    {queueOpts.map((o) => (
+                      <option key={o.ip} value={o.ip}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <input
                 value={staticConfig.gateway}
                 onChange={(e) => setStaticConfig({ ...staticConfig, gateway: e.target.value })}

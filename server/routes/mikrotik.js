@@ -120,6 +120,44 @@ router.get("/hotspot/active", limiter, async (req, res) => {
   res.json({ ok: true, count: rows.length, users: rows.map(mapHotspotActiveRow) });
 });
 
+// GET /api/mikrotik/queues/simple
+router.get("/mikrotik/queues/simple", limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
+  function isPrivate(ip) {
+    try {
+      const o = ip.split('.').map(Number);
+      if (o[0] === 10) return true;
+      if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+      if (o[0] === 192 && o[1] === 168) return true;
+      return false;
+    } catch { return false; }
+  }
+  try {
+    const rows = await rosPrint(tenantId, "/queue/simple/print");
+    const mapped = (Array.isArray(rows) ? rows : []).map((q) => {
+      const target = s(q?.target || q?.["target"] || "");
+      const ip = firstIpFromTarget(target);
+      return {
+        name: s(q?.name),
+        target,
+        ip,
+        comment: s(q?.comment),
+        maxLimit: s(q?.["max-limit"] || q?.maxLimit || ""),
+      };
+    }).filter((r) => r.ip && (!privateOnly || isPrivate(r.ip)));
+    res.json({ ok: true, count: mapped.length, queues: mapped });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load queues' });
+  }
+});
+
+// Alias
+router.get("/queues/simple", limiter, async (req, res) => {
+  req.url = "/mikrotik/queues/simple";
+  return router.handle(req, res);
+});
+
 // GET /api/mikrotik/static/active
 router.get("/mikrotik/static/active", limiter, async (req, res) => {
   const tenantId = req.tenantId;
