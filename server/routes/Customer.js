@@ -127,6 +127,7 @@ router.get('/search', async (req, res) => {
 router.get('/detect-static', async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const trustLists = String(req.query?.trustLists || '').toLowerCase() === 'true';
 
     let queues = [];
     let allowList = [];
@@ -212,8 +213,8 @@ router.get('/detect-static', async (req, res) => {
         const comment = String(r?.comment || '').trim() || null;
         // Try to infer accountNumber from comment if present
         const accountFromComment = (comment && comment.match(/acct[:#\s]*([A-Za-z0-9_-]+)/i))?.[1] || null;
-        if (!accountFromComment) continue; // require account marker
-        candidates.push({ source, accountNumber: accountFromComment, ip, rateLimit: '', comment });
+        if (!accountFromComment && !trustLists) continue; // require account marker unless trusting lists
+        candidates.push({ source, accountNumber: accountFromComment || '', ip, rateLimit: '', comment });
       }
     }
     pushFromList(allowList, 'address-list-allow');

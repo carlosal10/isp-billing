@@ -217,6 +217,7 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [importing, setImporting] = useState(false);
   const [importPlan, setImportPlan] = useState("");
   const [autoAcc, setAutoAcc] = useState(true);
+  const [trustLists, setTrustLists] = useState(true);
 
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
@@ -403,7 +404,7 @@ export default function CustomersModal({ isOpen, onClose }) {
                   onClick={async () => {
                     setDetecting(true);
                     try {
-                      const { data } = await api.get("/customers/detect-static");
+                      const { data } = await api.get(`/customers/detect-static${trustLists ? '?trustLists=true' : ''}`);
                       const list = Array.isArray(data?.candidates) ? data.candidates : [];
                       setDetected(list);
                       setSelectedKeys(new Set());
@@ -427,6 +428,9 @@ export default function CustomersModal({ isOpen, onClose }) {
                     <option key={p._id} value={p._id}>{p.name} {p.speed ? `(${p.speed})` : ""}</option>
                   ))}
                 </select>
+                <label style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trustLists} onChange={() => setTrustLists(v => !v)} /> Trust address-lists
+                </label>
                 <label style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={autoAcc} onChange={() => setAutoAcc(v => !v)} /> Auto-generate account numbers
                 </label>
