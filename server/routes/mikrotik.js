@@ -220,11 +220,44 @@ router.get("/mikrotik/arp", limiter, async (req, res) => {
   }
 });
 
-// Alias
+// Alias with same logic (avoid internal re-dispatch)
 router.get("/arp", limiter, async (req, res) => {
-  const q = new URLSearchParams(req.query).toString();
-  req.url = "/mikrotik/arp" + (q ? ("?" + q) : "");
-  return router.handle(req, res);
+  const tenantId = req.tenantId;
+  const lanOnly = String(req.query?.lanOnly || 'true').toLowerCase() !== 'false';
+  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
+  const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
+  try {
+    const [arps, bridges, vlans] = await Promise.all([
+      rosPrint(tenantId, "/ip/arp/print"),
+      lanOnly ? rosPrint(tenantId, "/interface/bridge/print") : Promise.resolve([]),
+      lanOnly ? rosPrint(tenantId, "/interface/vlan/print") : Promise.resolve([]),
+    ]);
+    const lanIf = new Set([
+      ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
+      ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
+    ]);
+    const mapped = (Array.isArray(arps) ? arps : []).map((a) => ({
+      address: s(a?.address),
+      interface: s(a?.interface),
+      mac: s(a?.['mac-address']),
+      type: s(a?.type),
+      dynamic: s(a?.dynamic),
+      comment: s(a?.comment),
+    })).filter((r) => {
+      if (!r.address) return false;
+      if (privateOnly && !isPrivateIPv4(r.address)) return false;
+      if (lanOnly && r.interface && lanIf.size && !lanIf.has(r.interface)) return false;
+      if (permanentOnly) {
+        const dyn = String(r.dynamic || 'no').toLowerCase() === 'yes';
+        const type = String(r.type || '').toLowerCase();
+        if (dyn && type !== 'static') return false;
+      }
+      return true;
+    });
+    return res.json({ ok: true, count: mapped.length, arps: mapped });
+  } catch (e) {
+    return res.json({ ok: false, count: 0, arps: [], error: e?.message || 'Failed to load ARP' });
+  }
 });
 
 // GET /api/mikrotik/static/active
