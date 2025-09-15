@@ -107,6 +107,33 @@ const planRoutes = require("./routes/plans");
 const invoiceRoutes = require("./routes/Invoices");
 const usageLogsRoutes = require("./routes/usageLogs");
 const statsRoutes = require("./routes/Stats");
+const arpRoutes = require("./routes/arp");
+const staticCandidatesRoutes = require("./routes/staticCandidates");
+app.use("/api/arp", authenticate, requireTenant, arpRoutes);
+console.log("✅ arp routes loaded");
+
+// PPPoE profiles (for customer plan UI)
+const pppoeRoutes = require("./routes/pppoe");
+app.use("/api/pppoe", authenticate, requireTenant, pppoeRoutes);
+console.log("✅ pppoe routes loaded");  
+
+// Customer profiles (for customer create/edit UI)
+const customersProfilesRoutes = require("./routes/customersProfiles");
+app.use("/api/customers/profiles", authenticate, requireTenant, customersProfilesRoutes);
+console.log("✅ customers profiles routes loaded");
+// Mikrotik profiles (for mikrotik admin UI)
+const mikrotikProfilesRoutes = require("./routes/mikrotikProfiles");
+app.use("/api/mikrotik/pppoe-profiles", authenticate, requireTenant, mikrotikProfilesRoutes);
+console.log("✅ mikrotik profiles routes loaded");
+
+// Queues (for static IP migration & control)
+const queuesRoutes = require("./routes/queues");
+app.use("/api/queues", authenticate, requireTenant, queuesRoutes);
+console.log("✅ queues routes loaded");
+
+console.log("✅ All routes loaded");
+
+console.log(`🔑 Allowed CORS origins: ${ALLOWED_ORIGINS.join(", ")}`) ;
 
 // Auth (HYBRID SPLIT)
 const tenantAuthRoutes = require("./routes/tenantAuth");      // /api/auth/*
@@ -184,6 +211,7 @@ app.use(
 app.use("/api/mikrotik/admin", authenticate, requireTenant, mikrotikAdminRoutes);
 // Static-IP migration & enforcement (monitor -> enforce)
 app.use("/api/static", authenticate, requireTenant, staticControlRoutes);
+app.use("/api/static/candidates", authenticate, requireTenant, staticCandidatesRoutes);
 
 // Hotspot
 app.use("/api/hotspot-plans", authenticate, requireTenant, hotspotPlansRoutes);
