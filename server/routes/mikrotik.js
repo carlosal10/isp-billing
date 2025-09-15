@@ -260,6 +260,88 @@ router.get("/arp", limiter, async (req, res) => {
   }
 });
 
+// Aggregate: GET /api/mikrotik/static/candidates
+router.get("/mikrotik/static/candidates", limiter, async (req, res) => {
+  const tenantId = req.tenantId;
+  const include = String(req.query?.include || 'queues,lists,secrets,arp')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const lanOnly = String(req.query?.lanOnly || 'true').toLowerCase() !== 'false';
+  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
+  const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
+  const trustLists = String(req.query?.trustLists || 'true').toLowerCase() === 'true';
+  try {
+    const wantQueues = include.includes('queues');
+    const wantLists = include.includes('lists');
+    const wantSecrets = include.includes('secrets');
+    const wantArp = include.includes('arp');
+
+    const [queues, lists, secrets, arps, bridges, vlans] = await Promise.all([
+      wantQueues ? rosPrint(tenantId, "/queue/simple/print") : Promise.resolve([]),
+      wantLists ? rosPrint(tenantId, "/ip/firewall/address-list/print") : Promise.resolve([]),
+      wantSecrets ? rosPrint(tenantId, "/ppp/secret/print") : Promise.resolve([]),
+      wantArp ? rosPrint(tenantId, "/ip/arp/print") : Promise.resolve([]),
+      lanOnly ? rosPrint(tenantId, "/interface/bridge/print") : Promise.resolve([]),
+      lanOnly ? rosPrint(tenantId, "/interface/vlan/print") : Promise.resolve([]),
+    ]);
+    const lanIf = new Set([
+      ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
+      ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
+    ]);
+    const out = new Map();
+    function push(ip, source, label) {
+      const key = String(ip || '').trim();
+      if (!key) return;
+      if (privateOnly && !isPrivateIPv4(key)) return;
+      const v = out.get(key) || { ip: key, sources: [], label: '' };
+      if (!v.sources.includes(source)) v.sources.push(source);
+      if (!v.label && label) v.label = label;
+      out.set(key, v);
+    }
+    for (const q of queues || []) {
+      const target = s(q?.target || q?.['target']);
+      const ip = firstIpFromTarget(target);
+      if (!ip) continue;
+      push(ip, 'queue', s(q?.comment) || s(q?.name));
+    }
+    for (const r of lists || []) {
+      const listName = s(r?.list);
+      if (!listName) continue;
+      if (!trustLists && listName !== 'STATIC_ALLOW' && listName !== 'STATIC_BLOCK') continue;
+      const ip = s(r?.address);
+      if (!ip) continue;
+      push(ip, `list:${listName}`, `${listName}${r?.comment ? ' — ' + s(r.comment) : ''}`);
+    }
+    for (const sec of secrets || []) {
+      const ip = s(sec?.['remote-address']);
+      if (!ip) continue;
+      push(ip, 'ppp-secret', `ppp secret ${s(sec?.name)}`);
+    }
+    for (const a of arps || []) {
+      const ip = s(a?.address);
+      if (!ip) continue;
+      if (lanOnly && lanIf.size) {
+        const iface = s(a?.interface);
+        if (iface && !lanIf.has(iface)) continue;
+      }
+      if (permanentOnly) {
+        const dyn = String(a?.dynamic || 'no').toLowerCase() === 'yes';
+        const type = String(a?.type || '').toLowerCase();
+        if (dyn && type !== 'static') continue;
+      }
+      push(ip, 'arp', `${s(a?.interface)}${a?.comment ? ' — ' + s(a.comment) : ''}`);
+    }
+    return res.json({ ok: true, count: out.size, candidates: Array.from(out.values()) });
+  } catch (e) {
+    return res.json({ ok: false, count: 0, candidates: [], error: e?.message || 'Failed to load candidates' });
+  }
+});
+
+router.get("/static/candidates", limiter, async (req, res) => {
+  const q = new URLSearchParams(req.query).toString();
+  req.url = "/mikrotik/static/candidates" + (q ? ("?" + q) : "");
+  return router.handle(req, res);
+});
+
 // GET /api/mikrotik/static/active
 router.get("/mikrotik/static/active", limiter, async (req, res) => {
   const tenantId = req.tenantId;

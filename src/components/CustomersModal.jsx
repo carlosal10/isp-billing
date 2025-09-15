@@ -75,12 +75,17 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
   const [useQueueIp, setUseQueueIp] = useState(false);
   const [useArpIp, setUseArpIp] = useState(false);
+  const [useRouterAll, setUseRouterAll] = useState(false);
   const [arpLoading, setArpLoading] = useState(false);
   const [arpOpts, setArpOpts] = useState([]);
   const [selectedArpIp, setSelectedArpIp] = useState("");
   const [arpLanOnly, setArpLanOnly] = useState(true);
   const [arpPrivateOnly, setArpPrivateOnly] = useState(true);
   const [arpPermanentOnly, setArpPermanentOnly] = useState(true);
+  const [routerAllLoading, setRouterAllLoading] = useState(false);
+  const [routerAllOpts, setRouterAllOpts] = useState([]);
+  const [selectedRouterAllIp, setSelectedRouterAllIp] = useState("");
+  const [trustLists, setTrustLists] = useState(true);
 
   const [queueTried, setQueueTried] = useState(false);
 
@@ -137,11 +142,46 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
     }
   }, [arpLanOnly, arpPrivateOnly, arpPermanentOnly]);
 
+  const loadRouterAll = useCallback(async () => {
+    try {
+      setRouterAllLoading(true);
+      const params = {
+        include: 'queues,lists,secrets,arp',
+        lanOnly: arpLanOnly,
+        privateOnly: arpPrivateOnly,
+        permanentOnly: arpPermanentOnly,
+        trustLists,
+      };
+      const { data } = await api.get('/static/candidates', { params });
+      const list = Array.isArray(data?.candidates) ? data.candidates : [];
+      const seen = new Set();
+      const opts = [];
+      for (const c of list) {
+        const ip = String(c?.ip || '').trim();
+        if (!ip || seen.has(ip)) continue;
+        seen.add(ip);
+        const label = `${ip} ${c.label ? '— ' + c.label : ''} ${Array.isArray(c.sources) ? '— ['+c.sources.join(', ')+']' : ''}`;
+        opts.push({ ip, label });
+      }
+      setRouterAllOpts(opts);
+    } catch (e) {
+      setRouterAllOpts([]);
+    } finally {
+      setRouterAllLoading(false);
+    }
+  }, [arpLanOnly, arpPrivateOnly, arpPermanentOnly, trustLists]);
+
   useEffect(() => {
     if (networkType === 'static' && useArpIp && !arpLoading) {
       loadArps();
     }
   }, [networkType, useArpIp, arpLoading, loadArps]);
+
+  useEffect(() => {
+    if (networkType === 'static' && useRouterAll && !routerAllLoading) {
+      loadRouterAll();
+    }
+  }, [networkType, useRouterAll, routerAllLoading, loadRouterAll]);
 
   // Always select first profile if PPPoE + nothing selected
   useEffect(() => {
@@ -239,6 +279,10 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                 <input type="checkbox" checked={useArpIp} onChange={() => setUseArpIp(v => !v)} />
                 Pick IP from ARP table (LAN)
               </label>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginBottom: 6, marginLeft: 8 }}>
+                <input type="checkbox" checked={useRouterAll} onChange={() => setUseRouterAll(v => !v)} />
+                Pick IP from router (all sources)
+              </label>
               {useQueueIp && (
                 <select
                   value={selectedQueueIp}
@@ -274,6 +318,40 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                     <option key={o.ip} value={o.ip}>{o.label}</option>
                   ))}
                 </select>
+              )}
+              {useRouterAll && (
+                <>
+                  <div style={{ display:'flex', gap:12, marginTop:6 }}>
+                    <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                      <input type="checkbox" checked={arpLanOnly} onChange={() => setArpLanOnly(v => !v)} /> LAN only
+                    </label>
+                    <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                      <input type="checkbox" checked={arpPrivateOnly} onChange={() => setArpPrivateOnly(v => !v)} /> Private only
+                    </label>
+                    <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                      <input type="checkbox" checked={arpPermanentOnly} onChange={() => setArpPermanentOnly(v => !v)} /> Permanent only
+                    </label>
+                    <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                      <input type="checkbox" checked={trustLists} onChange={() => setTrustLists(v => !v)} /> Trust lists
+                    </label>
+                  </div>
+                  <select
+                    value={selectedRouterAllIp}
+                    onChange={(e) => {
+                      const ip = e.target.value;
+                      setSelectedRouterAllIp(ip);
+                      if (ip) setStaticConfig((s) => ({ ...s, ip }));
+                    }}
+                    disabled={routerAllLoading}
+                  >
+                    <option value="">
+                      {routerAllLoading ? 'Loading…' : (routerAllOpts.length ? 'Select IP from router…' : 'No IPs found')}
+                    </option>
+                    {routerAllOpts.map((o) => (
+                      <option key={o.ip} value={o.ip}>{o.label}</option>
+                    ))}
+                  </select>
+                </>
               )}
               {useArpIp && (
                 <div style={{ display:'flex', gap:12, marginTop:6 }}>
