@@ -120,6 +120,12 @@ const mikrotikRoutes = require("./routes/mikrotik");
 const mikrotikTerminalRoutes = require("./routes/mikrotikTerminal");
 const mikrotikAdminRoutes = require("./routes/mikrotikAdmin");
 const staticControlRoutes = require("./routes/staticControl");
+const queuesRoutes = require("./routes/queues");
+const arpRoutes = require("./routes/arp");
+const pppoeRoutes = require("./routes/pppoe");
+const customersProfilesRoutes = require("./routes/customersProfiles");
+const mikrotikProfilesRoutes = require("./routes/mikrotikProfiles");
+const staticCandidatesRoutes = require("./routes/staticCandidates");
 
 // Hotspot
 const hotspotPlansRoutes = require("./routes/hotspotPlans");
@@ -140,6 +146,7 @@ const debugRoutes = require("./routes/debug");
 const tenantRoutes = require("./routes/tenant");
 const accountRoutes = require("./routes/account");
 
+
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
 
@@ -159,12 +166,13 @@ app.use("/api/usageLogs", authenticate, requireTenant, usageLogsRoutes);
 app.use("/api/stats", authenticate, requireTenant, statsRoutes);
 app.use("/api/tenant", authenticate, requireTenant, tenantRoutes);
 app.use("/api/account", authenticate, accountRoutes);
-app.use('/customers', require('./routes/customersProfiles'));  // GET /customers/profiles
-app.use('/pppoe', require('./routes/pppoe'));                  // GET /pppoe/profiles
-app.use('/mikrotik', require('./routes/mikrotikProfiles'));    // GET /mikrotik/pppoe-profiles (optional)
-app.use('/queues', require('./routes/queues'));                // GET /queues/simple
-app.use('/arp', require('./routes/arp'));
-app.use('/static-candidates', require('./routes/staticCandidates'));  // GET /static-candidates?include=queues,lists,arp&trustLists=true&lanOnly=true&permanentOnly=true&privateOnly=true
+app.use("/api/queues", authenticate, requireTenant, queuesRoutes);
+app.use("/api/arp", authenticate, requireTenant, arpRoutes);
+app.use("/api/pppoe", authenticate, requireTenant, pppoeRoutes);  
+app.use("/api/customers", authenticate, requireTenant, customersProfilesRoutes);
+app.use("/api/mikrotik", authenticate, requireTenant, mikrotikProfilesRoutes);
+app.use("/api/static-candidates", authenticate, requireTenant, staticCandidatesRoutes);
+
 
 // Public paylink endpoints (must be before any generic /api auth wrappers)
 app.use("/api/paylink", paylinkRoutes);
