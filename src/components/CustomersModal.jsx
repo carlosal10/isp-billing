@@ -75,13 +75,13 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
   const [useQueueIp, setUseQueueIp] = useState(false);
   const [useArpIp, setUseArpIp] = useState(false);
-  const [useRouterAll, setUseRouterAll] = useState(false);
+  const [useRouterAll, setUseRouterAll] = useState(true);
   const [arpLoading, setArpLoading] = useState(false);
   const [arpOpts, setArpOpts] = useState([]);
   const [selectedArpIp, setSelectedArpIp] = useState("");
-  const [arpLanOnly, setArpLanOnly] = useState(true);
-  const [arpPrivateOnly, setArpPrivateOnly] = useState(true);
-  const [arpPermanentOnly, setArpPermanentOnly] = useState(true);
+  const [arpLanOnly, setArpLanOnly] = useState(false);
+  const [arpPrivateOnly, setArpPrivateOnly] = useState(false);
+  const [arpPermanentOnly, setArpPermanentOnly] = useState(false);
   const [routerAllLoading, setRouterAllLoading] = useState(false);
   const [routerAllOpts, setRouterAllOpts] = useState([]);
   const [selectedRouterAllIp, setSelectedRouterAllIp] = useState("");
@@ -147,9 +147,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       setRouterAllLoading(true);
       const params = {
         include: 'queues,lists,secrets,arp',
-        lanOnly: arpLanOnly,
-        privateOnly: arpPrivateOnly,
-        permanentOnly: arpPermanentOnly,
+        lanOnly: !!arpLanOnly,
+        privateOnly: !!arpPrivateOnly,
+        permanentOnly: !!arpPermanentOnly,
         trustLists,
       };
       const { data } = await api.get('/static/candidates', { params });

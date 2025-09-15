@@ -265,9 +265,10 @@ router.get("/mikrotik/static/candidates", limiter, async (req, res) => {
   const tenantId = req.tenantId;
   const include = String(req.query?.include || 'queues,lists,secrets,arp')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const lanOnly = String(req.query?.lanOnly || 'true').toLowerCase() !== 'false';
-  const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
-  const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
+  // Defaults loosened to surface legacy data; caller can re-tighten via query
+  const lanOnly = String(req.query?.lanOnly || 'false').toLowerCase() === 'true';
+  const privateOnly = String(req.query?.privateOnly || 'false').toLowerCase() === 'true';
+  const permanentOnly = String(req.query?.permanentOnly || 'false').toLowerCase() === 'true';
   const trustLists = String(req.query?.trustLists || 'true').toLowerCase() === 'true';
   try {
     const wantQueues = include.includes('queues');
