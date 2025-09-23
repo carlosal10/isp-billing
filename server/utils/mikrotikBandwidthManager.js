@@ -1,123 +1,237 @@
 // utils/mikrotikBandwidthManager.js
 const { sendCommand } = require('./mikrotikConnectionManager');
 
-// RouterOS word helpers (align with other routes)
-const qs = (k, v) => `?${k}=${v}`;
-const w = (k, v) => `=${k}=${v}`;
+const qs = (k, v) => '?' + k + '=' + v;
+const w = (k, v) => '=' + k + '=' + v;
 
-async function getQueueIdByName(tenantId, name) {
+const DEFAULT_TIMEOUT = 8000;
+const STATIC_ALLOW = 'STATIC_ALLOW';
+const STATIC_BLOCK = 'STATIC_BLOCK';
+
+const isYes = (v) => {
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === 'yes' || s === 'true' || s === '1';
+};
+
+const firstQueueTargetIp = (target) => {
+  if (!target) return '';
+  const first = String(target).split(',')[0].trim();
+  return first.split('/')[0].trim();
+};
+
+const safeIp = (ip) => {
+  const value = String(ip == null ? '' : ip).trim();
+  return value && value.toLowerCase() !== 'undefined' ? value : '';
+};
+
+async function fetchQueueByName(tenantId, name) {
   try {
-    const rows = await sendCommand('/queue/simple/print', [qs('name', String(name))], { tenantId, timeoutMs: 8000 });
-    const r0 = Array.isArray(rows) && rows[0] ? rows[0] : null;
-    return r0 ? (r0['.id'] || r0.id || r0.numbers) : null;
-  } catch {
+    const rows = await sendCommand('/queue/simple/print', [qs('name', String(name))], { tenantId, timeoutMs: DEFAULT_TIMEOUT });
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    if (!row) return null;
+    const id = row['.id'] || row.id || row.numbers;
+    return {
+      id,
+      disabled: row.disabled ?? 'no',
+      target: row.target || row['target-addresses'] || '',
+      maxLimit: row['max-limit'] || row.maxLimit || '',
+      comment: row.comment || '',
+      row,
+    };
+  } catch (err) {
     return null;
   }
 }
 
-/**
- * Apply bandwidth queue for a customer
- * @param {Object} customer - Customer object from DB
- * @param {Object} plan - Plan object from DB
- */
+async function ensureList(tenantId, list) {
+  const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+  if (Array.isArray(rows) && rows.length > 0) return;
+  await sendCommand(
+    '/ip/firewall/address-list/add',
+    [
+      w('list', list),
+      w('comment', list === STATIC_ALLOW ? 'Billing: allowed static' : list === STATIC_BLOCK ? 'Billing: blocked static' : 'Billing: managed'),
+    ],
+    { tenantId, timeoutMs: DEFAULT_TIMEOUT }
+  ).catch(() => {});
+}
+
+async function ensureAddressListEntry(tenantId, list, ip, comment) {
+  const addr = safeIp(ip);
+  if (!addr) return;
+  await ensureList(tenantId, list);
+  const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+  const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+  if (!row) {
+    const words = [w('list', list), w('address', addr)];
+    if (comment) words.push(w('comment', comment));
+    await sendCommand('/ip/firewall/address-list/add', words, { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+  } else if (comment && row.comment !== comment) {
+    const id = row['.id'] || row.id || row.numbers;
+    if (id) {
+      await sendCommand('/ip/firewall/address-list/set', [w('numbers', id), w('comment', comment)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+    }
+  }
+}
+
+async function removeAddressListEntry(tenantId, list, ip) {
+  const addr = safeIp(ip);
+  if (!addr) return;
+  const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = row['.id'] || row.id || row.numbers;
+    if (id) {
+      await sendCommand('/ip/firewall/address-list/remove', [w('numbers', id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+    }
+  }
+}
+
+function resolveRateLimit(plan) {
+  if (!plan || typeof plan !== 'object') return '10M/2M';
+  if (plan.speed != null) return String(plan.speed) + 'M/0M';
+  if (plan.rateLimit) return String(plan.rateLimit);
+  if (plan.rate_limit) return String(plan.rate_limit);
+  return '10M/2M';
+}
+
+function accountLabel(customer) {
+  const raw = customer && (customer.accountNumber || customer._id || customer.id);
+  const value = String(raw == null ? '' : raw).trim();
+  return value || 'static-customer';
+}
+
 async function applyCustomerQueue(customer, plan) {
   try {
-    const tenantId = String(customer.tenantId || '');
+    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
     if (!tenantId) throw new Error('Missing tenantId on customer');
-    const rateLimit = plan && plan.speed ? `${plan.speed}M/0M` : '10M/2M';
+    if (!customer || customer.connectionType !== 'static') return;
 
-    if (customer.connectionType === 'pppoe') {
-      // PPPoE bandwidth is typically enforced via PPP profile rate-limit.
-      // Skip creating a duplicate simple queue.
-      return;
-    }
+    const ip = safeIp(customer.staticConfig && customer.staticConfig.ip);
+    if (!ip) throw new Error('Static IP missing for static connection');
 
-    if (customer.connectionType === 'static') {
-      const ip = customer?.staticConfig?.ip;
-      if (!ip) throw new Error('Static IP missing for static connection');
-      const name = String(customer.accountNumber);
-      const id = await getQueueIdByName(tenantId, name);
-      if (id) {
-        // Update rate-limit
-        await sendCommand('/queue/simple/set', [w('numbers', id), w('max-limit', rateLimit), w('comment', `Customer: ${customer.name || name}`)], { tenantId, timeoutMs: 8000 });
-      } else {
-        // Create new queue
-        await sendCommand(
-          '/queue/simple/add',
-          [w('name', name), w('target', `${ip}/32`), w('max-limit', rateLimit), w('comment', `Customer: ${customer.name || name}`)],
-          { tenantId, timeoutMs: 8000 }
-        );
+    const queueName = accountLabel(customer);
+    const planDoc = plan && typeof plan === 'object' ? plan : (customer && typeof customer.plan === 'object' ? customer.plan : null);
+    const rateLimit = resolveRateLimit(planDoc);
+    const comment = 'Customer: ' + (customer && customer.name ? customer.name : queueName);
+
+    const queue = await fetchQueueByName(tenantId, queueName);
+    const target = ip + '/32';
+
+    if (queue && queue.id) {
+      const updates = [w('numbers', queue.id)];
+      if (!queue.target || firstQueueTargetIp(queue.target) !== ip) updates.push(w('target', target));
+      if (rateLimit && queue.maxLimit !== rateLimit) updates.push(w('max-limit', rateLimit));
+      if (comment && queue.comment !== comment) updates.push(w('comment', comment));
+      if (updates.length > 1) {
+        await sendCommand('/queue/simple/set', updates, { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
       }
+      if (isYes(queue.disabled)) {
+        await sendCommand('/queue/simple/enable', [w('numbers', queue.id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+      }
+    } else {
+      const words = [w('name', queueName), w('target', target)];
+      if (rateLimit) words.push(w('max-limit', rateLimit));
+      if (comment) words.push(w('comment', comment));
+      await sendCommand('/queue/simple/add', words, { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
     }
+
+    await ensureAddressListEntry(tenantId, STATIC_ALLOW, ip, comment);
+    await removeAddressListEntry(tenantId, STATIC_BLOCK, ip);
   } catch (err) {
-    console.error(`Failed to apply queue for ${customer.accountNumber}:`, err);
+    const labelSource = customer && (customer.accountNumber || customer._id || customer.id) ? customer.accountNumber || customer._id || customer.id : 'unknown';
+    console.error('Failed to apply queue for ' + labelSource + ':', err);
     throw err;
   }
 }
 
-/**
- * Remove bandwidth queue for a customer
- */
 async function removeCustomerQueue(customer) {
   try {
-    const tenantId = String(customer.tenantId || '');
+    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
     if (!tenantId) throw new Error('Missing tenantId on customer');
-    const id = await getQueueIdByName(tenantId, customer.accountNumber);
-    if (!id) return;
-    await sendCommand('/queue/simple/remove', [w('numbers', id)], { tenantId, timeoutMs: 8000 });
+    const queueName = accountLabel(customer);
+    const queue = await fetchQueueByName(tenantId, queueName);
+    if (queue && queue.id) {
+      await sendCommand('/queue/simple/remove', [w('numbers', queue.id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+    }
+    if (customer && customer.connectionType === 'static') {
+      const ip = safeIp(customer.staticConfig && customer.staticConfig.ip);
+      await removeAddressListEntry(tenantId, STATIC_ALLOW, ip);
+      await removeAddressListEntry(tenantId, STATIC_BLOCK, ip);
+    }
   } catch (err) {
-    console.error(`Failed to remove queue for ${customer.accountNumber}:`, err);
+    const labelSource = customer && (customer.accountNumber || customer._id || customer.id) ? customer.accountNumber || customer._id || customer.id : 'unknown';
+    console.error('Failed to remove queue for ' + labelSource + ':', err);
     throw err;
   }
 }
 
-/**
- * Update customer's queue (e.g., plan change)
- */
 async function updateCustomerQueue(customer, plan) {
   try {
-    // Idempotent: apply will create or update max-limit
     await applyCustomerQueue(customer, plan);
   } catch (err) {
-    console.error(`Failed to update queue for ${customer.accountNumber}:`, err);
+    const labelSource = customer && (customer.accountNumber || customer._id || customer.id) ? customer.accountNumber || customer._id || customer.id : 'unknown';
+    console.error('Failed to update queue for ' + labelSource + ':', err);
     throw err;
   }
 }
 
-/**
- * Disable queue for customer (used for auto-disconnect)
- */
 async function disableCustomerQueue(customer) {
   try {
-    const tenantId = String(customer.tenantId || '');
+    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
     if (!tenantId) throw new Error('Missing tenantId on customer');
-    const id = await getQueueIdByName(tenantId, customer.accountNumber);
-    if (!id) return;
-    await sendCommand('/queue/simple/disable', [w('numbers', id)], { tenantId, timeoutMs: 8000 });
+    const queueName = accountLabel(customer);
+    const queue = await fetchQueueByName(tenantId, queueName);
+    if (queue && queue.id && !isYes(queue.disabled)) {
+      await sendCommand('/queue/simple/disable', [w('numbers', queue.id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+    }
+    if (customer && customer.connectionType === 'static') {
+      const ip = safeIp(customer.staticConfig && customer.staticConfig.ip);
+      const comment = 'Blocked: ' + (customer && customer.name ? customer.name : queueName);
+      await removeAddressListEntry(tenantId, STATIC_ALLOW, ip);
+      await ensureAddressListEntry(tenantId, STATIC_BLOCK, ip, comment);
+    }
   } catch (err) {
-    console.error(`Failed to disable queue for ${customer.accountNumber}:`, err);
+    const labelSource = customer && (customer.accountNumber || customer._id || customer.id) ? customer.accountNumber || customer._id || customer.id : 'unknown';
+    console.error('Failed to disable queue for ' + labelSource + ':', err);
   }
 }
 
-/**
- * Enable queue for customer (used for reconnect)
- */
-async function enableCustomerQueue(customer) {
+async function enableCustomerQueue(customer, plan) {
   try {
-    const tenantId = String(customer.tenantId || '');
+    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
     if (!tenantId) throw new Error('Missing tenantId on customer');
-    const id = await getQueueIdByName(tenantId, customer.accountNumber);
-    if (!id) return;
-    await sendCommand('/queue/simple/enable', [w('numbers', id)], { tenantId, timeoutMs: 8000 });
+    const queueName = accountLabel(customer);
+    const queue = await fetchQueueByName(tenantId, queueName);
+    if (queue && queue.id) {
+      if (isYes(queue.disabled)) {
+        await sendCommand('/queue/simple/enable', [w('numbers', queue.id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+      }
+    } else if (customer && customer.connectionType === 'static') {
+      await applyCustomerQueue(customer, plan);
+      return;
+    }
+    if (customer && customer.connectionType === 'static') {
+      const ip = safeIp(customer.staticConfig && customer.staticConfig.ip);
+      const comment = 'Customer: ' + (customer && customer.name ? customer.name : queueName);
+      await ensureAddressListEntry(tenantId, STATIC_ALLOW, ip, comment);
+      await removeAddressListEntry(tenantId, STATIC_BLOCK, ip);
+    }
   } catch (err) {
-    console.error(`Failed to enable queue for ${customer.accountNumber}:`, err);
+    const labelSource = customer && (customer.accountNumber || customer._id || customer.id) ? customer.accountNumber || customer._id || customer.id : 'unknown';
+    console.error('Failed to enable queue for ' + labelSource + ':', err);
   }
+}
+
+async function applyBandwidth(customer, plan) {
+  return applyCustomerQueue(customer, plan);
 }
 
 module.exports = {
   applyCustomerQueue,
+  applyBandwidth,
   removeCustomerQueue,
   updateCustomerQueue,
   disableCustomerQueue,
   enableCustomerQueue
 };
+

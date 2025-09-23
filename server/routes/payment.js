@@ -6,7 +6,7 @@ const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const { initiateSTKPush } = require('../utils/mpesa');
-const { applyBandwidth } = require('../utils/mikrotikBandwidthManager');
+const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // -------------------- STK Push --------------------
@@ -157,8 +157,25 @@ router.post('/manual', async (req, res) => {
 
       await payment.save();
 
-      try { await applyBandwidth(payment.customer, payment.plan); }
-      catch (e) { console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e); }
+      try {
+          const customerDoc = payment.customer;
+          const planDoc = payment.plan;
+          if (customerDoc) {
+            customerDoc.status = 'active';
+            if (typeof customerDoc.save === 'function') {
+              await customerDoc.save().catch(() => {});
+            } else if (customerDoc._id) {
+              await Customer.updateOne({ _id: customerDoc._id, tenantId: req.tenantId }, { $set: { status: 'active' } }).catch(() => {});
+            }
+            if (customerDoc.connectionType === 'static') {
+              await enableCustomerQueue(customerDoc, planDoc).catch(() => {});
+            } else {
+              await applyCustomerQueue(customerDoc, planDoc).catch(() => {});
+            }
+          }
+        } catch (e) {
+          console.warn(`[${debugId}] queue sync failed:`, e?.message || e);
+        }
 
       return res.json({ message: 'Payment validated', payment, debugId });
     }
@@ -208,8 +225,17 @@ router.post('/manual', async (req, res) => {
       ...(notes ? { notes } : {}),
     });
 
-    try { await applyBandwidth(customer, plan); }
-    catch (e) { console.warn(`[${debugId}] applyBandwidth failed:`, e?.message || e); }
+    try {
+      customer.status = 'active';
+      await customer.save().catch(() => {});
+      if (customer.connectionType === 'static') {
+        await enableCustomerQueue(customer, plan).catch(() => {});
+      } else {
+        await applyCustomerQueue(customer, plan).catch(() => {});
+      }
+    } catch (e) {
+      console.warn(`[${debugId}] queue sync failed:`, e?.message || e);
+    }
 
     return res.json({ message: 'Manual payment created and validated', payment, debugId });
   } catch (err) {
@@ -283,3 +309,4 @@ router.get('/', async (req, res) => {
 
 
 module.exports = router;
+
