@@ -6,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 // Uses your pooled, tenant-scoped manager
 const { sendCommand } = require("../utils/mikrotikConnectionManager");
 const Customer = require("../models/customers");
+const { enableCustomerQueue, disableCustomerQueue } = require("../utils/mikrotikBandwidthManager");
 
 // ---------- helpers ----------
 const n = (v, d = 0) => {

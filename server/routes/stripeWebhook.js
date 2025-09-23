@@ -2,7 +2,7 @@
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Payment = require('../models/Payment');
-const { applyBandwidth } = require('../utils/mikrotikBandwidthManager');
+const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 
 const router = express.Router();
 
@@ -30,7 +30,23 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         payment.expiryDate = new Date(Date.now() + payment.plan.duration * 24 * 60 * 60 * 1000);
         await payment.save();
 
-        await applyBandwidth(payment.customer, payment.plan);
+        try {
+          const customerDoc = payment.customer;
+          const planDoc = payment.plan;
+          if (customerDoc) {
+            customerDoc.status = 'active';
+            if (typeof customerDoc.save === 'function') {
+              await customerDoc.save().catch(() => {});
+            }
+            if (customerDoc.connectionType === 'static') {
+              await enableCustomerQueue(customerDoc, planDoc).catch(() => {});
+            } else {
+              await applyCustomerQueue(customerDoc, planDoc).catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.warn('[stripe-webhook] queue sync failed:', err?.message || err);
+        }
 
         console.log(`📶 Bandwidth applied for customer ${payment.customer.accountNumber}`);
       } else {
@@ -46,3 +62,4 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 });
 
 module.exports = router;
+
