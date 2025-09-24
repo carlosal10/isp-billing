@@ -8,6 +8,25 @@ const { sendCommand } = require("../utils/mikrotikConnectionManager");
 const Customer = require("../models/customers");
 const { enableCustomerQueue, disableCustomerQueue, applyCustomerQueue } = require("../utils/mikrotikBandwidthManager");
 
+// Track static session presence to approximate uptime between polls
+const staticPresenceCache = new Map(); // key: `${tenantId}|${ip}` -> { firstSeen, lastSeen, mac }
+const STATIC_PRESENCE_TTL_MS = 15 * 60 * 1000; // drop stale entries after 15 minutes
+
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const parts = [];
+  const days = Math.floor(totalSeconds / 86400);
+  if (days) parts.push(`${days}d`);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  if (hours) parts.push(`${hours}h`);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (minutes) parts.push(`${minutes}m`);
+  const seconds = totalSeconds % 60;
+  if (!parts.length || seconds) parts.push(`${seconds}s`);
+  return parts.slice(0, 3).join(" ");
+}
+
 // ---------- helpers ----------
 const n = (v, d = 0) => {
   const x = Number(v);
@@ -527,16 +546,33 @@ router.get("/static/active", limiter, async (req, res) => {
       ...customerByIp.keys(),
     ]);
 
+    const now = Date.now();
     const users = [];
     for (const ip of universe) {
       const q = queueByIp.get(ip) || null;
       const a = arpMap.get(ip) || null;
       const c = customerByIp.get(ip) || null;
+      const cacheKey = `${req.tenantId}|${ip}`;
+
+      if (!a) {
+        staticPresenceCache.delete(cacheKey);
+        continue; // only treat entries with live ARP bindings as active
+      }
+
+      const mac = s(a?.["mac-address"] || "");
+      const cached = staticPresenceCache.get(cacheKey);
+      if (!cached || cached.mac !== mac) {
+        staticPresenceCache.set(cacheKey, { firstSeen: now, lastSeen: now, mac });
+      } else {
+        cached.lastSeen = now;
+      }
+
+      const sessionMeta = staticPresenceCache.get(cacheKey);
+      const uptimeMs = sessionMeta ? now - sessionMeta.firstSeen : 0;
 
       const queueDisabled = q ? isYes(q?.disabled) : false;
       const accountNumber = c?.accountNumber || s(q?.name || "") || ip.replace(/\./g, "-");
       const planName = c?.plan?.name || null;
-      const uptime = s(a?.uptime || a?.["last-seen"] || "");
       const lastSeen = s(a?.["last-seen"] || "");
       const status = (c?.status || (queueDisabled ? "inactive" : "active")) || null;
 
@@ -559,14 +595,26 @@ router.get("/static/active", limiter, async (req, res) => {
         totalBytes,
         "bytes-in": bytesIn,
         "bytes-out": bytesOut,
-        uptime: uptime || (lastSeen ? "Last seen " + lastSeen : "-"),
+        uptime: formatDuration(uptimeMs),
+        uptimeMs,
         lastSeen,
-        mac: s(a?.["mac-address"] || ""),
+        mac,
         interface: s(a?.interface || ""),
         planName: planName || undefined,
         name: c?.name || undefined,
         phone: c?.phone || undefined,
       });
+    }
+
+    // prune cached entries that haven't been observed recently
+    for (const [key, meta] of staticPresenceCache.entries()) {
+      if (!meta || !Number.isFinite(meta.lastSeen)) {
+        staticPresenceCache.delete(key);
+        continue;
+      }
+      if (now - meta.lastSeen > STATIC_PRESENCE_TTL_MS) {
+        staticPresenceCache.delete(key);
+      }
     }
 
     users.sort((a, b) => a.accountNumber.localeCompare(b.accountNumber));

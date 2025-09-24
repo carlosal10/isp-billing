@@ -479,12 +479,16 @@ export default function Dashboard() {
       };
       // Prefer provided uptime; for Static sessions, also show lastSeen label
       const uptimeStr = s.uptime || (s.lastSeen ? `Last seen ${s.lastSeen}` : "-");
+      const uptimeMs = typeof s.uptimeMs === "number" && Number.isFinite(s.uptimeMs)
+        ? s.uptimeMs
+        : null;
       return {
         accountNumber: acct || "-",
         name: c?.name || s.fullName || "-",
         phone: c?.phone || "-",
         ip: s.address || s.ip || s.ipAddress || "-",
         uptime: uptimeStr,
+        uptimeMs,
         bytesIn: toNum(s.bytesIn || s.rx || s["bytes-in"]),
         bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"]),
         planName: c?.plan?.name || s.plan || "-",
