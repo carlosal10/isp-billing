@@ -1,0 +1,41 @@
+diff --git a/server/utils/mikrotikBandwidthManager.js b/server/utils/mikrotikBandwidthManager.js
+index 1111111..2222222 100644
+--- a/server/utils/mikrotikBandwidthManager.js
++++ b/server/utils/mikrotikBandwidthManager.js
+@@
+-hello
+line1
+line2
+`test
+`${foo}
+??
+const STATIC_ALLOW = 'STATIC_ALLOW';
++// utils/mikrotikBandwidthManager.js
++const { sendCommand } = require('./mikrotikConnectionManager');
++
++const qs = (k, v) => `?${k}=${v}`;
++const w = (k, v) => `=${k}=${v}`;
++
++const DEFAULT_TIMEOUT = 8000;
++const STATIC_ALLOW = ''STATIC_ALLOW'';
++const STATIC_BLOCK = ''STATIC_BLOCK'';
++
++const isYes = (v) => {
++  const s = String(v ?? '''').trim().toLowerCase();
++  return s === ''yes'' || s === ''true'' || s === ''1'';
++};
++
++const firstQueueTargetIp = (target) => {
++  if (!target) return '''';
++  const first = String(target).split('','')[0].trim();
++  return first.split(''/'')[0].trim();
++};
++
++const safeIp = (ip) => {
++  const value = String(ip ?? '''').trim();
++  return value && value.toLowerCase() !== ''undefined'' ? value : '''';
++};
++test1
++test2
++const STATIC_ALLOW = 'STATIC_ALLOW';
++const STATIC_BLOCK = 'STATIC_BLOCK';

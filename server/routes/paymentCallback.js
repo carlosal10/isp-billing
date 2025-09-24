@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const Payment = require('../models/Payment');
-const { applyCustomerQueue } = require('../utils/mikrotikBandwidthManager');
+const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 
 function parseDurationToDays(v) {
   if (v == null) return NaN;
@@ -68,8 +68,23 @@ router.post('/callback', async (req, res) => {
 
         await payment.save();
 
-        // Apply bandwidth in MikroTik
-        await applyCustomerQueue(payment.customer, payment.plan);
+        try {
+          const customerDoc = payment.customer;
+          const planDoc = payment.plan;
+          if (customerDoc) {
+            customerDoc.status = 'active';
+            if (typeof customerDoc.save === 'function') {
+              await customerDoc.save().catch(() => {});
+            }
+            if (customerDoc.connectionType === 'static') {
+              await enableCustomerQueue(customerDoc, planDoc).catch(() => {});
+            } else {
+              await applyCustomerQueue(customerDoc, planDoc).catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.warn('[payment-callback] queue sync failed:', err?.message || err);
+        }
 
         console.log(`✅ Payment ${payment._id} confirmed & bandwidth applied.`);
       } else {
@@ -91,3 +106,4 @@ router.post('/callback', async (req, res) => {
 });
 
 module.exports = router;
+
