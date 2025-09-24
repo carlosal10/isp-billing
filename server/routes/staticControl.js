@@ -261,7 +261,7 @@ router.post('/seed-allow', limiter, async (req, res) => {
     let dbIps = new Set();
     if (limitToDb) {
       try {
-        const Customer = require('../models/customers');
+            const Customer = require('../models/customers');
         const docs = await Customer.find({ tenantId, $or: [ { connectionType: 'static' }, { accountNumber: { $exists: true } } ] })
           .select('accountNumber staticConfig.ip')
           .lean();

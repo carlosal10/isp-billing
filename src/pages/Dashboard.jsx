@@ -465,17 +465,26 @@ export default function Dashboard() {
         if (ipKey) c = customerByStaticIp.get(ipKey);
       }
       const status = (c?.status || "").toString().toLowerCase();
-      const isDisabled = status && status !== "active";
+      const apiDisabled =
+        typeof s.queueDisabled !== "undefined"
+          ? !!s.queueDisabled
+          : typeof s.disabled !== "undefined"
+          ? !!s.disabled
+          : undefined;
+      const isDisabled =
+        apiDisabled !== undefined ? apiDisabled : (status && status !== "active");
       const toNum = (v) => {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
-        };
+      };
+      // Prefer provided uptime; for Static sessions, also show lastSeen label
+      const uptimeStr = s.uptime || (s.lastSeen ? `Last seen ${s.lastSeen}` : "-");
       return {
         accountNumber: acct || "-",
         name: c?.name || s.fullName || "-",
         phone: c?.phone || "-",
         ip: s.address || s.ip || s.ipAddress || "-",
-        uptime: s.uptime || "-",
+        uptime: uptimeStr,
         bytesIn: toNum(s.bytesIn || s.rx || s["bytes-in"]),
         bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"]),
         planName: c?.plan?.name || s.plan || "-",
@@ -845,6 +854,7 @@ export default function Dashboard() {
                         <div className="static-actions" style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                           <button
                             className="btn"
+                            style={{ display: u.isDisabled ? 'none' : undefined }}
                             onClick={() => disableStaticQueue(u.accountNumber)}
                             disabled={!!acting[u.accountNumber]}
                           >
@@ -852,6 +862,7 @@ export default function Dashboard() {
                           </button>
                           <button
                             className="btn"
+                            style={{ display: u.isDisabled ? undefined : 'none' }}
                             onClick={() => enableStaticQueue(u.accountNumber)}
                             disabled={!!acting[u.accountNumber]}
                           >

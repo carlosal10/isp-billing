@@ -1,3 +1,11 @@
 {
-    "chatgpt.openOnStartup": true
+  "chatgpt.openOnStartup": true,
+  "terminal.explorerKind": "both",
+  "terminal.integrated.accessibleViewFocusOnCommandExecution": true,
+  "terminal.integrated.accessibleViewPreserveCursorPosition": true,
+  "terminal.integrated.bellDuration": 100000,
+  "terminal.integrated.copyOnSelection": true,
+  "terminal.integrated.gpuAcceleration": "on",
+  "terminal.integrated.ignoreBracketedPasteMode": true,
+  "terminal.integrated.scrollback": 1000000
 }

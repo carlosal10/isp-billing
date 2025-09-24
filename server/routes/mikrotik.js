@@ -6,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 // Uses your pooled, tenant-scoped manager
 const { sendCommand } = require("../utils/mikrotikConnectionManager");
 const Customer = require("../models/customers");
+const { enableCustomerQueue, disableCustomerQueue, applyCustomerQueue } = require("../utils/mikrotikBandwidthManager");
 
 // ---------- helpers ----------
 const n = (v, d = 0) => {
@@ -15,6 +16,11 @@ const n = (v, d = 0) => {
 const s = (v, d = "") => (v == null ? d : String(v));
 const qs = (k, v) => `?${k}=${v}`;
 const w = (k, v) => `=${k}=${v}`;
+
+const isYes = (v) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'yes' || s === 'true' || s === '1';
+};
 
 function mapPPPActiveRow(r = {}) {
   return {
@@ -472,8 +478,6 @@ router.get("/mikrotik/static/active", limiter, async (req, res) => {
 
 // Alias route
 router.get("/static/active", limiter, async (req, res) => {
-  const { data } = { data: null };
-  // Delegate by calling the above logic (we can't call router handler directly), so just duplicate minimal call
   const tenantId = req.tenantId;
   try {
     const [queues, lists, arps] = await Promise.all([
@@ -481,35 +485,94 @@ router.get("/static/active", limiter, async (req, res) => {
       rosPrint(tenantId, "/ip/firewall/address-list/print"),
       rosPrint(tenantId, "/ip/arp/print"),
     ]);
-    const ips = new Map();
+
+    const queueByIp = new Map();
     for (const q of Array.isArray(queues) ? queues : []) {
-      const name = s(q?.name);
       const ip = firstIpFromTarget(q?.target || q?.["target"] || "");
       if (!ip) continue;
-      if (!ips.has(ip)) ips.set(ip, name || null);
+      queueByIp.set(ip, q);
     }
+
+    const allowSet = new Set();
+    const blockSet = new Set();
     for (const r of Array.isArray(lists) ? lists : []) {
-      if (s(r?.list) !== "STATIC_ALLOW") continue;
       const ip = s(r?.address);
-      if (ip && !ips.has(ip)) ips.set(ip, null);
+      if (!ip) continue;
+      const listName = s(r?.list);
+      if (listName === "STATIC_ALLOW") allowSet.add(ip);
+      if (listName === "STATIC_BLOCK") blockSet.add(ip);
     }
+
     const arpMap = new Map((Array.isArray(arps) ? arps : []).map((a) => [s(a?.address), a]));
-    const wantIps = [...ips.keys()];
+
+    // Load static customers to map IP -> accountNumber (fallback)
     const customers = await Customer.find({
       tenantId,
       connectionType: 'static',
-      'staticConfig.ip': { $in: wantIps },
-    }).select('accountNumber staticConfig.ip').lean();
-    const ipToAcct = new Map(customers.map((c) => [s(c?.staticConfig?.ip), s(c?.accountNumber)]));
-    const users = [];
-    for (const [ip, qName] of ips) {
-      const a = arpMap.get(ip);
-      if (!a) continue;
-      const username = qName || ipToAcct.get(ip) || ip.replace(/\./g, '-');
-      users.push({ username, address: ip, uptime: s(a?.['last-seen'] || a?.uptime || ''), 'bytes-in': 0, 'bytes-out': 0 });
+    })
+      .select('accountNumber status name phone plan staticConfig.ip')
+      .populate('plan', 'name')
+      .lean();
+
+    const customerByIp = new Map();
+    for (const c of customers) {
+      const ip = s(c?.staticConfig?.ip);
+      if (ip) customerByIp.set(ip, c);
     }
+
+    const universe = new Set([
+      ...queueByIp.keys(),
+      ...allowSet,
+      ...blockSet,
+      ...customerByIp.keys(),
+    ]);
+
+    const users = [];
+    for (const ip of universe) {
+      const q = queueByIp.get(ip) || null;
+      const a = arpMap.get(ip) || null;
+      const c = customerByIp.get(ip) || null;
+
+      const queueDisabled = q ? isYes(q?.disabled) : false;
+      const accountNumber = c?.accountNumber || s(q?.name || "") || ip.replace(/\./g, "-");
+      const planName = c?.plan?.name || null;
+      const uptime = s(a?.uptime || a?.["last-seen"] || "");
+      const lastSeen = s(a?.["last-seen"] || "");
+      const status = (c?.status || (queueDisabled ? "inactive" : "active")) || null;
+
+      const bytesIn = n(q?.["bytes-in"] || q?.rx || q?.["rx-bytes"]);
+      const bytesOut = n(q?.["bytes-out"] || q?.tx || q?.["tx-bytes"]);
+      const totalBytes = n(q?.["total-bytes"] || q?.bytes || 0);
+      const queueRate = s(q?.["max-limit"] || q?.maxLimit || "");
+
+      users.push({
+        username: accountNumber,
+        accountNumber,
+        address: ip,
+        ip,
+        queueDisabled,
+        status,
+        inAllow: allowSet.has(ip),
+        inBlock: blockSet.has(ip),
+        queueName: s(q?.name || ""),
+        queueRate,
+        totalBytes,
+        "bytes-in": bytesIn,
+        "bytes-out": bytesOut,
+        uptime: uptime || (lastSeen ? "Last seen " + lastSeen : "-"),
+        lastSeen,
+        mac: s(a?.["mac-address"] || ""),
+        interface: s(a?.interface || ""),
+        planName: planName || undefined,
+        name: c?.name || undefined,
+        phone: c?.phone || undefined,
+      });
+    }
+
+    users.sort((a, b) => a.accountNumber.localeCompare(b.accountNumber));
     return res.json({ ok: true, count: users.length, users });
-  } catch (_e) {
+  } catch (e) {
+    console.warn("[MikroTik] static/active failed:", e?.message || e);
     return res.json({ ok: true, count: 0, users: [] });
   }
 });
@@ -585,6 +648,21 @@ router.post("/static/:account/enable-queue", limiter, async (req, res) => {
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
     await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+
+    // persist + sync firewall lists
+    try {
+      const customerDoc = await Customer.findOne({ tenantId: req.tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
+      if (customerDoc) {
+        await Customer.updateOne({ _id: customerDoc._id }, { $set: { status: 'active', updatedAt: new Date() } });
+        const payload = customerDoc.toObject();
+        payload.status = 'active';
+        await enableCustomerQueue(payload, (customerDoc.plan && typeof customerDoc.plan === 'object') ? customerDoc.plan : null)
+          .catch(() => {});
+      }
+    } catch (postErr) {
+      console.warn('[MikroTik] enable queue post-processing failed:', postErr?.message || postErr);
+    }
+
     res.json({ ok: true, message: "Queue enabled" });
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || "Enable failed" });
@@ -597,6 +675,20 @@ router.post("/static/:account/disable-queue", limiter, async (req, res) => {
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
     await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+
+    // persist + sync firewall lists
+    try {
+      const customerDoc = await Customer.findOne({ tenantId: req.tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
+      if (customerDoc) {
+        await Customer.updateOne({ _id: customerDoc._id }, { $set: { status: 'inactive', updatedAt: new Date() } });
+        const payload = customerDoc.toObject();
+        payload.status = 'inactive';
+        await disableCustomerQueue(payload).catch(() => {});
+      }
+    } catch (postErr) {
+      console.warn('[MikroTik] disable queue post-processing failed:', postErr?.message || postErr);
+    }
+
     res.json({ ok: true, message: "Queue disabled" });
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || "Disable failed" });
