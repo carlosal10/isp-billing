@@ -97,6 +97,60 @@ function exportCSV(rows) {
   URL.revokeObjectURL(url);
 }
 
+function deriveCreatedAt(customer) {
+  if (!customer) return null;
+  if (customer.createdAt) {
+    const dt = new Date(customer.createdAt);
+    return Number.isFinite(dt.getTime()) ? dt : null;
+  }
+  const rawId = customer._id ? String(customer._id) : "";
+  if (rawId.length === 24) {
+    const ts = parseInt(rawId.slice(0, 8), 16);
+    if (Number.isFinite(ts)) return new Date(ts * 1000);
+  }
+  return null;
+}
+
+function exportCustomers(customers) {
+  if (!Array.isArray(customers) || customers.length === 0) return;
+  const headers = [
+    "Account",
+    "Name",
+    "Phone",
+    "Email",
+    "Connection",
+    "Status",
+    "Plan",
+    "Created",
+  ];
+  const rows = customers.map((c) => {
+    const createdAt = deriveCreatedAt(c);
+    const planName = typeof c.plan === "object" && c.plan ? c.plan.name : c.plan;
+    return [
+      c.accountNumber || "-",
+      c.name || "-",
+      c.phone || "-",
+      c.email || "-",
+      (c.connectionType || "").toUpperCase(),
+      (c.status || "").toUpperCase(),
+      planName || "-",
+      createdAt ? createdAt.toLocaleString() : "-",
+    ];
+  });
+
+  const out = [headers, ...rows]
+    .map((entry) => entry.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob([out], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* -----------------------------------
    Component
 ----------------------------------- */
@@ -575,6 +629,8 @@ export default function Dashboard() {
           phone: c.phone,
           expiryDate: expiry,
           daysLeft: daysUntil(expiry),
+          connectionType: c.connectionType || "",
+          createdAt: deriveCreatedAt(c),
         });
       }
     }
@@ -595,6 +651,8 @@ export default function Dashboard() {
           phone: c.phone,
           expiryDate: expiry,
           daysAgo: daysSince(expiry),
+          connectionType: c.connectionType || "",
+          createdAt: deriveCreatedAt(c),
         });
       }
     }
@@ -606,7 +664,14 @@ export default function Dashboard() {
     const dueCount = dueSoon.length;
     const expiredCount = expired.length;
     const totalCustomers = Array.isArray(customers) ? customers.length : 0;
-    return { onlineCount, dueCount, expiredCount, totalCustomers };
+    const staticInactiveCount = Array.isArray(customers)
+      ? customers.reduce((acc, c) => {
+          if ((c?.connectionType || "").toLowerCase() !== "static") return acc;
+          const status = String(c?.status || "").toLowerCase();
+          return status && status !== "active" ? acc + 1 : acc;
+        }, 0)
+      : 0;
+    return { onlineCount, dueCount, expiredCount, totalCustomers, staticInactiveCount };
   }, [enrichedOnline, dueSoon, expired, customers]);
 
   const paymentsChart = useMemo(() => {
@@ -762,6 +827,10 @@ export default function Dashboard() {
           <div className="counter">
             <div className="counter-title">Total Customers</div>
             <div className="counter-value">{computed.totalCustomers}</div>
+          </div>
+          <div className="counter">
+            <div className="counter-title">Static Inactive</div>
+            <div className="counter-value">{computed.staticInactiveCount}</div>
           </div>
         </section>
 
@@ -955,7 +1024,14 @@ export default function Dashboard() {
         </section>
 
         <section className="due-soon-section">
-          <h2>Due to Expire (next {DUE_WINDOW_DAYS} days)</h2>
+          <div className="section-head">
+            <h2>Due to Expire (next {DUE_WINDOW_DAYS} days)</h2>
+            <div className="section-actions">
+              <button className="btn" onClick={() => exportCustomers(customers)}>
+                Export Customers
+              </button>
+            </div>
+          </div>
           <div className="table-wrapper">
             <table>
               <thead>
@@ -963,6 +1039,8 @@ export default function Dashboard() {
                   <th>Account #</th>
                   <th>Name</th>
                   <th>Phone</th>
+                  <th>Connection</th>
+                  <th>Date Created</th>
                   <th>Expiry Date</th>
                   <th>Days Left</th>
                 </tr>
@@ -973,13 +1051,15 @@ export default function Dashboard() {
                     <td>{u.accountNumber}</td>
                     <td>{u.name}</td>
                     <td>{u.phone}</td>
+                    <td>{(u.connectionType || "").toUpperCase() || "-"}</td>
+                    <td>{u.createdAt ? formatDate(u.createdAt) : "-"}</td>
                     <td>{formatDate(u.expiryDate)}</td>
                     <td className="num">{u.daysLeft}</td>
                   </tr>
                 ))}
                 {dueSoon.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center" }}>
+                    <td colSpan={7} style={{ textAlign: "center" }}>
                       No accounts due soon.
                     </td>
                   </tr>
@@ -998,6 +1078,8 @@ export default function Dashboard() {
                   <th>Account #</th>
                   <th>Name</th>
                   <th>Phone</th>
+                  <th>Connection</th>
+                  <th>Date Created</th>
                   <th>Expired On</th>
                   <th>Days Ago</th>
                 </tr>
@@ -1008,14 +1090,16 @@ export default function Dashboard() {
                     <td>{u.accountNumber}</td>
                     <td>{u.name}</td>
                     <td>{u.phone}</td>
+                    <td>{(u.connectionType || "").toUpperCase() || "-"}</td>
+                    <td>{u.createdAt ? formatDate(u.createdAt) : "-"}</td>
                     <td>{formatDate(u.expiryDate)}</td>
                     <td className="num">{u.daysAgo}</td>
                   </tr>
                 ))}
                 {expired.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center" }}>
-                      No expired accounts 🎉
+                    <td colSpan={7} style={{ textAlign: "center" }}>
+                      No expired accounts.
                     </td>
                   </tr>
                 )}

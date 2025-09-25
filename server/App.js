@@ -6,6 +6,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const path = require("path");
 require("./jobs/expireAccess");
+require("./jobs/expireStatic");
 require("./jobs/smsReminders");
 
 const app = express();
