@@ -852,9 +852,7 @@ export default function Dashboard() {
               justifyContent: "flex-end",
             }}
           >
-            <button className="btn" onClick={() => exportCustomers(customers)}>
-              Export Customers
-            </button>
+            
           </div>
         </div>
 
@@ -1153,7 +1151,16 @@ export default function Dashboard() {
         open={customerModal.open}
         customer={customerModal.customer}
         onClose={() => setCustomerModal({ open: false, customer: null })}
-      />
+      >
+        <div style={{ marginTop: 12 }}>
+          {customerModal.customer && (
+            <button className="btn" onClick={() => exportCustomers(customers)}>
+              Export Customers
+            </button>
+          )}
+        </div>
+      </CustomerDetailsModal>
+
       <CustomersBrowserModal
         open={browseOpen}
         onClose={() => setBrowseOpen(false)}
