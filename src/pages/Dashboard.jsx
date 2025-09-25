@@ -838,7 +838,7 @@ export default function Dashboard() {
           {/* Inline customer details panel */}
           {inlineCustomer && (
             <div style={{ marginTop: 18 }}>
-              <CustomerDetailsPanel
+              <CustomersBrowserModal
                 customer={inlineCustomer}
                 onClose={() => setInlineCustomer(null)}
               />
