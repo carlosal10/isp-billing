@@ -3,6 +3,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { api } from "../lib/apiClient";
 
+function resolveCreatedAt(doc = {}) {
+  if (doc.createdAt) {
+    const dt = new Date(doc.createdAt);
+    if (Number.isFinite(dt.getTime())) return dt;
+  }
+  const rawId = doc._id ? String(doc._id) : "";
+  if (rawId.length === 24) {
+    const ts = parseInt(rawId.slice(0, 8), 16);
+    if (Number.isFinite(ts)) return new Date(ts * 1000);
+  }
+  return null;
+}
+
 export default function CustomersBrowserModal({ open, onClose, onSelect }) {
   const [tab, setTab] = useState("all"); // all | disabled
   const [all, setAll] = useState([]);
@@ -10,6 +23,11 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const formatCreated = (record) => {
+    const dt = resolveCreatedAt(record);
+    return dt ? dt.toLocaleString() : "-";
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -102,6 +120,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                 <th>Email</th>
                 <th>Address</th>
                 <th>Plan</th>
+                <th>Created</th>
                 <th></th>
               </tr>
             </thead>
@@ -114,11 +133,12 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                   <td>{c.email}</td>
                   <td>{c.address}</td>
                   <td>{c.plan?.name || '-'}</td>
+                  <td>{formatCreated(c)}</td>
                   <td><button className="btn" onClick={() => onSelect?.(c)}>View</button></td>
                 </tr>
               ))}
               {filteredAll.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign:'center' }}>{loading ? 'Loading…' : 'No customers found'}</td></tr>
+                <tr><td colSpan={8} style={{ textAlign:'center' }}>{loading ? 'Loading…' : 'No customers found'}</td></tr>
               )}
             </tbody>
           </table>
@@ -134,6 +154,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Address</th>
+                <th>Created</th>
                 <th></th>
               </tr>
             </thead>
@@ -146,6 +167,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                   <td>{r.customer?.phone || '-'}</td>
                   <td>{r.customer?.email || '-'}</td>
                   <td>{r.customer?.address || '-'}</td>
+                  <td>{formatCreated(r.customer)}</td>
                   <td>
                     {r.kind === 'PPPoE' ? (
                       <button className="btn" onClick={() => enableAccount(r.accountNumber)}>Enable</button>
@@ -156,7 +178,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                 </tr>
               ))}
               {disabledCombined.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign:'center' }}>{loading ? 'Loading…' : 'No disabled accounts'}</td></tr>
+                <tr><td colSpan={8} style={{ textAlign:'center' }}>{loading ? 'Loading…' : 'No disabled accounts'}</td></tr>
               )}
             </tbody>
           </table>
@@ -165,4 +187,3 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
     </Modal>
   );
 }
-

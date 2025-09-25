@@ -834,15 +834,29 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Inline customer details panel */}
-        {inlineCustomer && (
-          <div ref={customersSectionRef} style={{ marginTop: 18 }}>
-            <CustomerDetailsPanel
-              customer={inlineCustomer}
-              onClose={() => setInlineCustomer(null)}
-            />
+        <div ref={customersSectionRef}>
+          {/* Inline customer details panel */}
+          {inlineCustomer && (
+            <div style={{ marginTop: 18 }}>
+              <CustomerDetailsPanel
+                customer={inlineCustomer}
+                onClose={() => setInlineCustomer(null)}
+              />
+            </div>
+          )}
+          <div
+            className="customers-browser-actions"
+            style={{
+              marginTop: inlineCustomer ? 12 : 18,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button className="btn" onClick={() => exportCustomers(customers)}>
+              Export Customers
+            </button>
           </div>
-        )}
+        </div>
 
         <section className="pppoe-status-section">
           <div className="section-head">
@@ -1024,14 +1038,7 @@ export default function Dashboard() {
         </section>
 
         <section className="due-soon-section">
-          <div className="section-head">
-            <h2>Due to Expire (next {DUE_WINDOW_DAYS} days)</h2>
-            <div className="section-actions">
-              <button className="btn" onClick={() => exportCustomers(customers)}>
-                Export Customers
-              </button>
-            </div>
-          </div>
+          <h2>Due to Expire (next {DUE_WINDOW_DAYS} days)</h2>
           <div className="table-wrapper">
             <table>
               <thead>
