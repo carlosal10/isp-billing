@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone, MdHistory } from "react-icons/md";
 import { api } from "../lib/apiClient";
-import "./PppoeModal.css"; // reuse modal styles
+import "./PppoeModal.css"; // keeps your base modal tokens if any
 import "./StaticIpSetupModal.css";
 
 export default function StaticIpSetupModal({ isOpen, onClose }) {
@@ -20,36 +20,32 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [seedFromQueues, setSeedFromQueues] = useState(true);
   const [seedFromArp, setSeedFromArp] = useState(false);
   const [seedLimitToDb, setSeedLimitToDb] = useState(true);
-
-  // Persist seed options between sessions
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('static.seed.opts');
-      if (raw) {
-        const opts = JSON.parse(raw);
-        if (typeof opts.q === 'boolean') setSeedFromQueues(opts.q);
-        if (typeof opts.a === 'boolean') setSeedFromArp(opts.a);
-        if (typeof opts.limit === 'boolean') setSeedLimitToDb(opts.limit);
-      }
-    } catch {}
-    // load once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    try {
-      const data = JSON.stringify({ q: !!seedFromQueues, a: !!seedFromArp, limit: !!seedLimitToDb });
-      localStorage.setItem('static.seed.opts', data);
-    } catch {}
-  }, [seedFromQueues, seedFromArp, seedLimitToDb]);
   const [rollbacking, setRollbacking] = useState(false);
   const [rollbackPreview, setRollbackPreview] = useState(null);
   const [cleaning, setCleaning] = useState(false);
   const [cleanPreview, setCleanPreview] = useState(null);
 
-  const unknownCount = unknown.length;
+  // Persist seed options between sessions
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("static.seed.opts");
+      if (raw) {
+        const opts = JSON.parse(raw);
+        if (typeof opts.q === "boolean") setSeedFromQueues(opts.q);
+        if (typeof opts.a === "boolean") setSeedFromArp(opts.a);
+        if (typeof opts.limit === "boolean") setSeedLimitToDb(opts.limit);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      const data = JSON.stringify({ q: !!seedFromQueues, a: !!seedFromArp, limit: !!seedLimitToDb });
+      localStorage.setItem("static.seed.opts", data);
+    } catch {}
+  }, [seedFromQueues, seedFromArp, seedLimitToDb]);
 
-  
+  const unknownCount = unknown.length;
 
   const loadDetect = useCallback(async () => {
     try {
@@ -60,20 +56,24 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
         setSegments(segs);
         if (!segment && segs[0]?.name) setSegment(segs[0].name);
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }, [segment]);
 
   const loadUnknown = useCallback(async () => {
     try {
       const { data } = await api.get("/static/unknown-sources");
       setUnknown(Array.isArray(data?.items) ? data.items : []);
-    } catch (e) { setUnknown([]); }
+    } catch (e) {
+      setUnknown([]);
+    }
   }, []);
 
   const loadCustomers = useCallback(async () => {
     try {
       const { data } = await api.get("/customers");
-      setCustomers(Array.isArray(data) ? data.filter((c) => c.connectionType === 'static') : []);
+      setCustomers(Array.isArray(data) ? data.filter((c) => c.connectionType === "static") : []);
     } catch (e) {}
   }, []);
 
@@ -93,7 +93,12 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
     const allow = new Set((lists.STATIC_ALLOW || []).map((x) => x.address));
     const block = new Set((lists.STATIC_BLOCK || []).map((x) => x.address));
     const arpMap = new Map((snapshot?.arpBindings || []).map((a) => [a.address, a]));
-    function firstIpFromTarget(t) { if (!t) return null; const first = String(t).split(',')[0].trim(); const ip = first.split('/')[0].trim(); return ip; }
+    function firstIpFromTarget(t) {
+      if (!t) return null;
+      const first = String(t).split(",")[0].trim();
+      const ip = first.split("/")[0].trim();
+      return ip;
+    }
     const qSet = new Set((snapshot?.simpleQueues || []).map((q) => firstIpFromTarget(q.target)).filter(Boolean));
     return { allow, block, arpMap, qSet };
   }, [snapshot]);
@@ -101,303 +106,422 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   async function doPreviewBootstrap() {
-    setLoading(true); setMsg(""); setPreview(null);
+    setLoading(true);
+    setMsg("");
+    setPreview(null);
     try {
-      const { data } = await api.post("/static/bootstrap", { segment: segment || 'bridge', dryRun: true });
+      const { data } = await api.post("/static/bootstrap", { segment: segment || "bridge", dryRun: true });
       if (!data?.ok) throw new Error(data?.error || "Preview failed");
       setPreview({ lists: data.toCreate?.lists || [], rules: data.toCreate?.rules || [] });
       setMsg("Preview ready");
-    } catch (e) { setMsg(e?.message || "Preview failed"); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setMsg(e?.message || "Preview failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function doBootstrap() {
-    setLoading(true); setMsg("");
+    setLoading(true);
+    setMsg("");
     try {
-      const { data } = await api.post("/static/bootstrap", { segment: segment || 'bridge', dryRun: false });
+      const { data } = await api.post("/static/bootstrap", { segment: segment || "bridge", dryRun: false });
       if (!data?.ok) throw new Error(data?.error || "Bootstrap failed");
       setMsg("Bootstrap complete");
       await loadDetect();
-    } catch (e) { setMsg(e?.message || "Bootstrap failed"); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setMsg(e?.message || "Bootstrap failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function doSeed() {
-    setSeeding(true); setMsg("");
+    setSeeding(true);
+    setMsg("");
     try {
-      const include = [seedFromQueues && 'queues', seedFromArp && 'arp'].filter(Boolean);
-      const body = { include: include.length ? include : ['queues'], limitToDb: !!seedLimitToDb };
+      const include = [seedFromQueues && "queues", seedFromArp && "arp"].filter(Boolean);
+      const body = { include: include.length ? include : ["queues"], limitToDb: !!seedLimitToDb };
       const { data } = await api.post("/static/seed-allow", body);
       if (!data?.ok) throw new Error(data?.error || "Seed failed");
       setMsg(`Seeded ${data.addedCount} IPs to STATIC_ALLOW`);
       await loadDetect();
-    } catch (e) { setMsg(e?.message || "Seed failed"); }
-    finally { setSeeding(false); }
+    } catch (e) {
+      setMsg(e?.message || "Seed failed");
+    } finally {
+      setSeeding(false);
+    }
   }
 
   async function doEnforce() {
-    setEnforcing(true); setMsg("");
+    setEnforcing(true);
+    setMsg("");
     try {
-      const { data } = await api.post("/static/enforce", { segment: segment || 'bridge' });
+      const { data } = await api.post("/static/enforce", { segment: segment || "bridge" });
       if (!data?.ok) throw new Error(data?.error || "Enforce failed");
       setMsg("Enforcement enabled");
       await loadDetect();
-    } catch (e) { setMsg(e?.message || "Enforce failed"); }
-    finally { setEnforcing(false); }
+    } catch (e) {
+      setMsg(e?.message || "Enforce failed");
+    } finally {
+      setEnforcing(false);
+    }
   }
 
   async function adopt(ip, createQueue) {
     try {
-      await api.post("/static/adopt", { ip, comment: 'adopted-via-ui', createQueue: !!createQueue });
+      await api.post("/static/adopt", { ip, comment: "adopted-via-ui", createQueue: !!createQueue });
       await Promise.all([loadUnknown(), loadDetect()]);
     } catch {}
   }
 
   async function doRollbackPreview() {
-    setRollbacking(true); setMsg(""); setRollbackPreview(null);
+    setRollbacking(true);
+    setMsg("");
+    setRollbackPreview(null);
     try {
       const { data } = await api.post("/static/rollback", { dryRun: true });
       if (!data?.ok) throw new Error(data?.error || "Rollback preview failed");
       setRollbackPreview(data);
       setMsg("Rollback preview ready");
-    } catch (e) { setMsg(e?.message || "Rollback preview failed"); }
-    finally { setRollbacking(false); }
+    } catch (e) {
+      setMsg(e?.message || "Rollback preview failed");
+    } finally {
+      setRollbacking(false);
+    }
   }
 
   async function doRollback(removeRules = false) {
-    setRollbacking(true); setMsg("");
+    setRollbacking(true);
+    setMsg("");
     try {
       const { data } = await api.post("/static/rollback", { removeRules: !!removeRules });
       if (!data?.ok) throw new Error(data?.error || "Rollback failed");
       setMsg("Rollback applied");
       setRollbackPreview(null);
       await loadDetect();
-    } catch (e) { setMsg(e?.message || "Rollback failed"); }
-    finally { setRollbacking(false); }
+    } catch (e) {
+      setMsg(e?.message || "Rollback failed");
+    } finally {
+      setRollbacking(false);
+    }
   }
 
   async function doCleanPreview() {
-    setCleaning(true); setMsg(""); setCleanPreview(null);
+    setCleaning(true);
+    setMsg("");
+    setCleanPreview(null);
     try {
       const { data } = await api.post("/static/clean-lists", { dryRun: true });
       if (!data?.ok) throw new Error(data?.error || "Clean preview failed");
       setCleanPreview(data);
       setMsg("Clean preview ready");
-    } catch (e) { setMsg(e?.message || "Clean preview failed"); }
-    finally { setCleaning(false); }
+    } catch (e) {
+      setMsg(e?.message || "Clean preview failed");
+    } finally {
+      setCleaning(false);
+    }
   }
 
   async function doCleanApply() {
-    setCleaning(true); setMsg("");
+    setCleaning(true);
+    setMsg("");
     try {
       const { data } = await api.post("/static/clean-lists", {});
       if (!data?.ok) throw new Error(data?.error || "Clean failed");
       setMsg(`Removed ${data.removed} stale entries`);
       setCleanPreview(null);
       await loadDetect();
-    } catch (e) { setMsg(e?.message || "Clean failed"); }
-    finally { setCleaning(false); }
+    } catch (e) {
+      setMsg(e?.message || "Clean failed");
+    } finally {
+      setCleaning(false);
+    }
   }
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content staticip-modal" style={{ maxWidth: 980 }}>
-        <button className="close" onClick={onClose} aria-label="Close"><FaTimes /></button>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <MdSecurity /> Static IP Control
-        </h2>
+    <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+      <div className="ps-modal staticip-modal" style={{ maxWidth: 980 }}>
+        {/* Close */}
+        <button className="ps-close" onClick={onClose} aria-label="Close">
+          <FaTimes size={18} />
+        </button>
 
-        {msg && (
-          <div className="status-msg" style={{ background: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#ecfdf5" : undefined, borderColor: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#bbf7d0" : undefined, color: msg.toLowerCase().includes("complete") || msg.toLowerCase().includes("enabled") || msg.toLowerCase().includes("ready") ? "#065f46" : undefined }}>
-            {msg}
-          </div>
-        )}
+        {/* Header */}
+        <header className="ps-head">
+          <span className="ps-chip">Network</span>
+          <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MdSecurity /> Static IP Control
+          </h2>
+        </header>
 
-        {/* Actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: 8, marginTop: 8 }}>
-          <select value={segment} onChange={(e) => setSegment(e.target.value)}>
+        {/* Top actions */}
+        <div className="ps-tabs" style={{ gap: 10, flexWrap: "wrap" }}>
+          <select className="ps-input" value={segment} onChange={(e) => setSegment(e.target.value)} style={{ maxWidth: 240 }}>
             {segments.map((s) => (
-              <option key={s.name} value={s.name}>{s.name} {s.lanCidr ? `(${s.lanCidr})` : ''}</option>
+              <option key={s.name} value={s.name}>
+                {s.name} {s.lanCidr ? `(${s.lanCidr})` : ""}
+              </option>
             ))}
             {segments.length === 0 && <option value="bridge">bridge</option>}
           </select>
-          <button onClick={doPreviewBootstrap} disabled={loading}><MdPreview className="inline-icon" /> Preview Bootstrap</button>
-          <button onClick={doBootstrap} disabled={loading}><MdBolt className="inline-icon" /> Bootstrap</button>
-          <button onClick={doSeed} disabled={seeding}><MdDownloadDone className="inline-icon" /> Seed Allow</button>
-          <button onClick={doEnforce} disabled={enforcing}><MdRule className="inline-icon" /> Enable Enforcement</button>
-          <button onClick={refreshAll}><MdRefresh className="inline-icon" /> Refresh</button>
+
+          <button onClick={doPreviewBootstrap} disabled={loading} className={`ps-tab ${loading ? "" : ""}`}>
+            <MdPreview className="inline-icon" /> Preview Bootstrap
+          </button>
+          <button onClick={doBootstrap} disabled={loading} className="ps-tab">
+            <MdBolt className="inline-icon" /> Bootstrap
+          </button>
+          <button onClick={doSeed} disabled={seeding} className="ps-tab">
+            <MdDownloadDone className="inline-icon" /> {seeding ? "Seeding…" : "Seed Allow"}
+          </button>
+          <button onClick={doEnforce} disabled={enforcing} className="ps-tab">
+            <MdRule className="inline-icon" /> {enforcing ? "Enforcing…" : "Enable Enforcement"}
+          </button>
+          <button onClick={refreshAll} className="ps-tab">
+            <MdRefresh className="inline-icon" /> Refresh
+          </button>
         </div>
 
-        {/* Dry-run Preview */}
-        {preview && (
-          <div style={{ marginTop: 10, border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>
-            <div className="help" style={{ marginBottom: 6 }}>Bootstrap Preview</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Lists to create</div>
-                {preview.lists.length ? (
-                  <ul>{preview.lists.map((l) => (<li key={l}>{l}</li>))}</ul>
-                ) : (<div style={{ opacity: .7 }}>No lists need creation</div>)}
+        {/* Flash message */}
+        {msg && (
+          <p
+            className={`ps-msg ${
+              /complete|enabled|ready/i.test(msg) ? "ok" : /failed|error/i.test(msg) ? "err" : ""
+            }`}
+          >
+            {msg}
+          </p>
+        )}
+
+        {/* Content body */}
+        <div className="ps-form" style={{ paddingTop: 8 }}>
+          {/* Bootstrap preview */}
+          {preview && (
+            <div style={{ border: "1px solid #e6eaf2", borderRadius: 12, padding: 12, background: "#fff" }}>
+              <div className="ps-subtitle" style={{ marginBottom: 6 }}>
+                Bootstrap Preview
               </div>
-              <div>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Rules to add</div>
-                {preview.rules.length ? (
-                  <ul>{preview.rules.map((r) => (<li key={r}>{r}</li>))}</ul>
-                ) : (<div style={{ opacity: .7 }}>No rules need creation</div>)}
+              <div className="ps-grid">
+                <div>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Lists to create</div>
+                  {preview.lists.length ? (
+                    <ul>{preview.lists.map((l) => <li key={l}>{l}</li>)}</ul>
+                  ) : (
+                    <div style={{ opacity: 0.7 }}>No lists need creation</div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Rules to add</div>
+                  {preview.rules.length ? (
+                    <ul>{preview.rules.map((r) => <li key={r}>{r}</li>)}</ul>
+                  ) : (
+                    <div style={{ opacity: 0.7 }}>No rules need creation</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Monitor banner */}
+          <div
+            className="stack-sm"
+            style={{
+              marginTop: 6,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e6eaf2",
+              background: "#f8fafc",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>Monitor mode</div>
+              <div style={{ color: "#334155" }}>{unknownCount} unknown sources observed</div>
+            </div>
+            <div>
+              <button onClick={loadUnknown} className="ps-tab">
+                <MdRefresh className="inline-icon" /> Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Seed options */}
+          <div style={{ padding: 12, borderRadius: 12, border: "1px solid #e6eaf2", background: "#fff" }}>
+            <div className="ps-subtitle" style={{ marginBottom: 6 }}>
+              Seed Options
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={seedFromQueues} onChange={() => setSeedFromQueues((v) => !v)} /> From Queues
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={seedFromArp} onChange={() => setSeedFromArp((v) => !v)} /> From ARP (LAN only)
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={seedLimitToDb} onChange={() => setSeedLimitToDb((v) => !v)} /> Limit to DB accounts only
+              </label>
+              <div style={{ marginLeft: "auto" }}>
+                <button onClick={doSeed} disabled={seeding} className="ps-submit">
+                  {seeding ? "Seeding…" : "Seed Allowed IPs"}
+                </button>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Monitor banner */}
-        <div className="stack-sm" style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          {/* Unknown sources */}
           <div>
-            <div style={{ fontWeight: 800, color: '#0f172a' }}>Monitor mode</div>
-            <div style={{ color: '#334155' }}>{unknownCount} unknown sources observed</div>
-          </div>
-          <div>
-            <button onClick={loadUnknown}><MdRefresh className="inline-icon" /> Refresh</button>
-          </div>
-        </div>
-
-        {/* Seed options */}
-        <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: '1px solid #e6eaf2', background: '#fff' }}>
-          <div className="help" style={{ marginBottom: 8 }}>Seed Options</div>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 12 }}>
-            <input type="checkbox" checked={seedFromQueues} onChange={() => setSeedFromQueues(v => !v)} /> From Queues
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 12 }}>
-            <input type="checkbox" checked={seedFromArp} onChange={() => setSeedFromArp(v => !v)} /> From ARP (LAN only)
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={seedLimitToDb} onChange={() => setSeedLimitToDb(v => !v)} /> Limit to DB accounts only
-          </label>
-          <div style={{ marginTop: 8 }}>
-            <button onClick={doSeed} disabled={seeding}>{seeding ? 'Seeding…' : 'Seed Allowed IPs'}</button>
-          </div>
-        </div>
-
-        {/* Unknown sources table */}
-        <div style={{ marginTop: 10 }}>
-          <div className="help">Unknown Sources</div>
-          <div className="table-responsive" style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: 8 }}>IP</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Segment</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Queue?</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>ARP Perm?</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>DHCP Lease?</th>
-                  <th style={{ textAlign: 'right', padding: 8 }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unknown.map((u) => (
-                  <tr key={u.address} style={{ borderTop: '1px solid #eef1f6' }}>
-                    <td style={{ padding: 8 }}>{u.address}</td>
-                    <td style={{ padding: 8 }}>{u.segment || '-'}</td>
-                    <td style={{ padding: 8 }}>{u.hasQueue ? 'Yes' : 'No'}</td>
-                    <td style={{ padding: 8 }}>{u.inArpPermanent ? 'Yes' : 'No'}</td>
-                    <td style={{ padding: 8 }}>{u.hasDhcpLease ? 'Yes' : 'No'}</td>
-                    <td style={{ padding: 8, textAlign: 'right' }}>
-                      <button onClick={() => adopt(u.address, false)}><MdDone className="inline-icon" /> Adopt</button>
-                    </td>
+            <div className="ps-subtitle">Unknown Sources</div>
+            <div className="table-responsive" style={{ maxHeight: 260, overflow: "auto", border: "1px solid #e6e9f1", borderRadius: 12, background: "#fff" }}>
+              <table className="w-full" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: 10 }}>IP</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>Segment</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>Queue?</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>ARP Perm?</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>DHCP Lease?</th>
+                    <th style={{ textAlign: "right", padding: 10 }}>Action</th>
                   </tr>
-                ))}
-                {unknown.length === 0 && (
-                  <tr><td colSpan="6" style={{ padding: 8, opacity: .7 }}>No unknown sources yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Static clients summary */}
-        <div style={{ marginTop: 14 }}>
-          <div className="help">Static Clients</div>
-          <div className="table-responsive" style={{ maxHeight: 260, overflow: 'auto', border: '1px solid #e6e9f1', borderRadius: 8 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Name</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Account</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>IP</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Badges</th>
-                  <th style={{ textAlign: 'left', padding: 8 }}>Segment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c) => {
-                  const ip = c?.staticConfig?.ip || '';
-                  const badges = [];
-                  if (byIp.allow.has(ip)) badges.push('allow-list');
-                  if (byIp.block.has(ip)) badges.push('block-list');
-                  if (byIp.qSet.has(ip)) badges.push('queue');
-                  if (byIp.arpMap.has(ip)) badges.push('arp');
-                  const seg = byIp.arpMap.get(ip)?.interface || '-';
-                  return (
-                    <tr key={c._id} style={{ borderTop: '1px solid #eef1f6' }}>
-                      <td style={{ padding: 8 }}>{c.name || '-'}</td>
-                      <td style={{ padding: 8 }}>{c.accountNumber || '-'}</td>
-                      <td style={{ padding: 8 }}>{ip || '-'}</td>
-                      <td style={{ padding: 8 }}>
-                        {badges.length ? badges.map((b, i) => (
-                          <span key={i} style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 999, border: '1px solid #e6eaf2', background: '#f1f5f9', marginRight: 6 }}>{b}</span>
-                        )) : <span style={{ opacity: .6 }}>none</span>}
+                </thead>
+                <tbody>
+                  {unknown.map((u) => (
+                    <tr key={u.address} style={{ borderTop: "1px solid #eef1f6" }}>
+                      <td style={{ padding: 10 }}>{u.address}</td>
+                      <td style={{ padding: 10 }}>{u.segment || "-"}</td>
+                      <td style={{ padding: 10 }}>{u.hasQueue ? "Yes" : "No"}</td>
+                      <td style={{ padding: 10 }}>{u.inArpPermanent ? "Yes" : "No"}</td>
+                      <td style={{ padding: 10 }}>{u.hasDhcpLease ? "Yes" : "No"}</td>
+                      <td style={{ padding: 10, textAlign: "right" }}>
+                        <button onClick={() => adopt(u.address, false)} className="ps-tab">
+                          <MdDone className="inline-icon" /> Adopt
+                        </button>
                       </td>
-                      <td style={{ padding: 8 }}>{seg}</td>
                     </tr>
-                  );
-                })}
-                {customers.length === 0 && (
-                  <tr><td colSpan="5" style={{ padding: 8, opacity: .7 }}>No static customers yet.</td></tr>
-                )}
-              </tbody>
-            </table>
+                  ))}
+                  {unknown.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ padding: 10, opacity: 0.7 }}>
+                        No unknown sources yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        {/* Rollback section */}
-        <div style={{ marginTop: 14 }}>
-          <div className="help">Rollback</div>
-          <div className="stack-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={doRollbackPreview} disabled={rollbacking}>
-              <MdHistory className="inline-icon" /> {rollbacking ? 'Preparing…' : 'Preview Rollback'}
-            </button>
-            {rollbackPreview && (
-              <>
-                <span style={{ opacity: .8 }}>
-                  addAllow {rollbackPreview.addAllow}, delAllow {rollbackPreview.delAllow}, addBlock {rollbackPreview.addBlock}, delBlock {rollbackPreview.delBlock}, rules {rollbackPreview.rules?.length || 0}
-                </span>
-                <button onClick={() => doRollback(false)} disabled={rollbacking}>
-                  Disable Rules + Restore Lists
-                </button>
-                <button onClick={() => doRollback(true)} disabled={rollbacking}>
-                  Remove Rules + Restore Lists
-                </button>
-              </>
-            )}
+          {/* Static clients */}
+          <div>
+            <div className="ps-subtitle">Static Clients</div>
+            <div className="table-responsive" style={{ maxHeight: 260, overflow: "auto", border: "1px solid #e6e9f1", borderRadius: 12, background: "#fff" }}>
+              <table className="w-full" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: 10 }}>Name</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>Account</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>IP</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>Badges</th>
+                    <th style={{ textAlign: "left", padding: 10 }}>Segment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((c) => {
+                    const ip = c?.staticConfig?.ip || "";
+                    const badges = [];
+                    if (byIp.allow.has(ip)) badges.push("allow-list");
+                    if (byIp.block.has(ip)) badges.push("block-list");
+                    if (byIp.qSet.has(ip)) badges.push("queue");
+                    if (byIp.arpMap.has(ip)) badges.push("arp");
+                    const seg = byIp.arpMap.get(ip)?.interface || "-";
+                    return (
+                      <tr key={c._id} style={{ borderTop: "1px solid #eef1f6" }}>
+                        <td style={{ padding: 10 }}>{c.name || "-"}</td>
+                        <td style={{ padding: 10 }}>{c.accountNumber || "-"}</td>
+                        <td style={{ padding: 10 }}>{ip || "-"}</td>
+                        <td style={{ padding: 10 }}>
+                          {badges.length ? (
+                            badges.map((b, i) => (
+                              <span
+                                key={i}
+                                style={{
+                                  display: "inline-block",
+                                  padding: "2px 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid #e6eaf2",
+                                  background: "#f1f5f9",
+                                  marginRight: 6,
+                                  fontSize: 12,
+                                }}
+                              >
+                                {b}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ opacity: 0.6 }}>none</span>
+                          )}
+                        </td>
+                        <td style={{ padding: 10 }}>{seg}</td>
+                      </tr>
+                    );
+                  })}
+                  {customers.length === 0 && (
+                    <tr>
+                      <td colSpan="5" style={{ padding: 10, opacity: 0.7 }}>
+                        No static customers yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        {/* Clean lists section */}
-        <div style={{ marginTop: 10 }}>
-          <div className="help">Clean Lists</div>
-          <div className="stack-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={doCleanPreview} disabled={cleaning}>
-              {cleaning ? 'Calculating…' : 'Preview Clean'}
-            </button>
-            {cleanPreview && (
-              <>
-                <span style={{ opacity: .8 }}>
-                  removeAllow {cleanPreview.removeAllow}, removeBlock {cleanPreview.removeBlock}
-                </span>
-                <button onClick={doCleanApply} disabled={cleaning}>
-                  Apply Clean
-                </button>
-              </>
-            )}
+          {/* Rollback */}
+          <div>
+            <div className="ps-subtitle">Rollback</div>
+            <div className="stack-sm" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={doRollbackPreview} disabled={rollbacking} className="ps-tab">
+                <MdHistory className="inline-icon" /> {rollbacking ? "Preparing…" : "Preview Rollback"}
+              </button>
+              {rollbackPreview && (
+                <>
+                  <span style={{ opacity: 0.8 }}>
+                    addAllow {rollbackPreview.addAllow}, delAllow {rollbackPreview.delAllow}, addBlock{" "}
+                    {rollbackPreview.addBlock}, delBlock {rollbackPreview.delBlock}, rules {rollbackPreview.rules?.length || 0}
+                  </span>
+                  <button onClick={() => doRollback(false)} disabled={rollbacking} className="ps-tab">
+                    Disable Rules + Restore Lists
+                  </button>
+                  <button onClick={() => doRollback(true)} disabled={rollbacking} className="ps-tab">
+                    Remove Rules + Restore Lists
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Clean lists */}
+          <div>
+            <div className="ps-subtitle">Clean Lists</div>
+            <div className="stack-sm" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={doCleanPreview} disabled={cleaning} className="ps-tab">
+                {cleaning ? "Calculating…" : "Preview Clean"}
+              </button>
+              {cleanPreview && (
+                <>
+                  <span style={{ opacity: 0.8 }}>
+                    removeAllow {cleanPreview.removeAllow}, removeBlock {cleanPreview.removeBlock}
+                  </span>
+                  <button onClick={doCleanApply} disabled={cleaning} className="ps-tab">
+                    Apply Clean
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

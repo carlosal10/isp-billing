@@ -39,7 +39,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "migrate:payments:dry": "DRY_RUN=1 node migrations/2025-09-28-normalize-payments.js",
+    "migrate:payments": "DRY_RUN=0 node migrations/2025-09-28-normalize-payments.js"
   },
   "eslintConfig": {
     "extends": [

@@ -1,9 +1,8 @@
-// src/components/PaymentsModal.jsx
 import "./PaymentsModal.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import { MdAdd } from "react-icons/md";
-import { api } from "../lib/apiClient"; // ✅ use shared axios with auth/x-isp-id
+import { MdAdd, MdEdit, MdDelete, MdClose } from "react-icons/md";
+import { api } from "../lib/apiClient";
 
 export default function PaymentsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices"
@@ -22,6 +21,12 @@ export default function PaymentsModal({ isOpen, onClose }) {
     amount: "",
     method: "",
   });
+
+  // ------- Edit/Delete state -------
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editPayment, setEditPayment] = useState(null); // current payment being edited
+  const [confirm, setConfirm] = useState({ open: false, id: null, loading: false, message: "" });
 
   const dropdownRef = useRef(null);
 
@@ -80,10 +85,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     setLoadingSearch(true);
     setSearchError("");
     try {
-      // backend route expected: GET /api/customers/search?query=...
-      const { data } = await api.get(`/customers/search`, {
-        params: { query },
-      });
+      const { data } = await api.get(`/customers/search`, { params: { query } });
       setCustomerResults(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Customer search failed:", err);
@@ -113,35 +115,20 @@ export default function PaymentsModal({ isOpen, onClose }) {
     }
 
     try {
-      // Preferred route: POST /api/payments/manual
-      // Body contains: customerId (required), accountNumber (optional), transactionId, amount (optional), method
       await api.post(`/payments/manual`, {
         customerId: manualPayment.customerId,
         accountNumber: manualPayment.accountNumber,
         transactionId: manualPayment.transactionId,
-        amount:
-          manualPayment.amount !== ""
-            ? Number(manualPayment.amount)
-            : undefined, // backend can default to plan price
+        amount: manualPayment.amount !== "" ? Number(manualPayment.amount) : undefined,
         method: manualPayment.method || "manual",
         validatedBy: "Admin Panel",
         notes: "Manual validation from PaymentsModal",
       });
 
       alert("Payment validated successfully!");
-
-      // reset
-      setManualPayment({
-        customerId: null,
-        accountNumber: "",
-        transactionId: "",
-        amount: "",
-        method: "",
-      });
+      setManualPayment({ customerId: null, accountNumber: "", transactionId: "", amount: "", method: "" });
       setSearchTerm("");
       setCustomerResults([]);
-
-      // refresh lists
       fetchPayments();
       fetchInvoices();
     } catch (err) {
@@ -174,14 +161,76 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const viewInvoicePDF = async (id) => {
     try {
-      const res = await api.get(`/invoices/${id}/pdf`, {
-        responseType: "blob",
-      });
+      const res = await api.get(`/invoices/${id}/pdf`, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       window.open(url, "_blank");
     } catch (err) {
       console.error("Failed to fetch PDF:", err);
       alert(getErrMsg(err, "Error fetching invoice PDF"));
+    }
+  };
+
+  // ---------- Edit / Delete handlers ----------
+  const openEdit = (p) => {
+    setEditPayment({
+      _id: p._id,
+      transactionId: p.transactionId || "",
+      amount: p.amount ?? "",
+      method: p.method || "manual",
+      notes: p.notes || "",
+      status: p.status || "Validated",
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editPayment?._id) return;
+    setEditSaving(true);
+    try {
+      // Assumes backend route: PUT /api/payments/:id
+      await api.put(`/payments/${editPayment._id}`, {
+        transactionId: String(editPayment.transactionId || "").trim(),
+        amount: editPayment.amount === "" ? undefined : Number(editPayment.amount),
+        method: editPayment.method || "manual",
+        notes: editPayment.notes || undefined,
+        status: editPayment.status || undefined, // e.g., Validated/Failed/Refunded
+      });
+
+      // Optimistic refresh
+      await fetchPayments();
+      setEditOpen(false);
+      setEditPayment(null);
+    } catch (err) {
+      alert(getErrMsg(err, "Failed to save changes"));
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const askDelete = (id) => {
+    setConfirm({
+      open: true,
+      id,
+      loading: false,
+      message:
+        "Deleting a validated payment may impact invoices, balances, and renewal history. Proceed?",
+    });
+  };
+
+  const doDelete = async () => {
+    if (!confirm.id) return;
+    setConfirm((s) => ({ ...s, loading: true }));
+    try {
+      // Assumes backend route: DELETE /api/payments/:id
+      await api.delete(`/payments/${confirm.id}`);
+      setPayments((list) => list.filter((p) => p._id !== confirm.id));
+      setConfirm({ open: false, id: null, loading: false, message: "" });
+      // Consider refreshing invoices if they depend on payments
+      fetchInvoices();
+    } catch (err) {
+      alert(getErrMsg(err, "Failed to delete payment"));
+      setConfirm((s) => ({ ...s, loading: false }));
     }
   };
 
@@ -201,16 +250,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
         {/* Tabs */}
         <div className="tabs">
-          <button
-            className={activeTab === "payments" ? "active" : ""}
-            onClick={() => setActiveTab("payments")}
-          >
+          <button className={activeTab === "payments" ? "active" : ""} onClick={() => setActiveTab("payments")}>
             Payments
           </button>
-          <button
-            className={activeTab === "invoices" ? "active" : ""}
-            onClick={() => setActiveTab("invoices")}
-          >
+          <button className={activeTab === "invoices" ? "active" : ""} onClick={() => setActiveTab("invoices")}>
             Invoices
           </button>
         </div>
@@ -229,26 +272,35 @@ export default function PaymentsModal({ isOpen, onClose }) {
                     <th>Method</th>
                     <th>Status</th>
                     <th>Date</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payments.map((p) => (
                     <tr key={p._id}>
-                      <td>{p._id}</td>
+                      <td title={p._id}>{p._id}</td>
                       <td>{p.customerName || p.customer?.name || "-"}</td>
                       <td>{p.amount}</td>
                       <td>{p.method}</td>
                       <td>{p.status}</td>
-                      <td>
-                        {p.createdAt
-                          ? new Date(p.createdAt).toLocaleString()
-                          : "-"}
+                      <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}</td>
+                      <td className="actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <button className="btn-icon" title="Edit" onClick={() => openEdit(p)}>
+                          <MdEdit />
+                        </button>
+                        <button
+                          className="btn-icon danger"
+                          title="Delete"
+                          onClick={() => askDelete(p._id)}
+                        >
+                          <MdDelete />
+                        </button>
                       </td>
                     </tr>
                   ))}
                   {payments.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: "center" }}>
+                      <td colSpan={7} style={{ textAlign: "center" }}>
                         No payments yet.
                       </td>
                     </tr>
@@ -293,9 +345,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   </ul>
                 )}
 
-                {hasNoSearchResults && (
-                  <div className="search-empty">No matching customers</div>
-                )}
+                {hasNoSearchResults && <div className="search-empty">No matching customers</div>}
               </div>
 
               {/* Transaction details */}
@@ -304,12 +354,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   type="text"
                   placeholder="Transaction ID"
                   value={manualPayment.transactionId}
-                  onChange={(e) =>
-                    setManualPayment((p) => ({
-                      ...p,
-                      transactionId: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setManualPayment((p) => ({ ...p, transactionId: e.target.value }))}
                   required
                 />
               </div>
@@ -321,18 +366,14 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   step="0.01"
                   placeholder="Amount (KES) — optional (defaults to plan price)"
                   value={manualPayment.amount}
-                  onChange={(e) =>
-                    setManualPayment((p) => ({ ...p, amount: e.target.value }))
-                  }
+                  onChange={(e) => setManualPayment((p) => ({ ...p, amount: e.target.value }))}
                 />
               </div>
 
               <div className="field">
                 <select
                   value={manualPayment.method}
-                  onChange={(e) =>
-                    setManualPayment((p) => ({ ...p, method: e.target.value }))
-                  }
+                  onChange={(e) => setManualPayment((p) => ({ ...p, method: e.target.value }))}
                 >
                   <option value="">Select Method (default: Manual)</option>
                   <option value="manual">Manual (Cash/Bank)</option>
@@ -372,21 +413,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
                       <td>{inv.customerName || inv.customer?.name || "-"}</td>
                       <td>{inv.amount}</td>
                       <td>{inv.status}</td>
-                      <td>
-                        {inv.dueDate
-                          ? new Date(inv.dueDate).toLocaleDateString()
-                          : "-"}
-                      </td>
+                      <td>{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "-"}</td>
                       <td className="actions">
-                        <button onClick={() => markInvoicePaid(inv._id)}>
-                          Mark Paid
-                        </button>
-                        <button onClick={() => generateInvoice(inv._id)}>
-                          Generate
-                        </button>
-                        <button onClick={() => viewInvoicePDF(inv._id)}>
-                          View PDF
-                        </button>
+                        <button onClick={() => markInvoicePaid(inv._id)}>Mark Paid</button>
+                        <button onClick={() => generateInvoice(inv._id)}>Generate</button>
+                        <button onClick={() => viewInvoicePDF(inv._id)}>View PDF</button>
                       </td>
                     </tr>
                   ))}
@@ -401,6 +432,100 @@ export default function PaymentsModal({ isOpen, onClose }) {
               </table>
             </div>
           </>
+        )}
+
+        {/* ===== Edit Drawer ===== */}
+        {editOpen && editPayment && (
+          <div className="drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && setEditOpen(false)}>
+            <div className="drawer">
+              <button className="drawer-close" onClick={() => setEditOpen(false)} aria-label="Close">
+                <MdClose size={18} />
+              </button>
+              <h3>Edit Payment</h3>
+              <form onSubmit={saveEdit} className="stacked-form">
+                <div className="field">
+                  <label>Transaction ID</label>
+                  <input
+                    type="text"
+                    value={editPayment.transactionId}
+                    onChange={(e) => setEditPayment((p) => ({ ...p, transactionId: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label>Amount (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editPayment.amount}
+                    onChange={(e) => setEditPayment((p) => ({ ...p, amount: e.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label>Method</label>
+                  <select
+                    value={editPayment.method}
+                    onChange={(e) => setEditPayment((p) => ({ ...p, method: e.target.value }))}
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="stripe">Stripe</option>
+                    <option value="paypal">PayPal</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Status</label>
+                  <select
+                    value={editPayment.status}
+                    onChange={(e) => setEditPayment((p) => ({ ...p, status: e.target.value }))}
+                  >
+                    <option value="Validated">Validated</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Failed">Failed</option>
+                    <option value="Refunded">Refunded</option>
+                    <option value="Reversed">Reversed</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Notes</label>
+                  <textarea
+                    rows={4}
+                    value={editPayment.notes}
+                    onChange={(e) => setEditPayment((p) => ({ ...p, notes: e.target.value }))}
+                    placeholder="Optional notes / reason for edit"
+                  />
+                </div>
+
+                <div className="drawer-actions">
+                  <button type="button" className="secondary" onClick={() => setEditOpen(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary" disabled={editSaving}>
+                    {editSaving ? "Saving…" : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ===== Confirm Delete ===== */}
+        {confirm.open && (
+          <div className="confirm-overlay" onMouseDown={(e) => e.target === e.currentTarget && setConfirm({ open: false, id: null, loading: false, message: "" })}>
+            <div className="confirm-dialog">
+              <h4>Delete Payment?</h4>
+              <p>{confirm.message}</p>
+              <div className="confirm-actions">
+                <button className="secondary" onClick={() => setConfirm({ open: false, id: null, loading: false, message: "" })} disabled={confirm.loading}>
+                  Cancel
+                </button>
+                <button className="danger" onClick={doDelete} disabled={confirm.loading}>
+                  {confirm.loading ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

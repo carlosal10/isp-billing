@@ -1,59 +1,239 @@
-.staticip-modal .table-responsive {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* =========================================
+   StaticIpSetupModal.css
+   (Enhancements layered onto your ps-* system)
+========================================= */
+
+.staticip-modal {
+  /* container already styled by ps-modal; just small tweaks */
+  background: var(--ec-white);
 }
 
+/* Inline icon alignment for tab-like buttons */
+.staticip-modal .inline-icon {
+  vertical-align: -2px;
+  margin-right: 6px;
+  font-size: 1.1em;
+}
+
+/* --- Section cards / blocks --- */
+.staticip-modal .block {
+  background: #fff;
+  border: 1px solid #e6eaf2;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+/* Subtle section titles */
+.staticip-modal .ps-subtitle {
+  color: var(--ec-primary);
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+/* Status message (extra styles sit on top of .ps-msg) */
+.staticip-modal .ps-msg {
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e6eaf2;
+  background: #fff;
+}
+.staticip-modal .ps-msg.ok {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #065f46;
+}
+.staticip-modal .ps-msg.err {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #7f1d1d;
+}
+
+/* --- Action bar buttons (reuse ps-tab for pill look) --- */
+.staticip-modal .ps-tabs .ps-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+/* --- Select width in top actions --- */
+.staticip-modal .ps-tabs .ps-input {
+  height: 42px;
+}
+
+/* --- Monitor banner --- */
+.staticip-modal .stack-sm {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* --- Tables: carded container --- */
+.staticip-modal .table-responsive {
+  overflow: auto;
+  border: 1px solid #e6e9f1;
+  border-radius: 12px;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
+  /* Nice scrollbars on modern browsers */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.staticip-modal .table-responsive::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.staticip-modal .table-responsive::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+.staticip-modal .table-responsive::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Table base */
 .staticip-modal table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.95rem;
 }
 
-.staticip-modal th, .staticip-modal td {
+/* Sticky headers + subtle backdrop */
+.staticip-modal thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(#ffffff, #f9fbff);
+  color: #334155;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: .01em;
+  border-bottom: 1px solid #eef1f6;
+}
+
+/* Cells */
+.staticip-modal th,
+.staticip-modal td {
   padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
 }
 
-/* Compact tables and wrap controls on smaller screens */
-@media (max-width: 720px) {
-  .staticip-modal {
-    width: 100% !important;
-    height: 100% !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    padding: 12px 10px 16px !important;
-  }
+/* Zebra + hover */
+.staticip-modal tbody tr:nth-child(odd) {
+  background: #fcfdff;
+}
+.staticip-modal tbody tr:hover {
+  background: #f6f8fe;
+}
 
-  .staticip-modal .stack-sm {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
+/* Badge chips inside tables */
+.staticip-modal .chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e6eaf2;
+  font-size: 12px;
+  color: #334155;
+  margin-right: 6px;
+}
 
-  .staticip-modal .table-responsive {
-    border-radius: 10px;
-  }
+/* "Adopt" / table actions use ps-tab for consistency */
+.staticip-modal td .ps-tab {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
 
+/* Cards that list "Preview" content */
+.staticip-modal .preview-card {
+  border: 1px solid #e6eaf2;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+.staticip-modal .preview-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.staticip-modal .preview-card li {
+  line-height: 1.6;
+  color: var(--ec-text);
+}
+
+/* Seed options row */
+.staticip-modal .seed-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.staticip-modal .seed-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+/* Make the primary action stand out */
+.staticip-modal .ps-submit {
+  min-width: 200px;
+}
+
+/* --- Responsive tweaks --- */
+@media (max-width: 780px) {
+  .staticip-modal .ps-tabs {
+    gap: 8px;
+  }
+  .staticip-modal .ps-tabs .ps-input {
+    flex: 1 1 100%;
+  }
+  .staticip-modal .ps-tabs .ps-tab {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
   .staticip-modal table {
-    min-width: 640px; /* enable horizontal scroll */
+    min-width: 720px; /* keep horizontal scroll if many columns */
     font-size: 0.92rem;
   }
-
-  .staticip-modal th, .staticip-modal td {
+  .staticip-modal th,
+  .staticip-modal td {
     padding: 8px 10px;
-  }
-
-  .staticip-modal button {
-    padding: 8px 12px;
-    border-radius: 10px;
   }
 }
 
 /* Very small devices */
 @media (max-width: 420px) {
   .staticip-modal table {
-    min-width: 560px;
+    min-width: 620px;
     font-size: 0.88rem;
   }
-  .staticip-modal th, .staticip-modal td {
+  .staticip-modal th,
+  .staticip-modal td {
     padding: 6px 8px;
   }
 }
 
+/* Optional dark mode (if you ever toggle [data-theme="dark"]) */
+[data-theme="dark"] .staticip-modal .table-responsive {
+  background: #0b1220;
+  border-color: #1f2a44;
+}
+[data-theme="dark"] .staticip-modal thead th {
+  background: #0f1730;
+  color: #e2e8f0;
+  border-bottom-color: #1f2a44;
+}
+[data-theme="dark"] .staticip-modal tbody tr:nth-child(odd) {
+  background: #0b1428;
+}
+[data-theme="dark"] .staticip-modal tbody tr:hover {
+  background: #0f1a33;
+}
+[data-theme="dark"] .staticip-modal .chip {
+  background: #0f1730;
+  border-color: #1f2a44;
+  color: #cbd5e1;
+}

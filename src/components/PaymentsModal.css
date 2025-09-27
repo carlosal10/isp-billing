@@ -195,3 +195,141 @@ button:focus-visible,
 .search-dropdown::-webkit-scrollbar-track{
   background:transparent;
 }
+/* =========================
+   PaymentsModal — Enhancements
+   (Edit drawer, confirm dialog, row actions)
+   Append to your PaymentsModal.css
+========================= */
+
+/* Actions column: compact icon buttons */
+.data-table td.actions { white-space: nowrap; text-align: right; }
+.data-table .actions .btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--ec-line);
+  background: #fff; color: var(--ec-primary);
+  margin-left: 6px;
+  transition: box-shadow .15s, transform .1s, color .15s, border-color .15s;
+}
+.data-table .actions .btn-icon:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+  color: var(--ec-secondary);
+  border-color: #e9edf6;
+}
+.data-table .actions .btn-icon.danger { color: #b91c1c; }
+.data-table .actions .btn-icon.danger:hover { color: #991b1b; }
+
+/* ============= Right-side Edit Drawer ============= */
+.drawer-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(11,37,69,.55); backdrop-filter: blur(2px);
+  display: flex; justify-content: flex-end; align-items: stretch;
+}
+.drawer {
+  width: min(480px, 96vw);
+  background: var(--ec-bg);
+  border-left: 1px solid var(--ec-line);
+  box-shadow: -16px 0 44px rgba(0,0,0,.16);
+  padding: 16px; position: relative;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.drawer h3 {
+  margin: 2px 0 8px;
+  color: var(--ec-primary); font-weight: 800;
+}
+.drawer-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--ec-line); background: #fff; color: #475569;
+  display: grid; place-items: center; cursor: pointer;
+  transition: transform .18s, box-shadow .18s;
+}
+.drawer-close:hover { transform: translateY(-1px); box-shadow: var(--shadow-soft); }
+
+/* Drawer form fields */
+.drawer .stacked-form { padding: 0; grid-template-columns: 1fr; }
+.drawer .stacked-form .field { margin-bottom: 10px; }
+.drawer .stacked-form label {
+  display: block; font-weight: 700; font-size: .9rem; color: #334155; margin-bottom: 6px;
+}
+.drawer .stacked-form input,
+.drawer .stacked-form select,
+.drawer .stacked-form textarea {
+  width: 100%;
+  background: #fff; color: #0f172a;
+  border: 1px solid #e6e9f1; border-radius: 12px; padding: 12px;
+  outline: none; font: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+.drawer .stacked-form input:focus,
+.drawer .stacked-form select:focus,
+.drawer .stacked-form textarea:focus {
+  border-color: #cdd7ff; box-shadow: 0 0 0 4px rgba(100,130,255,.14);
+}
+.drawer .stacked-form textarea { resize: vertical; min-height: 96px; }
+
+.drawer-actions {
+  margin-top: 8px;
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+
+/* Buttons (reuse tokens) */
+button.primary {
+  background: linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color: #fff; border: none; padding: 10px 14px;
+  border-radius: 12px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 12px 26px rgba(230,57,70,.24);
+  transition: filter .18s, transform .18s, box-shadow .18s;
+}
+button.primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+button.secondary {
+  background: #fff; color: var(--ec-primary);
+  border: 1px solid var(--ec-line); padding: 10px 14px;
+  border-radius: 12px; font-weight: 700; cursor: pointer;
+  transition: box-shadow .18s, transform .18s;
+}
+button.secondary:hover { box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+
+button.danger {
+  background: #b91c1c; color: #fff; border: none;
+  padding: 10px 14px; border-radius: 12px; font-weight: 800; cursor: pointer;
+  transition: filter .18s, transform .18s, box-shadow .18s;
+}
+button.danger:hover { filter: brightness(1.03); transform: translateY(-1px); }
+
+/* ============= Centered Confirm Dialog ============= */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(11,37,69,.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-dialog {
+  width: min(440px, 94vw);
+  background: var(--ec-bg); color: var(--ec-text);
+  border: 1px solid var(--ec-line); border-radius: 14px;
+  box-shadow: var(--shadow-hard); padding: 16px;
+}
+.confirm-dialog h4 {
+  margin: 0 0 6px; font-weight: 800; color: var(--ec-primary);
+}
+.confirm-dialog p { margin: 0 0 14px; color: #334155; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* ============= Accessibility & Responsive ============= */
+.drawer-close:focus-visible,
+.btn-icon:focus-visible,
+button.primary:focus-visible,
+button.secondary:focus-visible,
+button.danger:focus-visible {
+  outline: 2px solid var(--ec-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .drawer { width: 100%; }
+  .data-table td.actions { text-align: left; }
+}
