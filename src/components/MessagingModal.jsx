@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { api } from "../lib/apiClient";
+import "./MessagingModal.css";
 
 const TEMPLATES = [
   { id: "due_5", label: "Due in 5 days", body: "Hi {name}, your {plan} plan (KES {amount}) is due on {expiry}. Pay via {paylink}. Reply STOP to opt out." },
@@ -15,7 +16,7 @@ function countSmsSegments(text) {
     " !\"#¤%&'()*+,-./0123456789:;<=>?" +
     "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ`" +
     "¿abcdefghijklmnopqrstuvwxyzäöñüà";
-  const isGsm = [...text].every((c) => gsm7.includes(c) || c.charCodeAt(0) < 128);
+  const isGsm = [...(text || "")].every((c) => gsm7.includes(c) || c.charCodeAt(0) < 128);
   const perSeg = isGsm ? 160 : 70;
   const concatPerSeg = isGsm ? 153 : 67;
   if ((text || "").length <= perSeg) return { segments: text ? 1 : 0, perSeg, isGsm };
@@ -152,10 +153,11 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
           <div className="ps-grid">
             {/* Recipient */}
             <div>
-              <label className="ps-subtitle" style={{ fontSize: ".9rem" }}>
+              <label className="ps-subtitle" htmlFor="mm-recipient">
                 Recipient
               </label>
               <input
+                id="mm-recipient"
                 className="ps-input"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
@@ -168,21 +170,24 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
                 }
                 required
               />
-              <div style={{ fontSize: ".75rem", color: "#64748b", marginTop: 6 }}>
-                {channel === "sms"
-                  ? "Use local (07…) or +2547… — we’ll normalize."
-                  : channel === "email"
-                  ? "Must be a valid email."
-                  : "Use full international format starting with +."}
+              <div className="ps-sms-meta">
+                <span>
+                  {channel === "sms"
+                    ? "Use local (07…) or +2547… — we’ll normalize."
+                    : channel === "email"
+                    ? "Must be a valid email."
+                    : "Use full international format starting with +."}
+                </span>
               </div>
             </div>
 
             {/* Template picker */}
             <div>
-              <label className="ps-subtitle" style={{ fontSize: ".9rem" }}>
+              <label className="ps-subtitle" htmlFor="mm-template">
                 Quick Template
               </label>
               <select
+                id="mm-template"
                 className="ps-input"
                 value={templateId}
                 onChange={(e) => applyTemplate(e.target.value)}
@@ -195,32 +200,11 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
               </select>
 
               {/* Tokens helper */}
-              <div
-                style={{
-                  marginTop: 10,
-                  border: "1px solid #e6e9f1",
-                  borderRadius: 12,
-                  background: "#f7f9fc",
-                  padding: 10,
-                }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#334155", marginBottom: 6 }}>
-                  Tokens
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className="ps-token-wrap">
+                <div className="ps-token-title">Tokens</div>
+                <div className="ps-token-list">
                   {["{name}", "{plan}", "{amount}", "{expiry}", "{paylink}"].map((t) => (
-                    <span
-                      key={t}
-                      style={{
-                        padding: "6px 8px",
-                        border: "1px solid #e6e9f1",
-                        borderRadius: 10,
-                        background: "#fff",
-                        fontSize: 12,
-                        color: "#334155",
-                      }}
-                      title={`Available: ${t}`}
-                    >
+                    <span key={t} className="ps-token" title={`Available: ${t}`}>
                       {t}
                     </span>
                   ))}
@@ -231,20 +215,20 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
 
           {/* Message */}
           <div>
-            <label className="ps-subtitle" style={{ fontSize: ".9rem" }}>
+            <label className="ps-subtitle" htmlFor="mm-message">
               Message
             </label>
             <textarea
+              id="mm-message"
               className="ps-input"
               rows={6}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type your message… tokens like {name} will be replaced before sending (if supported by your backend)."
               required
-              style={{ resize: "vertical" }}
             />
             {channel === "sms" && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b", marginTop: 6 }}>
+              <div className="ps-sms-meta">
                 <span>
                   Encoding: <b>{smsInfo.isGsm ? "GSM-7" : "UCS-2"}</b> • Segment size: {smsInfo.perSeg}
                 </span>
@@ -256,40 +240,16 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
           </div>
 
           {/* Live Preview */}
-          <div
-            style={{
-              border: "1px solid #eef1f6",
-              borderRadius: 12,
-              overflow: "hidden",
-              background: "#fff",
-            }}
-          >
-            <div
-              style={{
-                padding: "10px 12px",
-                borderBottom: "1px solid #eef1f6",
-                fontSize: 12,
-                fontWeight: 800,
-                color: "#556270",
-                letterSpacing: ".04em",
-                textTransform: "uppercase",
-              }}
-            >
-              Preview
-            </div>
-            <div style={{ padding: 12, fontSize: 14, lineHeight: 1.6, color: "#1c2430", minHeight: 64 }}>
-              {message || <span style={{ color: "#94a3b8" }}>Your message will appear here…</span>}
+          <div className="ps-preview">
+            <div className="ps-preview-head">Preview</div>
+            <div className="ps-preview-body">
+              {message ? message : <span className="muted">Your message will appear here…</span>}
             </div>
           </div>
 
           {/* Actions */}
           <div className="ps-grid">
-            <button
-              type="button"
-              onClick={onClose}
-              className="ps-tab"
-              style={{ justifyContent: "center" }}
-            >
+            <button type="button" onClick={onClose} className="ps-tab">
               Cancel
             </button>
             <button type="submit" disabled={!canSend || loading} className="ps-submit">
