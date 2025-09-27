@@ -1,0 +1,160 @@
+/* SmsSettingsModal.css
+   Uses the shared ps-* modal system (overlay, shell, tabs, inputs, grid, submit).
+   Only adds a few sms-* helpers for layout tone.
+*/
+
+/* If your :root + ps-* tokens already exist globally, you can omit this block. */
+:root{
+  --ec-primary:#0B2545;
+  --ec-secondary:#E63946;
+  --ec-accent:#F1C40F;
+  --ec-text:#1c2430;
+  --ec-muted:#556270;
+  --ec-bg:#ffffff;
+  --ec-line:#eef1f6;
+
+  --ps-shadow:0 14px 42px rgba(0,0,0,.14);
+  --ps-soft:0 10px 30px rgba(0,0,0,.08);
+}
+
+/* Overlay + modal shell borrowed from shared modal styles (ps-*) */
+.ps-overlay{
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(11,37,69,.55); backdrop-filter: blur(2px);
+  display:flex; align-items:stretch; justify-content:center;
+}
+.ps-modal{
+  position:relative; width:100%; height:100%;
+  background:#fff; color:var(--ec-text);
+  display:flex; flex-direction:column;
+}
+@media (min-width: 780px){
+  .ps-modal{
+    height:auto; max-height:92vh; width:min(980px, 94vw);
+    margin:auto; border-radius:18px; overflow:hidden;
+    box-shadow: var(--ps-shadow); border:1px solid #eef1f6;
+  }
+}
+.ps-close{
+  position:absolute; top:14px; right:14px;
+  width:38px; height:38px; border-radius:12px;
+  border:1px solid #e7ebf3; background:#fff; color:#6b778c;
+  display:grid; place-items:center; cursor:pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.ps-close:hover{ transform: translateY(-1px); box-shadow: var(--ps-soft); }
+.ps-head{
+  padding:18px 16px 12px; background:#fff; border-bottom:1px solid #eef1f6;
+}
+.ps-head h2{
+  margin:6px 0 0; color:var(--ec-primary); font-weight:800;
+  font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+}
+.ps-chip{
+  display:inline-block; font-size:.75rem; font-weight:800; letter-spacing:.08em;
+  color:var(--ec-primary);
+  background:linear-gradient(135deg, #fff4bd, #ffe88a);
+  padding:6px 10px; border-radius:999px; border:1px solid #ffe07a;
+}
+.ps-tabs{
+  display:flex; gap:8px; padding:10px 16px; background:#fff; border-bottom:1px solid #eef1f6;
+  flex-wrap:wrap; position:sticky; top:0; z-index:2;
+}
+.ps-tab{
+  appearance:none; border:none; cursor:pointer;
+  background:#fff; color:#334155; font-weight:800;
+  padding:10px 14px; border-radius:12px; border:1px solid #e7ebf3;
+  display:flex; align-items:center; gap:8px;
+  transition: background .2s, box-shadow .2s, color .2s, transform .18s;
+}
+.ps-tab:hover{ box-shadow:var(--ps-soft); transform:translateY(-1px); }
+.ps-tab.active{
+  background: linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color:#fff; border-color:transparent; box-shadow:0 10px 24px rgba(230,57,70,.28);
+}
+.ps-msg{ margin:10px 16px 0; font-weight:600; }
+.ps-msg.ok{ color:#15803d; }
+.ps-msg.err{ color:#b91c1c; }
+.ps-loading{ margin:8px 16px; color:#64748b; }
+.ps-form{ padding:16px; display:flex; flex-direction:column; gap:14px; overflow:auto; }
+.ps-subtitle{ margin:0 0 6px; color:#0b2545; font-size:.95rem; font-weight:800; }
+
+/* Grid */
+.ps-grid{
+  display:grid; grid-template-columns:1fr; gap:12px;
+}
+@media (min-width: 720px){
+  .ps-grid{ grid-template-columns:1fr 1fr 1fr; gap:14px; }
+}
+
+/* Inputs */
+.ps-input{
+  width:100%; background:#fff;
+  border:1px solid #e6e9f1; border-radius:12px;
+  padding:12px 12px; font: inherit; color:#0f172a; outline:none;
+  transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.ps-input:focus{
+  border-color:#cdd7ff; box-shadow:0 0 0 4px rgba(100,130,255,.14);
+}
+
+/* Submit */
+.ps-submit{
+  width:100%;
+  background: linear-gradient(135deg, var(--ec-secondary), #c9303e);
+  color:#fff; font-weight:800; border:none; cursor:pointer;
+  padding:12px 18px; border-radius:12px;
+  box-shadow:0 10px 24px rgba(230,57,70,.24);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+.ps-submit:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+.ps-submit:disabled{ opacity:.6; cursor:not-allowed; box-shadow:none; }
+
+/* -------- Component-specific helpers (sms-*) -------- */
+.sms-section{ display:flex; flex-direction:column; gap:14px; }
+.sms-row{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.sms-check{ display:inline-flex; align-items:center; gap:8px; font-size:.95rem; color:#273449; }
+.sms-muted{ color:#64748b; font-size:.85rem; }
+.sms-align-end{ display:flex; align-items:end; }
+
+.sms-card{
+  border:1px solid var(--ec-line);
+  border-radius:12px;
+  background:#fff;
+  padding:12px;
+  box-shadow:0 8px 22px rgba(0,0,0,.05);
+}
+.sms-card-head{
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+}
+.sms-card-title{
+  font-weight:800; color:#0b2545; font-size:1rem;
+}
+.sms-card.is-disabled{ opacity:.6; }
+
+.sms-actions{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px;
+}
+
+.sms-textarea{
+  min-height:96px;
+}
+
+.sms-readonly{
+  background:#f7f9fc;
+  color:#0b2545;
+  user-select:text;
+}
+
+.sms-break{
+  word-break: break-all;
+}
+
+/* Mobile polish */
+@media (max-width: 720px){
+  .ps-head{ padding:16px 14px 10px; }
+  .ps-tabs{ padding:10px 14px; gap:6px; }
+  .ps-form{ padding:14px; gap:12px; }
+  .ps-input{ padding:11px 11px; }
+  .ps-submit{ padding:11px 14px; }
+}
