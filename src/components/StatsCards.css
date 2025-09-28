@@ -12,8 +12,7 @@
 
 .stat-card{
   background:var(--card);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow);
+  border-radius:30px;
   padding:16px 18px;
   transition:border-color .15s ease, transform .06s ease;
 }
