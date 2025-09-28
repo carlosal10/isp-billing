@@ -14,6 +14,8 @@
   background:var(--card);
   border-radius:30px;
   padding:16px 18px;
+  border: 12px solid transparent;
+  box-shadow: 5px 5px 5px rgba(0,0,0,.05);
   transition:border-color .15s ease, transform .06s ease;
 }
 .stat-card:hover{ border-color:#dbe8f7; transform:translateY(-1px) }
