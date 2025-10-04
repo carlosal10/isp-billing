@@ -1,6 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, setApiAccessors } from '../lib/apiClient';
 
+function readAuth() {
+  try { return JSON.parse(localStorage.getItem('auth') || 'null'); } catch { return null; }
+}
+
 const Ctx = createContext({
   servers: [],
   selected: '',
@@ -21,6 +25,8 @@ export function ServerProvider({ children }) {
 
   const load = useCallback(async () => {
     try {
+      const auth = readAuth();
+      if (!auth?.accessToken) { setServers([]); return; }
       const { data } = await api.get('/mikrotik/servers');
       setServers(Array.isArray(data) ? data : []);
       // auto-select primary if none
@@ -28,7 +34,10 @@ export function ServerProvider({ children }) {
         const primary = data.find(s => s.primary) || data[0];
         if (primary?.id) setSelected(primary.id);
       }
-    } catch {}
+    } catch (e) {
+      // ignore 401 pre-login; clear list
+      if (String(e?.message || '').includes('401')) setServers([]);
+    }
   }, [selected]);
 
   useEffect(() => { load(); }, [load]);
@@ -46,4 +55,3 @@ export function ServerProvider({ children }) {
 export function useServer() {
   return useContext(Ctx);
 }
-
