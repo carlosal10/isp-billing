@@ -53,7 +53,7 @@ app.use(
       return cb(new Error("CORS blocked: " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "x-isp-server"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id","X-Requested-With", "x-isp-server", "X-API-KEY","Accept"],
     credentials: true,
     optionsSuccessStatus: 204,
   })
