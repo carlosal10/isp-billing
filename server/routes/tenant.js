@@ -1,17 +1,26 @@
+// routes/tenant.js
 const express = require('express');
 const Tenant = require('../models/Tenant');
-
+const { requireAuth, requireTenant } = require("../security/auth");
 const router = express.Router();
 
 // GET /api/tenant/me - current tenant info from req.tenantId
-router.get('/me', async (req, res) => {
+router.get("/me", async (req, res) => {
+  if (!req.tenantId) return res.status(401).json({ ok:false, error:"Missing tenant" });
   try {
     const t = await Tenant.findById(req.tenantId).lean();
-    return res.json({ ok: true, id: String(req.tenantId), name: t?.name || '', subdomain: t?.subdomain || null, accountPrefix: t?.accountPrefix || '' });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: 'Failed to load tenant' });
+    return res.json({
+      ok: true,
+      id: String(req.tenantId),
+      name: t?.name || "",
+      subdomain: t?.subdomain ?? null,
+      accountPrefix: t?.accountPrefix || ""
+    });
+  } catch {
+    return res.status(500).json({ ok:false, error:"Failed to load tenant" });
   }
 });
+
 
 // PUT /api/tenant/subdomain - set or update subdomain for this tenant
 router.put('/subdomain', async (req, res) => {

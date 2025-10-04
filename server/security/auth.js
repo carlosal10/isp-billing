@@ -1,64 +1,115 @@
-// server/security/auth.js
-import jwt from "jsonwebtoken";
-import crypto from "node:crypto";
-import RefreshToken from "../models/RefreshToken.js";
-import Membership from "../models/Membership.js";
+// server/routes/auth.js
+import express from "express";
+import bcrypt from "bcryptjs"; // if you hash passwords
 import User from "../models/User.js";
+import Membership from "../models/Membership.js";
+import RefreshToken from "../models/RefreshToken.js";
+import { signAccessToken, refreshExpiry } from "../security/auth.js";
+import crypto from "node:crypto";
 
-export function signAccessToken({ user, tenantId }) {
-  // keep payload minimal
-  return jwt.sign(
-    { sub: String(user._id), email: user.email, ispId: String(tenantId) },
-    process.env.JWT_SECRET,
-    { expiresIn: "15m" }
-  );
+const router = express.Router();
+
+// Utility: hash refresh tokens at rest (recommended)
+function hashToken(t) {
+  return crypto.createHash("sha256").update(t).digest("hex");
 }
 
-export function requireAuth(req, res, next) {
-  const header = req.headers.authorization || "";
-  const [, token] = header.split(" ");
-  if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+// LOGIN — no requireAuth here
+router.post("/login", async (req, res) => {
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET); // { sub, email, ispId, iat, exp }
-    return next();
-  } catch {
-    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
+    const { email, password, ispId } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+
+    // if you store hashed passwords:
+    const ok = await bcrypt.compare(password, user.passwordHash || "");
+    if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+
+    // ensure membership when multitenant
+    if (ispId) {
+      const has = await Membership.findOne({ user: user._id, tenant: ispId });
+      if (!has) return res.status(403).json({ ok: false, error: "No membership for tenant" });
+    }
+
+    const accessToken = signAccessToken({ user, tenantId: ispId });
+    const rawRefresh = crypto.randomBytes(48).toString("base64url");
+    await RefreshToken.create({
+      tokenHash: hashToken(rawRefresh),   // store hash, not raw
+      user: user._id,
+      tenant: ispId,
+      expiresAt: refreshExpiry(),
+      isRevoked: false,
+    });
+
+    return res.json({
+      ok: true,
+      accessToken,
+      refreshToken: rawRefresh,
+      ispId,
+      user: { id: user._id, email: user.email, displayName: user.displayName },
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: "Login failed" });
   }
-}
+});
 
-export function requireTenant(req, res, next) {
-  const tenantId = req.headers["x-isp-id"] || req.user?.ispId;
-  if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant" });
-  req.tenantId = String(tenantId);
-  return next();
-}
+// REFRESH — no requireAuth here
+router.post("/refresh", async (req, res) => {
+  try {
+    const raw = req.body?.refreshToken; // or read from cookie
+    if (!raw) return res.status(401).json({ ok: false, error: "Missing refresh token" });
 
-export async function ensureMembership(userId, tenantId) {
-  const m = await Membership.findOne({ user: userId, tenant: tenantId }).lean();
-  return !!m;
-}
+    const doc = await RefreshToken.findOne({ tokenHash: hashToken(raw) });
+    if (!doc || doc.isRevoked) return res.status(401).json({ ok: false, error: "Invalid token" });
+    if (Date.now() > new Date(doc.expiresAt).getTime()) {
+      return res.status(401).json({ ok: false, error: "Expired token" });
+    }
 
-export function refreshExpiry() {
-  const days = Number(process.env.REFRESH_TTL_DAYS || 30);
-  return new Date(Date.now() + days * 86400 * 1000);
-}
+    // (Optional) re-check membership
+    const membership = await Membership.findOne({ user: doc.user, tenant: doc.tenant });
+    if (!membership) return res.status(403).json({ ok: false, error: "No membership for tenant" });
 
-export async function issueRefreshToken({ userId, tenantId }) {
-  const token = crypto.randomBytes(48).toString("base64url");
-  await RefreshToken.create({
-    token,
-    user: userId,
-    tenant: tenantId,
-    expiresAt: refreshExpiry(),
-  });
-  return token;
-}
+    // ROTATE: revoke old, mint new
+    await RefreshToken.updateOne({ _id: doc._id }, { $set: { isRevoked: true } });
+    const nextRaw = crypto.randomBytes(48).toString("base64url");
+    await RefreshToken.create({
+      tokenHash: hashToken(nextRaw),
+      user: doc.user,
+      tenant: doc.tenant,
+      expiresAt: refreshExpiry(),
+      isRevoked: false,
+    });
 
-export async function revokeRefreshToken(token) {
-  await RefreshToken.updateMany({ token }, { $set: { isRevoked: true } });
-}
+    // New access
+    const user = await User.findById(doc.user).lean();
+    const accessToken = signAccessToken({ user, tenantId: doc.tenant });
 
-export async function rotateRefreshIfNeeded(token) {
-  // Optional rotation placeholder — here we just bump updatedAt
-  await RefreshToken.updateOne({ token }, { $set: { updatedAt: new Date() } });
-}
+    return res.json({
+      ok: true,
+      accessToken,
+      refreshToken: nextRaw,
+      ispId: String(doc.tenant),
+      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: "Refresh failed" });
+  }
+});
+
+// LOGOUT — no requireAuth required; just revoke the presented refresh
+router.post("/logout", async (req, res) => {
+  try {
+    const raw = req.body?.refreshToken;
+    if (raw) {
+      await RefreshToken.updateMany({ tokenHash: hashToken(raw) }, { $set: { isRevoked: true } });
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: "Logout failed" });
+  }
+});
+
+export default router;

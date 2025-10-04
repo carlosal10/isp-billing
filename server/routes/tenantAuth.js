@@ -108,24 +108,40 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /api/auth/refresh
 router.post("/refresh", async (req, res) => {
   try {
     const parsed = RefreshSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
-    const rec = await RefreshToken.findOne({ token: parsed.data.refreshToken });
-    if (!rec || rec.isRevoked || rec.expiresAt < new Date()) {
+    const current = await RefreshToken.findOne({ token: parsed.data.refreshToken });
+    if (!current || current.isRevoked || current.expiresAt < new Date()) {
       return res.status(401).json({ ok: false, error: "Invalid refresh" });
     }
-    const user = await User.findById(rec.user);
+
+    const user = await User.findById(current.user);
     if (!user || !user.isActive) return res.status(401).json({ ok: false, error: "User disabled" });
 
-    const accessToken = signTenantAccessToken({ user, tenantId: rec.tenant });
-    // (Optional rotate) await RefreshToken.updateOne({ token: rec.token }, { $set: { updatedAt: new Date() } });
+    // rotate: revoke old, mint new
+    await RefreshToken.updateOne({ _id: current._id }, { $set: { isRevoked: true } });
+    const nextRaw = crypto.randomBytes(48).toString("base64url");
+    await RefreshToken.create({
+      token: nextRaw,
+      user: current.user,
+      tenant: current.tenant,
+      expiresAt: refreshExpiry(),
+      isRevoked: false,
+    });
 
-    res.json({ ok: true, accessToken });
+    const accessToken = signTenantAccessToken({ user, tenantId: current.tenant });
+    return res.json({
+      ok: true,
+      accessToken,
+      refreshToken: nextRaw,
+      ispId: String(current.tenant),
+      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+    });
   } catch (e) {
+    console.error("refresh error:", e);
     res.status(500).json({ ok: false, error: "Server error" });
   }
 });
