@@ -35,7 +35,7 @@ const io = new Server(server, {
       return cb(new Error("CORS blocked (WS): " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "x-isp-server"],
     credentials: true,
   },
 });
@@ -53,7 +53,7 @@ app.use(
       return cb(new Error("CORS blocked: " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "x-isp-server"],
     credentials: true,
     optionsSuccessStatus: 204,
   })
