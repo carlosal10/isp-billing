@@ -1,0 +1,58 @@
+openapi: 3.0.3
+info:
+  title: ISP Billing API
+  version: 1.0.0
+servers:
+  - url: https://your-host/api
+paths:
+  /health/detail:
+    get:
+      summary: Health details
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /mikrotik/servers:
+    get:
+      summary: List MikroTik servers
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create MikroTik server
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+  /mikrotik/servers/{id}/test:
+    post:
+      summary: Test connection
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /payments/manual:
+    post:
+      summary: Create/validate manual payment (supports backdating)
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /paylink/stk:
+    post:
+      summary: Public STK paylink starter
+      responses:
+        '200': { description: OK }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+

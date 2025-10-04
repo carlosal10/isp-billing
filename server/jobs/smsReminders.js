@@ -1,4 +1,4 @@
-const cron = require('node-cron');
+const { scheduleJob } = require('../utils/scheduler');
 const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
@@ -97,20 +97,20 @@ async function processTenantReminders(now) {
 }
 
 // Run once daily at 09:00 Nairobi time
-cron.schedule('0 9 * * *', async () => {
+scheduleJob({ name: 'smsReminders', cronExpr: '0 9 * * *', task: async () => {
   if (running) return;
   running = true;
   const now = new Date();
   try {
-    mark('smsReminders:start');
     await processTenantReminders(now);
-    mark('smsReminders:finish');
+    return { ok: true };
   } catch (e) {
     console.error('sms reminders job error', e);
+    throw e;
   } finally {
     running = false;
   }
-}, { timezone: 'Africa/Nairobi' });
+} });
 
 console.log('SMS reminder job scheduled (09:00 Africa/Nairobi)');
 

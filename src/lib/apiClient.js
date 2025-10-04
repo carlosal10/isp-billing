@@ -30,6 +30,7 @@ export const api = axios.create({
 let accessors = {
   getAccessToken: () => getAccess(),
   getIspId: () => getIspId(),
+  getServerId: () => null,
   tryRefresh: null,
   forceLogout: null,
 };
@@ -43,6 +44,8 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   const isp = accessors.getIspId?.();
   if (isp) config.headers["x-isp-id"] = isp;
+  const server = accessors.getServerId?.();
+  if (server) config.headers["x-isp-server"] = server;
   return config;
 });
 
@@ -130,4 +133,3 @@ api.interceptors.response.use(
     }
   }
 );
-

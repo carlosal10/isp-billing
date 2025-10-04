@@ -1,12 +1,9 @@
 // server/jobs/expireStatic.js
-const cron = require('node-cron');
+const { scheduleJob } = require('../utils/scheduler');
 const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const { disableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
-const { mark } = require('../utils/heartbeats');
-
-cron.schedule('*/10 * * * *', async () => {
-  mark('expireStatic:start');
+scheduleJob({ name: 'expireStatic', cronExpr: '*/10 * * * *', task: async () => {
   const now = new Date();
   // group latest success per customer
   const latest = await Payment.aggregate([
@@ -21,5 +18,5 @@ cron.schedule('*/10 * * * *', async () => {
     await Customer.updateOne({ _id: customer._id }, { $set: { status: 'inactive', updatedAt: new Date() } });
     await disableCustomerQueue(customer).catch(() => {});
   }
-  mark('expireStatic:finish');
-});
+  return { expired: latest.length };
+}});

@@ -27,6 +27,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AccountSettings from "./pages/AccountSettings";
+import Routers from "./pages/Routers";
 
 export default function App() {
   const { isAuthed, token, ispId } = useAuth();
@@ -111,6 +112,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/settings" element={<AccountSettings />} />
+            <Route path="/routers" element={<Routers />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

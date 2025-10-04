@@ -1,31 +1,23 @@
 // components/MikrotikTerminalModal.jsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FaTimes } from 'react-icons/fa';
 import './MikrotikTerminalModal.css';
+import { api } from '../lib/apiClient';
+import { useServer } from '../context/ServerContext';
 
-
-const API = 'https://isp-billing-uq58.onrender.com/api/mikrotik/terminal/exec';
-
-export default function MikrotikTerminalModal({ isOpen, onClose, authToken }) {
+export default function MikrotikTerminalModal({ isOpen, onClose }) {
   const [cmd, setCmd] = useState('/system/resource/print');
   const [out, setOut] = useState([]);
+  const { servers, selected, setSelected, reload } = useServer();
 
   if (!isOpen) return null;
 
   const run = async () => {
     setOut(o => [...o, `> ${cmd}`]);
     try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
-        },
-        body: JSON.stringify({ command: cmd })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setOut(o => [...o, `ERR: ${data.error || res.statusText}`]);
+      const { data } = await api.post('/mikrotik/terminal/exec', { command: cmd });
+      if (!data?.ok) {
+        setOut(o => [...o, `ERR: ${data?.error || 'request failed'}`]);
       } else {
         setOut(o => [...o, JSON.stringify(data.result, null, 2)]);
       }
@@ -46,6 +38,15 @@ export default function MikrotikTerminalModal({ isOpen, onClose, authToken }) {
       <div className="modal-content large">
         <button className="close" onClick={onClose}><FaTimes /></button>
         <h2>MikroTik Terminal</h2>
+        <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+          <label style={{ fontSize:12 }}>Server:</label>
+          <select value={selected || ''} onChange={(e)=>setSelected(e.target.value)}>
+            {(servers||[]).map(s => (
+              <option key={s.id} value={s.id}>{s.primary ? '★ ' : ''}{s.name} ({s.host})</option>
+            ))}
+          </select>
+          <button onClick={reload} style={{ fontSize:12 }}>Reload</button>
+        </div>
 
         <textarea
           rows={2}

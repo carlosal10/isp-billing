@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const { setConfigLoader, sendCommand } = require("../utils/mikrotikConnectionManager");
 const MikroTikConnection = require("../models/MikrotikConnection");
+const RouterEvent = require("../models/RouterEvent");
 
 // Load a tenant's router config from DB (supports multi-servers)
 setConfigLoader(async (tenantId, selector = {}) => {
@@ -23,6 +24,16 @@ setConfigLoader(async (tenantId, selector = {}) => {
     tls: !!rec.tls,
     timeout: 15000,
   };
+});
+
+// Wire audit logger to persist recent events
+const { setAuditLogger } = require("../utils/mikrotikConnectionManager");
+setAuditLogger(async (entry) => {
+  try {
+    const { tenantId, host, port, kind, ok, ms, command, wordsCount, error, at } = entry || {};
+    if (!tenantId) return;
+    await RouterEvent.create({ tenantId, host, port, kind, ok, ms, command, wordsCount, error, at: at ? new Date(at) : new Date() });
+  } catch {}
 });
 
 router.post("/", async (req, res) => {

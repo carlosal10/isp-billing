@@ -13,7 +13,7 @@ function loadAuth() {
 }
 
 export default function ConnectMikrotikModal({ isOpen, onClose }) {
-  const [form, setForm] = useState({ host: "", port: 8728, user: "", password: "", tls: false });
+  const [form, setForm] = useState({ name: "default", primary: true, host: "", port: 8728, user: "", password: "", tls: false });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -40,6 +40,8 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       const { data } = await api.post(
         "/connect",
         {
+          name: form.name.trim() || 'default',
+          primary: !!form.primary,
           host: form.host.trim(),
           port: Number(form.port) || (form.tls ? 8729 : 8728),
           user: form.user.trim(),
@@ -81,6 +83,10 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
 
         <form onSubmit={onSubmit} className="modal-form">
           <label>
+            Name:
+            <input id="name" value={form.name} onChange={onChange} required />
+          </label>
+          <label>
             Router IP:
             <input id="host" value={form.host} onChange={onChange} required />
           </label>
@@ -100,6 +106,10 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
             <input id="tls" type="checkbox" checked={form.tls} onChange={onChange} />
             Use TLS (8729)
           </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input id="primary" type="checkbox" checked={form.primary} onChange={onChange} />
+            Set as primary
+          </label>
 
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? "Connecting..." : "Connect"}
@@ -112,4 +122,3 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+require('./jobs/exports');
 // App.js
 require("dotenv").config();
 const { validateEnv } = require("./utils/env");
@@ -145,16 +146,35 @@ const smsRoutes = require("./routes/sms");
 const paylinkRoutes = require("./routes/paylink");
 const paylinkAdminRoutes = require("./routes/paylinkAdmin");
 const healthDetailRoutes = require("./routes/health");
+const eventsRoutes = require("./routes/events");
+const jobsRoutes = require("./routes/jobs");
+const apiKeysRoutes = require("./routes/apiKeys");
+const flagsRoutes = require("./routes/flags");
+const archiveRoutes = require("./routes/archive");
 
 // Debug
 const debugRoutes = require("./routes/debug");
 const tenantRoutes = require("./routes/tenant");
 const accountRoutes = require("./routes/account");
+const fs = require('fs');
 
 
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
 app.use("/api/health", authenticate, requireTenant, healthDetailRoutes);
+// Serve OpenAPI (raw yaml)
+app.get('/api/docs/openapi.yaml', (req, res) => {
+  try {
+    const p = path.resolve(__dirname, '../docs/openapi.yaml');
+    res.setHeader('Content-Type', 'application/yaml');
+    fs.createReadStream(p).pipe(res);
+  } catch { res.status(404).end(); }
+});
+app.use("/api", authenticate, requireTenant, eventsRoutes);
+app.use("/api", authenticate, requireTenant, jobsRoutes);
+app.use("/api/api-keys", authenticate, requireTenant, apiKeysRoutes);
+app.use("/api/flags", authenticate, requireTenant, flagsRoutes);
+app.use("/api", authenticate, requireTenant, archiveRoutes);
 
 // ----------------- Mount APIs -----------------
 // Tenant realm auth
