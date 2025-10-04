@@ -4,6 +4,7 @@ const router = express.Router();
 
 const mongoose = require('mongoose');
 const Customer = require('../models/customers');
+const Tenant = require('../models/Tenant');
 const Plan = require('../models/plan');
 
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
@@ -21,9 +22,12 @@ const { sendSms } = require('../utils/sms');
 
 /* ------------------------- Helpers ------------------------- */
 
-function generateAccountNumber() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+function sanitizeCode(s) {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 12);
 }
 const isYes = (v) => {
   const s = String(v ?? '').trim().toLowerCase();
@@ -144,7 +148,31 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Invalid connection type' });
     }
 
-    const accountNumber = generateAccountNumber();
+    // Generate tenant-aware account number: <prefix><address-code> (fallback to random)
+    let accountNumber = '';
+    try {
+      const tenant = await Tenant.findById(req.tenantId).lean();
+      const prefix = (tenant?.accountPrefix || '').trim();
+      const baseCode = sanitizeCode(address || name || phone || 'CUST');
+      let candidate = (prefix ? prefix : '') + baseCode;
+      // ensure uniqueness per-tenant by suffixing if needed
+      let attempt = 0;
+      while (attempt < 5) {
+        const exists = await Customer.findOne({ tenantId: req.tenantId, accountNumber: candidate }).select('_id').lean();
+        if (!exists) { accountNumber = candidate; break; }
+        attempt += 1;
+        const suffix = '-' + (attempt + 1);
+        candidate = ((prefix ? prefix : '') + baseCode).slice(0, Math.max(1, 16 - suffix.length)) + suffix;
+      }
+      if (!accountNumber) {
+        // fallback random
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        accountNumber = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      }
+    } catch {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      accountNumber = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
 
     const customer = new Customer({
       tenantId: req.tenantId,

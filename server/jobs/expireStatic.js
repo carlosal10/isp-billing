@@ -3,8 +3,10 @@ const cron = require('node-cron');
 const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const { disableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
+const { mark } = require('../utils/heartbeats');
 
 cron.schedule('*/10 * * * *', async () => {
+  mark('expireStatic:start');
   const now = new Date();
   // group latest success per customer
   const latest = await Payment.aggregate([
@@ -19,4 +21,5 @@ cron.schedule('*/10 * * * *', async () => {
     await Customer.updateOne({ _id: customer._id }, { $set: { status: 'inactive', updatedAt: new Date() } });
     await disableCustomerQueue(customer).catch(() => {});
   }
+  mark('expireStatic:finish');
 });

@@ -44,8 +44,8 @@ const PaymentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Core fields
-    amount: {
+  // Core fields
+  amount: {
       type: Number,
       required: true,
       min: [0, 'Amount cannot be negative'],
@@ -60,12 +60,16 @@ const PaymentSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
-    status: {
-      type: String,
-      enum: STATUS_ENUM,
-      default: 'Pending',
-      index: true,
-    },
+  status: {
+    type: String,
+    enum: STATUS_ENUM,
+    default: 'Pending',
+    index: true,
+  },
+
+  // Gateway correlation (e.g., M-Pesa STK ids)
+  merchantRequestId: { type: String, trim: true },
+  checkoutRequestId: { type: String, trim: true },
 
     // Entitlement
     expiryDate: { type: Date, index: true },

@@ -28,7 +28,7 @@ const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
 const pool = new Map();
 
 // Hook functions you can wire from the app:
-let loadTenantRouterConfig = async (_tenantId) => {
+let loadTenantRouterConfig = async (_tenantId, _selector) => {
   throw new Error("loadTenantRouterConfig not set");
 };
 let auditLog = async (_entry) => {}; // no-op by default
@@ -73,8 +73,8 @@ function normalizeResult(res) {
 }
 
 // --------- Core: get or create pooled client ---------
-async function getClientEntry(tenantId) {
-  const cfg = await loadTenantRouterConfig(tenantId);
+async function getClientEntry(tenantId, selector) {
+  const cfg = await loadTenantRouterConfig(tenantId, selector);
   if (!cfg) throw new Error("Router config not found for tenant");
 
   const key = k(tenantId, cfg.host, cfg.port || 8728);
@@ -174,7 +174,14 @@ async function sendCommand(path, words = [], options = {}) {
   const tenantId = options.tenantId || options.ispId; // support either naming
   if (!tenantId) throw new Error("Missing tenantId for RouterOS command");
 
-  const entry = await getClientEntry(tenantId);
+  const selector = {
+    id: options.serverId || options.server || null,
+    name: options.serverName || null,
+    host: options.host || null,
+    port: options.port || null,
+  };
+
+  const entry = await getClientEntry(tenantId, selector);
 
   // Exponential backoff window if previously failing
   if (!entry.connected && entry.fails > 0) {

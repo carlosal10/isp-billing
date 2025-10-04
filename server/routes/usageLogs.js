@@ -12,8 +12,9 @@ router.post('/record', async (req, res) => {
 
     // Probe router for active sessions
     let ppp = [], hs = [];
-    try { ppp = await sendCommand('/ppp/active/print', [], { tenantId, timeoutMs: 8000 }); } catch {}
-    try { hs = await sendCommand('/ip/hotspot/active/print', [], { tenantId, timeoutMs: 8000 }); } catch {}
+    const serverId = req.headers['x-isp-server'] || req.query.serverId || null;
+    try { ppp = await sendCommand('/ppp/active/print', [], { tenantId, timeoutMs: 8000, serverId }); } catch {}
+    try { hs = await sendCommand('/ip/hotspot/active/print', [], { tenantId, timeoutMs: 8000, serverId }); } catch {}
     const count = (Array.isArray(ppp) ? ppp.length : 0) + (Array.isArray(hs) ? hs.length : 0);
 
     const updated = await DailyUsage.findOneAndUpdate(

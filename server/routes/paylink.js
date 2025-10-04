@@ -106,6 +106,20 @@ router.post('/stk', async (req, res) => {
       transactionDesc: 'Subscription Payment',
     });
 
+    // Persist Daraja correlation ids so callback can match this payment
+    try {
+      const checkoutRequestId = resp?.CheckoutRequestID;
+      const merchantRequestId = resp?.MerchantRequestID;
+      if (checkoutRequestId || merchantRequestId) {
+        await Payment.updateOne(
+          { _id: payment._id },
+          { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
+        );
+      }
+    } catch (e) {
+      console.warn('Could not persist STK ids to payment:', e?.message || e);
+    }
+
     res.json({ ok: true, paymentId: payment._id, stk: resp });
   } catch (e) {
     // Surface Daraja error body if available
@@ -121,6 +135,24 @@ router.post('/stk', async (req, res) => {
       darajaStatus: darajaStatus || null,
       darajaResponse: darajaResponse || null,
     });
+  }
+});
+
+// Poll payment status (public)
+router.get('/status', async (req, res) => {
+  try {
+    const { paymentId } = req.query || {};
+    if (!paymentId) return res.status(400).json({ error: 'Missing paymentId' });
+    const p = await Payment.findById(paymentId).lean();
+    if (!p) return res.status(404).json({ error: 'Payment not found' });
+    res.json({
+      status: p.status,
+      transactionId: p.transactionId || null,
+      amount: p.amount,
+      method: p.method,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Failed to fetch payment status' });
   }
 });
 

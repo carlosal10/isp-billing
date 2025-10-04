@@ -4,9 +4,16 @@ const router = express.Router();
 const { setConfigLoader, sendCommand } = require("../utils/mikrotikConnectionManager");
 const MikroTikConnection = require("../models/MikrotikConnection");
 
-// Load a tenant's router config from DB
-setConfigLoader(async (tenantId) => {
-  const rec = await MikroTikConnection.findOne({ tenant: tenantId }).lean();
+// Load a tenant's router config from DB (supports multi-servers)
+setConfigLoader(async (tenantId, selector = {}) => {
+  let rec = null;
+  if (selector?.id) rec = await MikroTikConnection.findOne({ _id: selector.id, tenant: tenantId }).lean();
+  if (!rec && selector?.name) rec = await MikroTikConnection.findOne({ tenant: tenantId, name: selector.name }).lean();
+  if (!rec && selector?.host) {
+    rec = await MikroTikConnection.findOne({ tenant: tenantId, host: selector.host, port: selector.port || { $exists: true } }).lean();
+  }
+  if (!rec) rec = await MikroTikConnection.findOne({ tenant: tenantId, primary: true }).lean();
+  if (!rec) rec = await MikroTikConnection.findOne({ tenant: tenantId }).lean();
   if (!rec) return undefined;
   return {
     host: rec.host,
@@ -23,14 +30,19 @@ router.post("/", async (req, res) => {
     const tenantId = req.tenantId; // set by requireTenant
     if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
 
-    const { host, port, user, password, tls } = req.body || {};
+    const { host, port, user, password, tls, name, primary } = req.body || {};
     if (!host || !user || !password) {
       return res.status(400).json({ ok: false, error: "host, user, password required" });
     }
 
-    // Persist per-tenant connection config
+    // Upsert a connection named (default to 'default')
+    const connName = String(name || 'default').trim();
+    if (primary === true) {
+      // Demote existing primaries
+      await MikroTikConnection.updateMany({ tenant: tenantId, primary: true }, { $set: { primary: false } });
+    }
     const doc = await MikroTikConnection.findOneAndUpdate(
-      { tenant: tenantId },
+      { tenant: tenantId, name: connName },
       {
         $set: {
           host: String(host).trim(),
@@ -38,6 +50,7 @@ router.post("/", async (req, res) => {
           username: String(user).trim(),
           password: String(password),
           tls: !!tls,
+          primary: !!primary,
           updatedBy: req.user?.sub || null,
           lastVerifiedAt: null,
         },
@@ -46,7 +59,7 @@ router.post("/", async (req, res) => {
     );
 
     // Test by reading identity via pooled manager (must pass tenantId!)
-    const out = await sendCommand("/system/identity/print", [], { tenantId, timeoutMs: 10000 });
+    const out = await sendCommand("/system/identity/print", [], { tenantId, timeoutMs: 10000, serverId: doc._id.toString() });
     const identity = Array.isArray(out) && out[0]?.name;
 
     // Mark verified

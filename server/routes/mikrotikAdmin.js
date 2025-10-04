@@ -1,3 +1,12 @@
+function pickServerId(req) {
+  return (
+    req.headers['x-isp-server'] ||
+    req.headers['x-router-id'] ||
+    req.query?.serverId ||
+    req.query?.server ||
+    null
+  );
+}
 // routes/mikrotikAdmin.js
 const express = require("express");
 const rateLimit = require("express-rate-limit");
@@ -87,7 +96,7 @@ async function ensureAddressList(tenantId, cidr, comment, timeoutMs) {
 
   const words = [w("list", ADDRESS_LIST), w("address", cidr)];
   if (comment) words.push(w("comment", comment));
-  const res = await sendCommand("/ip/firewall/address-list/add", words, { tenantId, timeoutMs });
+  const res = await sendCommand("/ip/firewall/address-list/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
   return (Array.isArray(res) && res[0] && pickId(res[0])) || true;
 }
 
@@ -162,7 +171,7 @@ async function ensureMgmtAllowRule(tenantId, ports, timeoutMs) {
   ];
   if (placeBefore) words.push(w("place-before", placeBefore));
 
-  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs });
+  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
@@ -443,7 +452,7 @@ async function ensureFilterRule(tenantId, { chain, action, comment, matches = []
   const id = await findFilterIdByComment(tenantId, comment, timeoutMs);
   if (id) return id;
   const words = [w("chain", chain), w("action", action), w("comment", comment), ...matches];
-  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs });
+  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
@@ -602,3 +611,4 @@ router.post("/static/renew", limiter, guardRole, async (req, res) => {
     return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
   }
 });
+

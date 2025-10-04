@@ -1,5 +1,7 @@
 // App.js
 require("dotenv").config();
+const { validateEnv } = require("./utils/env");
+validateEnv();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -117,6 +119,7 @@ const platformAuthRoutes = require("./routes/platformAuth");  // /platform-api/a
 // MikroTik
 const mikrotikUserRoutes = require("./routes/mikrotikUser");
 const mikrotikConnectRoutes = require("./routes/mikrotikConnect");
+const mikrotikServersRoutes = require("./routes/mikrotikServers");
 const mikrotikRoutes = require("./routes/mikrotik");
 const mikrotikTerminalRoutes = require("./routes/mikrotikTerminal");
 const mikrotikAdminRoutes = require("./routes/mikrotikAdmin");
@@ -141,6 +144,7 @@ const stripeWebhook = require("./routes/stripeWebhook");
 const smsRoutes = require("./routes/sms");
 const paylinkRoutes = require("./routes/paylink");
 const paylinkAdminRoutes = require("./routes/paylinkAdmin");
+const healthDetailRoutes = require("./routes/health");
 
 // Debug
 const debugRoutes = require("./routes/debug");
@@ -150,6 +154,7 @@ const accountRoutes = require("./routes/account");
 
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
+app.use("/api/health", authenticate, requireTenant, healthDetailRoutes);
 
 // ----------------- Mount APIs -----------------
 // Tenant realm auth
@@ -177,8 +182,9 @@ app.use("/api/static-candidates", authenticate, requireTenant, staticCandidatesR
 
 // Public paylink endpoints (must be before any generic /api auth wrappers)
 app.use("/api/paylink", paylinkRoutes);
-// Public payment provider callbacks
+// Public payment provider callbacks (support both singular/plural path variations)
 app.use("/api/payment/callback", paymentCallbackRoutes);
+app.use("/api/payments/callback", paymentCallbackRoutes);
 app.use("/api/payment/stripe", stripeWebhook);
 
 // MikroTik PPPoE & connectivity
@@ -197,6 +203,7 @@ app.use(
 
 // Admin Mikrotik ops (whitelist, connection upsert/test)
 app.use("/api/mikrotik/admin", authenticate, requireTenant, mikrotikAdminRoutes);
+app.use("/api/mikrotik/servers", authenticate, requireTenant, mikrotikServersRoutes);
 // Static-IP migration & enforcement (monitor -> enforce)
 app.use("/api/static", authenticate, requireTenant, staticControlRoutes);
 

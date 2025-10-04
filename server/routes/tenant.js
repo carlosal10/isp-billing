@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/me', async (req, res) => {
   try {
     const t = await Tenant.findById(req.tenantId).lean();
-    return res.json({ ok: true, id: String(req.tenantId), name: t?.name || '', subdomain: t?.subdomain || null });
+    return res.json({ ok: true, id: String(req.tenantId), name: t?.name || '', subdomain: t?.subdomain || null, accountPrefix: t?.accountPrefix || '' });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'Failed to load tenant' });
   }
@@ -35,6 +35,20 @@ router.put('/subdomain', async (req, res) => {
     return res.json({ ok: true, subdomain: t?.subdomain || null, url });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'Failed to set subdomain' });
+  }
+});
+
+// ---- Account number prefix (tenant setting) ----
+// PUT /api/tenant/account/prefix { prefix }
+router.put('/account/prefix', async (req, res) => {
+  try {
+    const { prefix } = req.body || {};
+    const p = String(prefix || '').trim();
+    if (p.length > 20) return res.status(400).json({ ok: false, error: 'Prefix too long (max 20 chars)' });
+    const t = await Tenant.findByIdAndUpdate(req.tenantId, { $set: { accountPrefix: p } }, { new: true }).lean();
+    return res.json({ ok: true, accountPrefix: t?.accountPrefix || '' });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'Failed to set account prefix' });
   }
 });
 

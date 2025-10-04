@@ -13,10 +13,11 @@ router.get('/', limiter, async (req, res) => {
   const privateOnly = req.query.privateOnly === 'true';
   const permanentOnly = req.query.permanentOnly === 'true';
   try {
+    const serverId = req.headers['x-isp-server'] || req.query.serverId || null;
     const [arps, bridges, vlans] = await Promise.all([
-      sendCommand('/ip/arp/print', [], { tenantId, timeoutMs }).catch(() => []),
-      sendCommand('/interface/bridge/print', [], { tenantId, timeoutMs }).catch(() => []),
-      sendCommand('/interface/vlan/print', [], { tenantId, timeoutMs }).catch(() => []),
+      sendCommand('/ip/arp/print', [], { tenantId, timeoutMs, serverId }).catch(() => []),
+      sendCommand('/interface/bridge/print', [], { tenantId, timeoutMs, serverId }).catch(() => []),
+      sendCommand('/interface/vlan/print', [], { tenantId, timeoutMs, serverId }).catch(() => []),
     ]);
     const lanIf = new Set([
       ...((bridges||[]).map(b => String(b?.name||'').trim()).filter(Boolean)),

@@ -9,6 +9,7 @@ const customerSchema = new mongoose.Schema({
   address: String,
   routerIp: { type: String, default: null },
   status: { type: String, default: 'active' },
+  expiryDate: { type: Date },
   // Unique per-tenant (not globally unique)
   accountNumber: { type: String },
 

@@ -8,6 +8,7 @@ const ReminderLog = require('../models/ReminderLog');
 const { createPayLink } = require('../utils/paylink');
 const { renderTemplate, formatDateISO } = require('../utils/template');
 const { sendSms } = require('../utils/sms');
+const { mark } = require('../utils/heartbeats');
 
 let running = false;
 
@@ -101,7 +102,9 @@ cron.schedule('0 9 * * *', async () => {
   running = true;
   const now = new Date();
   try {
+    mark('smsReminders:start');
     await processTenantReminders(now);
+    mark('smsReminders:finish');
   } catch (e) {
     console.error('sms reminders job error', e);
   } finally {
@@ -112,4 +115,3 @@ cron.schedule('0 9 * * *', async () => {
 console.log('SMS reminder job scheduled (09:00 Africa/Nairobi)');
 
 module.exports = {};
-

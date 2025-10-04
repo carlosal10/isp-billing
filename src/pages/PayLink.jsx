@@ -49,6 +49,8 @@ export default function PayLink() {
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
+  const [paymentId, setPaymentId] = useState("");
+  const [status, setStatus] = useState("");
 
   const plan = info?.plan || null;
   const otherPlans = (info?.otherPlans || []).filter((p) => p._id !== plan?._id);
@@ -85,14 +87,43 @@ export default function PayLink() {
     setMessage("");
     setError("");
     try {
-      await api.post("/paylink/stk", { token, phone: msisdn });
+      const resp = await api.post("/paylink/stk", { token, phone: msisdn });
+      const pid = resp?.data?.paymentId;
+      if (pid) setPaymentId(pid);
       setMessage("Payment request sent. Check your phone to approve.");
+      // Begin short polling for confirmation
+      if (pid) pollStatus(pid);
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || "Failed to initiate payment");
     } finally {
       setSending(false);
     }
   }
+
+  // Poll status until terminal state or timeout
+  const pollStatus = useCallback(async (pid) => {
+    const started = Date.now();
+    const timeoutMs = 2 * 60 * 1000; // 2 minutes
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    while (Date.now() - started < timeoutMs) {
+      try {
+        const res = await api.get("/paylink/status", { params: { paymentId: pid } });
+        const st = res?.data?.status;
+        setStatus(st || "");
+        if (st === "Success" || st === "Validated") {
+          setMessage("Payment successful. Thank you!");
+          return;
+        }
+        if (st === "Failed" || st === "Reversed") {
+          setError("Payment failed. If charged, contact support with M-Pesa code.");
+          return;
+        }
+      } catch {}
+      await delay(3000);
+    }
+    // Timeout
+    setMessage((m) => m || "Still processing. You will be notified once confirmed.");
+  }, []);
 
   function handleKey(e) {
     if (e.key === "Enter" && canPay) {
@@ -200,6 +231,9 @@ export default function PayLink() {
                 <p className={message ? "msg-ok" : "msg-err"} role="status" aria-live="polite">
                   {message || error}
                 </p>
+              )}
+              {status && !error && (
+                <div className="sub" aria-live="polite">Status: {status}</div>
               )}
 
               {!!otherPlans.length && (

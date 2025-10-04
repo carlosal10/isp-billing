@@ -25,9 +25,9 @@ function parseDurationToDays(v) {
 }
 
 // -------------------- Safaricom STK Callback --------------------
-router.post('/callback', async (req, res) => {
+async function handleStkCallback(req, res) {
   const body = req.body;
-  console.log('📩 M-Pesa Callback:', JSON.stringify(body, null, 2));
+  console.log('M-Pesa Callback:', JSON.stringify(body, null, 2));
 
   try {
     // Safaricom sends response under Body.stkCallback
@@ -44,25 +44,46 @@ router.post('/callback', async (req, res) => {
     const mpesaReceipt = callbackMetadata.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
     const amount = callbackMetadata.find(i => i.Name === 'Amount')?.Value;
     const phone = callbackMetadata.find(i => i.Name === 'PhoneNumber')?.Value;
-    const accountReference = stkCallback.CheckoutRequestID; // we stored payment._id as reference
+    const checkoutRequestId = stkCallback.CheckoutRequestID;
+    const merchantRequestId = stkCallback.MerchantRequestID;
 
-    // Find payment
-    const payment = await Payment.findById(accountReference).populate('customer plan');
+    // Find payment (primary: by stored CheckoutRequestID)
+    let payment = await Payment.findOne({ checkoutRequestId }).populate('customer plan');
+
+    // Fallback: recent pending MPesa payment by phone+amount (last 2h)
+    if (!payment && phone && amount) {
+      const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      payment = await Payment.findOne({
+        method: 'mpesa',
+        status: 'Pending',
+        phoneNumber: String(phone),
+        amount: Number(amount),
+        createdAt: { $gte: since },
+      })
+        .sort({ createdAt: -1 })
+        .populate('customer plan');
+    }
+
     if (!payment) {
-      console.error('❌ Payment not found for reference:', accountReference);
+      console.error('Payment not found for checkout id:', checkoutRequestId);
     } else {
-      if (resultCode === 0) {
-        // ✅ Success
-        payment.status = 'Success';
-        payment.transactionId = mpesaReceipt;
-        payment.amount = amount || payment.amount;
-        payment.phoneNumber = phone || payment.phoneNumber;
+      // Always persist the gateway correlation ids if missing
+      if (!payment.checkoutRequestId && checkoutRequestId) payment.checkoutRequestId = checkoutRequestId;
+      if (!payment.merchantRequestId && merchantRequestId) payment.merchantRequestId = merchantRequestId;
 
-        // Set expiry date from plan duration (string like '30 days' or 'monthly')
-        if (payment.plan?.duration) {
-          const days = payment.plan.durationDays ?? parseDurationToDays(payment.plan.duration);
+      if (resultCode === 0) {
+        // Success
+        payment.status = 'Success';
+        if (mpesaReceipt) payment.transactionId = mpesaReceipt;
+        if (amount) payment.amount = Number(amount);
+        if (phone) payment.phoneNumber = String(phone);
+
+        // Compute expiry date from anchor: keep cycle date even if paid late
+        if (payment.plan?.duration || Number.isFinite(payment.plan?.durationDays)) {
+          const days = payment.plan?.durationDays ?? parseDurationToDays(payment.plan?.duration);
           if (Number.isFinite(days) && days > 0) {
-            payment.expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+            const anchor = payment.customer?.expiryDate ? new Date(payment.customer.expiryDate) : new Date();
+            payment.expiryDate = new Date(anchor.getTime() + days * 24 * 60 * 60 * 1000);
           }
         }
 
@@ -73,6 +94,7 @@ router.post('/callback', async (req, res) => {
           const planDoc = payment.plan;
           if (customerDoc) {
             customerDoc.status = 'active';
+            if (payment.expiryDate) customerDoc.expiryDate = payment.expiryDate;
             if (typeof customerDoc.save === 'function') {
               await customerDoc.save().catch(() => {});
             }
@@ -86,24 +108,26 @@ router.post('/callback', async (req, res) => {
           console.warn('[payment-callback] queue sync failed:', err?.message || err);
         }
 
-        console.log(`✅ Payment ${payment._id} confirmed & bandwidth applied.`);
+        console.log(`Payment ${payment._id} confirmed & bandwidth applied.`);
       } else {
-        // ❌ Failed
+        // Failed
         payment.status = 'Failed';
         await payment.save();
-        console.warn(`⚠️ Payment ${payment._id} failed: ${resultDesc}`);
+        console.warn(`Payment ${payment._id} failed: ${resultDesc}`);
       }
     }
 
     // Safaricom requires 0 response always
     res.json({ ResultCode: 0, ResultDesc: 'Success' });
-
   } catch (err) {
-    console.error('🔥 Callback handling failed:', err);
+    console.error('Callback handling failed:', err);
     // Still acknowledge to Safaricom
     res.json({ ResultCode: 0, ResultDesc: 'Handled with error' });
   }
-});
+}
+
+// Accept both .../callback and the mount root for flexibility
+router.post('/callback', handleStkCallback);
+router.post('/', handleStkCallback);
 
 module.exports = router;
-

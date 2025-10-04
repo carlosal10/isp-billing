@@ -142,13 +142,33 @@ router.post('/stk', async (req, res) => {
       status: 'Pending',
     });
 
+    // Compute callback URL (prefer explicit > env > fallback)
+    const apiBase = process.env.VITE_API_URL || '';
+    const serverBase = apiBase.replace(/\/?api\/?$/, '');
+    const cbUrl = callbackURL || process.env.MPESA_CALLBACK_URL || `${serverBase}/api/payment/callback/callback`;
+
     const stkResponse = await initiateSTKPush({
       ispId: req.tenantId,
       amount,
       phone,
-      accountReference: payment._id.toString(),
-      callbackURL,
+      // Use human-friendly reference (truncated safely by gateway util)
+      accountReference: customer.accountNumber,
+      callbackURL: cbUrl,
     });
+
+    // Persist Daraja correlation ids so callback can match this payment
+    try {
+      const checkoutRequestId = stkResponse?.CheckoutRequestID;
+      const merchantRequestId = stkResponse?.MerchantRequestID;
+      if (checkoutRequestId || merchantRequestId) {
+        await Payment.updateOne(
+          { _id: payment._id },
+          { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
+        );
+      }
+    } catch (e) {
+      console.warn('Could not persist STK ids to payment:', e?.message || e);
+    }
 
     res.json({ message: 'STK Push initiated', paymentId: payment._id, stkResponse });
   } catch (err) {
@@ -207,6 +227,11 @@ router.post('/manual', async (req, res) => {
     const {
       paymentId, customerId, accountNumber,
       transactionId, amount, method, notes, validatedBy,
+      // Optional backdating / expiry controls
+      paidAt,          // datetime to set as validatedAt
+      backdateTo,      // anchor date for cycle (expiry = anchor + plan duration)
+      expiryDate,      // explicit expiry override
+      extendDays,      // integer extra days to add
     } = req.body || {};
 
     if (!transactionId || !String(transactionId).trim()) {
@@ -228,9 +253,29 @@ router.post('/manual', async (req, res) => {
       payment.transactionId = String(transactionId).trim();
       payment.status = 'Success';
       payment.validatedBy = validatedBy || 'Manual Entry';
-      payment.validatedAt = new Date();
+      payment.validatedAt = paidAt ? new Date(paidAt) : new Date();
       if (notes) payment.notes = notes;
-      payment.expiryDate = new Date(Date.now() + durationDays * 86400000);
+      // Compute expiry base
+      let base = null;
+      if (backdateTo) {
+        const d = new Date(backdateTo);
+        if (!isNaN(d.getTime())) base = d;
+      }
+      if (!base && payment.customer?.expiryDate) base = new Date(payment.customer.expiryDate);
+      if (!base) base = new Date();
+
+      // Override vs computed
+      if (expiryDate) {
+        const d = new Date(expiryDate);
+        if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid expiryDate override', debugId });
+        payment.expiryDate = d;
+      } else {
+        payment.expiryDate = new Date(base.getTime() + durationDays * 86400000);
+      }
+      if (extendDays && Number.isFinite(Number(extendDays))) {
+        const extra = Math.round(Number(extendDays));
+        payment.expiryDate = new Date(payment.expiryDate.getTime() + extra * 86400000);
+      }
 
       try {
         await payment.save();
@@ -280,6 +325,18 @@ router.post('/manual', async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan.duration (must be days > 0)', debugId });
     }
 
+    // Backdating anchor and expiry
+    const anchor = backdateTo ? new Date(backdateTo) : (customer.expiryDate ? new Date(customer.expiryDate) : new Date());
+    const expiryBase = !isNaN(anchor.getTime()) ? anchor : new Date();
+    let computedExpiry = new Date(expiryBase.getTime() + durationDays * 86400000);
+    if (expiryDate) {
+      const d = new Date(expiryDate);
+      if (!isNaN(d.getTime())) computedExpiry = d;
+    }
+    if (extendDays && Number.isFinite(Number(extendDays))) {
+      computedExpiry = new Date(computedExpiry.getTime() + Math.round(Number(extendDays)) * 86400000);
+    }
+
     const doc = new Payment({
       tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
@@ -291,8 +348,8 @@ router.post('/manual', async (req, res) => {
       status: 'Success',
       transactionId: String(transactionId).trim(),
       validatedBy: validatedBy || 'Manual Entry',
-      validatedAt: new Date(),
-      expiryDate: new Date(Date.now() + durationDays * 86400000),
+      validatedAt: paidAt ? new Date(paidAt) : new Date(),
+      expiryDate: computedExpiry,
       ...(notes ? { notes } : {}),
     });
 
@@ -365,9 +422,9 @@ router.post('/stripe/create', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { transactionId, amount, method, notes, status, expiryDate, editedBy } = req.body || {};
+    const { transactionId, amount, method, notes, status, expiryDate, editedBy, validatedAt, backdateTo, extendDays } = req.body || {};
 
-    const payment = await Payment.findOne({ _id: id, tenantId: req.tenantId });
+    const payment = await Payment.findOne({ _id: id, tenantId: req.tenantId }).populate('plan');
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
     if (payment.isDeleted) return res.status(400).json({ error: 'Cannot edit a deleted payment' });
 
@@ -390,6 +447,25 @@ router.put('/:id', async (req, res) => {
       const d = expiryDate ? new Date(expiryDate) : null;
       if (d && isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid expiryDate' });
       payment.expiryDate = d || payment.expiryDate;
+    }
+    if (validatedAt !== undefined) {
+      const d = validatedAt ? new Date(validatedAt) : null;
+      if (d && isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid validatedAt' });
+      if (d) payment.validatedAt = d;
+    }
+    // Backdate/extend helpers: recompute expiry from an anchor or add days
+    if (backdateTo !== undefined) {
+      const d = backdateTo ? new Date(backdateTo) : null;
+      if (d && isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid backdateTo' });
+      const days = payment.plan?.durationDays ?? parseDurationToDays(payment.plan?.duration);
+      if (d && Number.isFinite(days) && days > 0) payment.expiryDate = new Date(d.getTime() + days * 86400000);
+    }
+    if (extendDays !== undefined) {
+      const n = Number(extendDays);
+      if (!Number.isNaN(n)) {
+        const base = payment.expiryDate?.getTime() || Date.now();
+        payment.expiryDate = new Date(base + Math.round(n) * 86400000);
+      }
     }
 
     payment.editedAt = new Date();

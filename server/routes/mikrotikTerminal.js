@@ -61,6 +61,7 @@ const limiter = rateLimit({
 const Body = z.object({
   command: z.string().min(1).max(512),
   timeoutMs: z.number().int().min(500).max(60000).optional(),
+  serverId: z.string().optional(),
 });
 
 /* ---------- Utils ---------- */
@@ -146,7 +147,7 @@ router.post("/exec", limiter, async (req, res) => {
     const parsed = Body.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
-    const { command, timeoutMs = 10000 } = parsed.data;
+    const { command, timeoutMs = 10000, serverId: bodyServer } = parsed.data;
 
     const { path, words } = parseCli(command);
     if (!isAllowed(path)) return res.status(403).json({ ok: false, error: `Command not allowed: ${path}` });
@@ -154,7 +155,9 @@ router.post("/exec", limiter, async (req, res) => {
     console.log("🛰️  MT exec:", redact(command));
 
     // Bind execution to the current tenant context
-    const result = await sendCommand(path, words, { tenantId, timeoutMs });
+    const hdrServer = req.headers['x-isp-server'] || req.headers['x-router-id'] || null;
+    const serverId = bodyServer || hdrServer || req.query?.serverId || null;
+    const result = await sendCommand(path, words, { tenantId, timeoutMs, serverId });
 
     return res.json({ ok: true, path, words, result });
   } catch (err) {
