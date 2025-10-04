@@ -1,42 +1,57 @@
 // server/routes/auth.js
-import express from "express";
-import bcrypt from "bcryptjs"; // if you hash passwords
-import User from "../models/User.js";
-import Membership from "../models/Membership.js";
-import RefreshToken from "../models/RefreshToken.js";
-import { signAccessToken, refreshExpiry } from "../security/auth.js";
-import crypto from "node:crypto";
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const crypto = require("node:crypto");
+const User = require("../models/User");
+const Membership = require("../models/Membership");
+const RefreshToken = require("../models/RefreshToken");
+const { signAccessToken, refreshExpiry } = require("../security/auth");
 
 const router = express.Router();
 
-// Utility: hash refresh tokens at rest (recommended)
+// ---- utils ----
 function hashToken(t) {
   return crypto.createHash("sha256").update(t).digest("hex");
 }
 
-// LOGIN — no requireAuth here
+async function resolveTenantIdForLogin(user, ispIdFromBody) {
+  // preferred: provided by client
+  if (ispIdFromBody) return ispIdFromBody;
+  // fallback: user's primaryTenant
+  if (user.primaryTenant) return user.primaryTenant;
+  // last resort: first membership
+  const m = await Membership.findOne({ user: user._id }).lean();
+  return m?.tenant || null;
+}
+
+// ---- POST /api/auth/login ----
 router.post("/login", async (req, res) => {
   try {
-    const { email, password, ispId } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    const { email, password, ispId } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ ok: false, error: "Invalid payload" });
+    }
 
-    // if you store hashed passwords:
+    const user = await User.findOne({ email });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    }
+
     const ok = await bcrypt.compare(password, user.passwordHash || "");
     if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
 
-    // ensure membership when multitenant
-    if (ispId) {
-      const has = await Membership.findOne({ user: user._id, tenant: ispId });
-      if (!has) return res.status(403).json({ ok: false, error: "No membership for tenant" });
-    }
+    const tenantId = await resolveTenantIdForLogin(user, ispId);
+    if (!tenantId) return res.status(400).json({ ok: false, error: "No tenant context" });
 
-    const accessToken = signAccessToken({ user, tenantId: ispId });
+    const mem = await Membership.findOne({ user: user._id, tenant: tenantId }).lean();
+    if (!mem) return res.status(403).json({ ok: false, error: "No membership for tenant" });
+
+    const accessToken = signAccessToken({ user, tenantId });
     const rawRefresh = crypto.randomBytes(48).toString("base64url");
     await RefreshToken.create({
-      tokenHash: hashToken(rawRefresh),   // store hash, not raw
+      tokenHash: hashToken(rawRefresh), // store hash only
       user: user._id,
-      tenant: ispId,
+      tenant: tenantId,
       expiresAt: refreshExpiry(),
       isRevoked: false,
     });
@@ -45,19 +60,20 @@ router.post("/login", async (req, res) => {
       ok: true,
       accessToken,
       refreshToken: rawRefresh,
-      ispId,
-      user: { id: user._id, email: user.email, displayName: user.displayName },
+      ispId: String(tenantId),
+      user: { id: String(user._id), email: user.email, displayName: user.displayName },
     });
   } catch (e) {
-    console.error(e);
+    console.error("login error:", e);
     return res.status(500).json({ ok: false, error: "Login failed" });
   }
 });
 
-// REFRESH — no requireAuth here
+// ---- POST /api/auth/refresh ----
+// Public endpoint: do NOT protect with requireAuth
 router.post("/refresh", async (req, res) => {
   try {
-    const raw = req.body?.refreshToken; // or read from cookie
+    const raw = req.body?.refreshToken;
     if (!raw) return res.status(401).json({ ok: false, error: "Missing refresh token" });
 
     const doc = await RefreshToken.findOne({ tokenHash: hashToken(raw) });
@@ -66,11 +82,12 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ ok: false, error: "Expired token" });
     }
 
-    // (Optional) re-check membership
-    const membership = await Membership.findOne({ user: doc.user, tenant: doc.tenant });
-    if (!membership) return res.status(403).json({ ok: false, error: "No membership for tenant" });
+    const user = await User.findById(doc.user).lean();
+    if (!user || user.isActive === false) {
+      return res.status(401).json({ ok: false, error: "User disabled" });
+    }
 
-    // ROTATE: revoke old, mint new
+    // rotate refresh: revoke old, mint new
     await RefreshToken.updateOne({ _id: doc._id }, { $set: { isRevoked: true } });
     const nextRaw = crypto.randomBytes(48).toString("base64url");
     await RefreshToken.create({
@@ -81,10 +98,7 @@ router.post("/refresh", async (req, res) => {
       isRevoked: false,
     });
 
-    // New access
-    const user = await User.findById(doc.user).lean();
     const accessToken = signAccessToken({ user, tenantId: doc.tenant });
-
     return res.json({
       ok: true,
       accessToken,
@@ -93,23 +107,26 @@ router.post("/refresh", async (req, res) => {
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
     });
   } catch (e) {
-    console.error(e);
+    console.error("refresh error:", e);
     return res.status(500).json({ ok: false, error: "Refresh failed" });
   }
 });
 
-// LOGOUT — no requireAuth required; just revoke the presented refresh
+// ---- POST /api/auth/logout ----
 router.post("/logout", async (req, res) => {
   try {
     const raw = req.body?.refreshToken;
     if (raw) {
-      await RefreshToken.updateMany({ tokenHash: hashToken(raw) }, { $set: { isRevoked: true } });
+      await RefreshToken.updateMany(
+        { tokenHash: hashToken(raw) },
+        { $set: { isRevoked: true } }
+      );
     }
     return res.json({ ok: true });
   } catch (e) {
-    console.error(e);
+    console.error("logout error:", e);
     return res.status(500).json({ ok: false, error: "Logout failed" });
   }
 });
 
-export default router;
+module.exports = router;
