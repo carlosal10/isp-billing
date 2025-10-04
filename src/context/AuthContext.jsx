@@ -11,27 +11,23 @@ import React, {
 import { jwtDecode } from "jwt-decode";
 import { api, setApiAccessors } from "../lib/apiClient";
 
+/* ---------- helpers ---------- */
+const AUTH_KEY = "auth"; // { accessToken, refreshToken, ispId, user }
+
+const safeParse = (s) => {
+  try { return JSON.parse(s || "null"); } catch { return null; }
+};
+const loadPersisted = () => safeParse(localStorage.getItem(AUTH_KEY));
+const persistAuth = (obj) => {
+  if (!obj) localStorage.removeItem(AUTH_KEY);
+  else localStorage.setItem(AUTH_KEY, JSON.stringify(obj));
+};
+
 const decodeToken = (t) => {
-  try {
-    return jwtDecode(t);
-  } catch {
-    return null;
-  }
+  try { return jwtDecode(t); } catch { return null; }
 };
 const msUntil = (exp) => Math.max(exp * 1000 - Date.now(), 0);
-const loadPersisted = () => {
-  try {
-    return JSON.parse(localStorage.getItem("auth") || "null");
-  } catch {
-    return null;
-  }
-};
-const persistAuth = (auth) =>
-  auth
-    ? localStorage.setItem("auth", JSON.stringify(auth))
-    : localStorage.removeItem("auth");
 
-// Fallback user builder if backend doesn’t send a user object
 const userFromToken = (token) => {
   const d = decodeToken(token);
   if (!d) return null;
@@ -42,35 +38,47 @@ const userFromToken = (token) => {
   };
 };
 
+/* ---------- context ---------- */
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
+/**
+ * Drop-in AuthProvider with:
+ * - status: "unknown" | "auth" | "guest" to gate routing
+ * - strict-mode-safe single init
+ * - refresh-before-logout flow
+ * - scheduled silent refresh
+ */
 export function AuthProvider({ children }) {
+  // public state
+  const [status, setStatus] = useState("unknown"); // "unknown" | "auth" | "guest"
   const [user, setUser] = useState(null);
   const [ispId, setIspId] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
   const [refreshToken, setRefreshToken] = useState(null);
+
+  // internals
   const refreshTimerRef = useRef(null);
+  const inFlightRefreshRef = useRef(null); // Promise when refreshing
+  const didInitRef = useRef(false);        // guard StrictMode double-run
 
   const clearRefreshTimer = useCallback(() => {
-    clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = null;
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
   }, []);
 
-  const scheduleRefresh = useCallback(
-    (decoded) => {
-      clearRefreshTimer();
-      if (!decoded?.exp) return;
-      const ms = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
-      refreshTimerRef.current = setTimeout(() => {
-        refresh().catch(() => logout());
-      }, ms);
-    },
-    // refresh & logout are defined with useCallback below, but JS hoisting
-    // means we still need to list them as deps to satisfy ESLint.
+  const scheduleRefresh = useCallback((decoded) => {
+    clearRefreshTimer();
+    if (!decoded?.exp) return;
+    // refresh 30s before expiry, minimum 1s from now
+    const delay = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
+    refreshTimerRef.current = setTimeout(() => {
+      refresh().catch(() => logout());
+    }, delay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+  }, []);
 
   const setAuthState = useCallback(
     ({ access, refresh: r, isp, usr }) => {
@@ -78,7 +86,6 @@ export function AuthProvider({ children }) {
       setRefreshToken(r || null);
       setIspId(isp || null);
 
-      // If caller didn't supply a user, derive from token once
       if (usr !== undefined) {
         setUser(usr);
       } else if (access) {
@@ -87,135 +94,162 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
 
-      const toPersist =
-        access && r
-          ? {
-              accessToken: access,
-              refreshToken: r,
-              ispId: isp,
-              user:
-                usr !== undefined
-                  ? usr
-                  : access
-                  ? user ?? userFromToken(access)
-                  : null,
-            }
-          : null;
-      persistAuth(toPersist);
+      // persist only when both tokens exist; otherwise clear
+      if (access && r) {
+        const existing = loadPersisted() || {};
+        const toSave = {
+          accessToken: access,
+          refreshToken: r,
+          ispId: isp ?? existing.ispId ?? null,
+          user:
+            usr !== undefined
+              ? usr
+              : existing.user ?? userFromToken(access) ?? null,
+        };
+        persistAuth(toSave);
+      } else {
+        persistAuth(null);
+      }
 
       const decoded = access ? decodeToken(access) : null;
       if (decoded) scheduleRefresh(decoded);
     },
-    [scheduleRefresh, user]
+    [scheduleRefresh]
   );
 
+  /* ---------- core ops ---------- */
+
   const refresh = useCallback(async () => {
-    const r = refreshToken || loadPersisted()?.refreshToken;
-    if (!r) throw new Error("No refresh token");
-    const { data } = await api.post("/auth/refresh", { refreshToken: r });
-    if (!data?.ok || !data?.accessToken)
-      throw new Error(data?.error || "Refresh failed");
+    // de-duplicate concurrent refreshes
+    if (inFlightRefreshRef.current) return inFlightRefreshRef.current;
 
-    const saved = loadPersisted() || {};
-    const fallbackUser =
-      saved.user || userFromToken(data.accessToken) || user || null;
-    const isp =
-      ispId || saved.ispId || decodeToken(data.accessToken)?.ispId || null;
+    const run = (async () => {
+      const r = refreshToken || loadPersisted()?.refreshToken;
+      if (!r) throw new Error("No refresh token");
 
-    setAuthState({ access: data.accessToken, refresh: r, isp, usr: fallbackUser });
-    return data.accessToken;
+      const { data } = await api.post("/auth/refresh", { refreshToken: r });
+      if (!data?.ok || !data?.accessToken) {
+        throw new Error(data?.error || "Refresh failed");
+      }
+
+      const saved = loadPersisted() || {};
+      const nextUser = saved.user || userFromToken(data.accessToken) || user || null;
+      const dec = decodeToken(data.accessToken);
+      const nextIsp = ispId || saved.ispId || dec?.ispId || null;
+
+      setAuthState({ access: data.accessToken, refresh: r, isp: nextIsp, usr: nextUser });
+      setStatus("auth");
+      return data.accessToken;
+    })();
+
+    inFlightRefreshRef.current = run;
+    try {
+      return await run;
+    } finally {
+      inFlightRefreshRef.current = null;
+    }
   }, [refreshToken, ispId, user, setAuthState]);
 
   const logout = useCallback(async () => {
     try {
       const r = refreshToken || loadPersisted()?.refreshToken;
       if (r) await api.post("/auth/logout", { refreshToken: r });
-    } catch {
-      // ignore network errors on logout
-    }
+    } catch { /* ignore */ }
     clearRefreshTimer();
     setAuthState({ access: null, refresh: null, isp: null, usr: null });
+    setStatus("guest");
   }, [refreshToken, clearRefreshTimer, setAuthState]);
 
   const login = useCallback(
     async ({ email, password, ispId: ispOverride }) => {
-      const { data } = await api.post("/auth/login", {
-        email,
-        password,
-        ispId: ispOverride,
-      });
-      if (!data?.ok || !data?.accessToken)
-        throw new Error(data?.error || "Login failed");
+      const { data } = await api.post("/auth/login", { email, password, ispId: ispOverride });
+      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Login failed");
+
       const dec = decodeToken(data.accessToken);
-      const isp = data.ispId || dec?.ispId || ispOverride;
-      const fallbackUser = data.user || userFromToken(data.accessToken);
-      setAuthState({
-        access: data.accessToken,
-        refresh: data.refreshToken,
-        isp,
-        usr: fallbackUser,
-      });
+      const isp = data.ispId || dec?.ispId || ispOverride || null;
+      const u = data.user || userFromToken(data.accessToken) || null;
+
+      setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
+      setStatus("auth");
     },
     [setAuthState]
   );
 
   const register = useCallback(
     async ({ tenantName, displayName, email, password }) => {
-      const { data } = await api.post("/auth/register", {
-        tenantName,
-        displayName,
-        email,
-        password,
-      });
-      if (!data?.ok || !data?.accessToken)
-        throw new Error(data?.error || "Registration failed");
+      const { data } = await api.post("/auth/register", { tenantName, displayName, email, password });
+      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Registration failed");
+
       const dec = decodeToken(data.accessToken);
       const isp = data.ispId || dec?.ispId || null;
-      const fallbackUser = data.user || userFromToken(data.accessToken);
-      setAuthState({
-        access: data.accessToken,
-        refresh: data.refreshToken,
-        isp,
-        usr: fallbackUser,
-      });
+      const u = data.user || userFromToken(data.accessToken) || null;
+
+      setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
+      setStatus("auth");
     },
     [setAuthState]
   );
 
-  // Wire axios accessors once on mount
+  /* ---------- mount/bootstrap ---------- */
   useEffect(() => {
+    if (didInitRef.current) return; // StrictMode-safe
+    didInitRef.current = true;
+
+    // Wire api accessors once
     setApiAccessors({
       getAccessToken: () => loadPersisted()?.accessToken || null,
-      getIspId: () => loadPersisted()?.ispId || null,
-      tryRefresh: () => refresh(),
-      forceLogout: () => logout(),
+      getIspId:       () => loadPersisted()?.ispId || null,
+      tryRefresh:     () => refresh(),
+      forceLogout:    () => logout(),
     });
 
     const saved = loadPersisted();
-    if (saved?.accessToken && saved?.refreshToken) {
+    const haveBoth = Boolean(saved?.accessToken && saved?.refreshToken);
+
+    (async () => {
+      if (!haveBoth) {
+        persistAuth(null);
+        setStatus("guest");
+        return;
+      }
+
       const dec = decodeToken(saved.accessToken);
       setIspId(saved.ispId || dec?.ispId || null);
       setAccessToken(saved.accessToken);
       setRefreshToken(saved.refreshToken);
       setUser(saved.user || userFromToken(saved.accessToken));
-      if (dec) scheduleRefresh(dec);
-    }
+
+      const nearExpiry = !dec?.exp || msUntil(dec.exp) < 30_000;
+
+      try {
+        if (nearExpiry) {
+          await refresh(); // will set status to "auth"
+        } else {
+          // quick validation; if it fails, refresh; if that fails, guest
+          try {
+            await api.get("/auth/me");
+            scheduleRefresh(dec);
+            setStatus("auth");
+          } catch {
+            await refresh(); // throws if refresh fails
+          }
+        }
+      } catch {
+        await logout();
+      }
+    })();
 
     return () => clearRefreshTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once
+  }, []);
 
-  // Consider the user "authed" if we have an access token (in state or persisted)
-  const isAuthed = useMemo(
-    () => Boolean(accessToken || loadPersisted()?.accessToken),
-    [accessToken]
-  );
-
-  // ✅ Include all functions used in the memo value to satisfy ESLint
+  /* ---------- context value ---------- */
+  const isAuthed = status === "auth";
   const value = useMemo(
     () => ({
+      status,
       isAuthed,
-      isAuthenticated: isAuthed, // alias for callers expecting this name
+      isAuthenticated: isAuthed, // alias
       user,
       ispId,
       token: accessToken,
@@ -224,7 +258,7 @@ export function AuthProvider({ children }) {
       refresh,
       logout,
     }),
-    [isAuthed, user, ispId, accessToken, login, register, refresh, logout]
+    [status, isAuthed, user, ispId, accessToken, login, register, refresh, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

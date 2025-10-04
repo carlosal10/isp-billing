@@ -1,7 +1,22 @@
 // src/lib/apiClient.js
 import axios from "axios";
 
-// ---- local storage (minimal)
+/** ================================
+ *  Config
+ *  ================================ */
+export const API_BASE =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000/api"
+    : "https://isp-billing-uq58.onrender.com/api");
+
+// Flip this to true if you ever switch to cookie-based auth/refresh.
+const USE_COOKIES = false;
+
+/** ================================
+ *  Minimal local storage helpers
+ *  (kept here so api works before AuthContext mounts)
+ *  ================================ */
 const KEY = "auth";
 const read = () => {
   try {
@@ -13,55 +28,74 @@ const read = () => {
 const getAccess = () => read()?.accessToken || null;
 const getIspId = () => read()?.ispId || null;
 
-// ---- API base URL
-export const API_BASE =
-  process.env.REACT_APP_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:5000/api"
-    : "https://isp-billing-uq58.onrender.com/api");
-
+/** ================================
+ *  Axios instance
+ *  ================================ */
 export const api = axios.create({
   baseURL: API_BASE,
   timeout: 20000,
-  withCredentials: false,
+  withCredentials: USE_COOKIES, // only true if using cookies
+  headers: {
+    "X-Requested-With": "XMLHttpRequest",
+  },
 });
 
-// ---- pluggable accessors wired by AuthContext
+/** ================================
+ *  Pluggable accessors (wired once by AuthContext)
+ *  ================================ */
 let accessors = {
   getAccessToken: () => getAccess(),
   getIspId: () => getIspId(),
   getServerId: () => null,
-  tryRefresh: null,
-  forceLogout: null,
+  tryRefresh: null,  // async () => string (newAccessToken)
+  forceLogout: null, // () => void
 };
-export function setApiAccessors(a) {
+
+export function setApiAccessors(a = {}) {
   accessors = { ...accessors, ...a };
 }
 
-// ---- auth headers
+/** ================================
+ *  Request interceptor — attach headers
+ *  ================================ */
 api.interceptors.request.use((config) => {
   const token = accessors.getAccessToken?.();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    // Ensure headers object exists
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   const isp = accessors.getIspId?.();
-  if (isp) config.headers["x-isp-id"] = isp;
+  if (isp) {
+    config.headers = config.headers || {};
+    config.headers["x-isp-id"] = isp;
+  }
   const server = accessors.getServerId?.();
-  if (server) config.headers["x-isp-server"] = server;
+  if (server) {
+    config.headers = config.headers || {};
+    config.headers["x-isp-server"] = server;
+  }
   return config;
 });
 
-// ---- single-flight refresh queue
+/** ================================
+ *  Refresh single-flight queue
+ *  ================================ */
 let isRefreshing = false;
-let queue = [];
-const enqueue = (cb) =>
-  new Promise((resolve, reject) => queue.push({ resolve, reject, cb }));
-const flushQueue = (error, token = null) => {
-  queue.forEach(({ resolve, reject, cb }) =>
-    error ? reject(error) : resolve(cb(token))
-  );
+let queue = []; // [{ resolve, reject, resume }]
+const enqueue = (resume) =>
+  new Promise((resolve, reject) => queue.push({ resolve, reject, resume }));
+const flushQueue = (error, newToken = null) => {
+  queue.forEach(({ resolve, reject, resume }) => {
+    if (error) reject(error);
+    else resolve(resume(newToken));
+  });
   queue = [];
 };
 
-// ---- shape Axios errors so UI always gets a helpful message
+/** ================================
+ *  Error shaping — keep UI messages tight
+ *  ================================ */
 function annotateAxiosError(err) {
   try {
     const cfg = err?.config || {};
@@ -73,7 +107,6 @@ function annotateAxiosError(err) {
       err?.response?.data?.message ||
       err?.message ||
       "Request failed";
-    // Only show the message (optionally with status); hide method and URL
     err.message = status ? `[${status}] ${serverMsg}` : `${serverMsg}`;
     err.__debug = {
       status,
@@ -86,46 +119,55 @@ function annotateAxiosError(err) {
   return err;
 }
 
-// ---- 401 handling + refresh
+/** ================================
+ *  401/419 handling + refresh
+ *  ================================ */
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
-    const original = error.config;
+    const original = error?.config || {};
+    const status = error?.response?.status;
 
-    if (error?.response?.status !== 401 || original?._retry) {
+    // Treat 401 (unauth) and 419/440 (session expired) similarly
+    const isAuthExpired = status === 401 || status === 419 || status === 440;
+
+    // If not auth error or we've already retried once, surface the error
+    if (!isAuthExpired || original._retry) {
       throw annotateAxiosError(error);
     }
-    if (
-      original.url?.includes("/auth/login") ||
-      original.url?.includes("/auth/refresh")
-    ) {
+
+    // Never try to refresh while calling login/refresh/logout endpoints
+    const url = String(original.url || "");
+    if (url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/logout")) {
       throw annotateAxiosError(error);
     }
 
+    // If a refresh is in-flight, queue and resume once done
     if (isRefreshing) {
       return enqueue((token) => {
-        original.headers = {
-          ...(original.headers || {}),
-          Authorization: `Bearer ${token}`,
-        };
-        original._retry = true;
-        return api(original);
+        const headers = { ...(original.headers || {}) };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const retried = { ...original, headers, _retry: true };
+        return api(retried);
       });
     }
 
+    // Start a new refresh
     original._retry = true;
     isRefreshing = true;
+
     try {
       if (!accessors.tryRefresh) throw annotateAxiosError(error);
       const newToken = await accessors.tryRefresh();
       flushQueue(null, newToken);
-      original.headers = {
-        ...(original.headers || {}),
-        Authorization: `Bearer ${newToken}`,
-      };
-      return api(original);
+
+      const headers = { ...(original.headers || {}) };
+      if (newToken) headers.Authorization = `Bearer ${newToken}`;
+      const retried = { ...original, headers };
+      return api(retried);
     } catch (e) {
       flushQueue(e, null);
+      // Force logout if refresh failed (session is dead)
       accessors.forceLogout && accessors.forceLogout();
       throw annotateAxiosError(e);
     } finally {

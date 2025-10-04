@@ -8,12 +8,12 @@ import { ServerProvider } from "./context/ServerContext";
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
-  <React.StrictMode>
+  
     <AuthProvider>
       <ServerProvider>
         <App />
       </ServerProvider>
     </AuthProvider>
-  </React.StrictMode>
+  
 );
 
