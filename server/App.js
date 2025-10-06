@@ -70,10 +70,11 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const dur = Date.now() - t0;
     const sawAuth = !!req.headers.authorization;
+    const hasAtCookie = !!(req.cookies && req.cookies.at);
     const isp = req.headers["x-isp-id"] || null;
     console.log(
       `[${req.method}] ${res.statusCode} ${req.originalUrl} ${dur}ms`,
-      { sawAuth, isp }
+      { sawAuth, hasAtCookie, isp }
     );
   });
   next();
@@ -93,11 +94,20 @@ const authenticate = (req, res, next) => {
   // Fallback to access token cookie (set on login/refresh)
   const cookieToken = req.cookies?.at;
   const token = headerToken || cookieToken;
-  if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+  if (!token) {
+    console.warn('[authz] Missing token', {
+      url: req.originalUrl,
+      hasAuthHeader: !!req.headers.authorization,
+      hasAtCookie: !!cookieToken,
+      origin: req.headers.origin || null,
+    });
+    return res.status(401).json({ ok: false, error: "Missing token" });
+  }
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET); // { sub/email/ispId, ... }
     next();
   } catch (err) {
+    console.warn('[authz] Invalid or expired token', { url: req.originalUrl });
     return res.status(401).json({ ok: false, error: "Invalid or expired token" });
   }
 };

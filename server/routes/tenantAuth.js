@@ -47,14 +47,21 @@ async function issueRefreshToken({ userId, tenantId }) {
 /* ----------------- Register ----------------- */
 router.post("/register", async (req, res) => {
   try {
+    console.log('[auth] register request', {
+      ip: req.ip,
+      origin: req.headers.origin || null,
+      referer: req.headers.referer || null,
+    });
     const parsed = RegisterSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.warn('[auth] register invalid payload', parsed.error?.issues || []);
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
     const { tenantName, displayName, email, password } = parsed.data;
 
     const existing = await User.findOne({ email }).lean();
     if (existing) {
+      console.warn('[auth] register email exists', { email });
       return res.status(409).json({ ok: false, error: "Email already exists" });
     }
 
@@ -80,6 +87,20 @@ router.post("/register", async (req, res) => {
       return res.status(500).json({ ok: false, error: "Failed to issue refresh token" });
     }
 
+    // Log token issuance (no secrets)
+    try {
+      console.log('[auth] tokens issued', {
+        flow: 'register',
+        userId: String(user._id),
+        tenantId: String(tenant._id),
+        hasAccess: !!accessToken,
+        hasRefresh: !!refreshToken,
+        accessBytes: accessToken ? accessToken.length : 0,
+        refreshBytes: refreshToken ? refreshToken.length : 0,
+      });
+    } catch {}
+
+    console.log('[auth] register success', { userId: String(user._id), tenantId: String(tenant._id) });
     return res.json({
       ok: true,
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
@@ -88,7 +109,7 @@ router.post("/register", async (req, res) => {
       refreshToken,
     });
   } catch (e) {
-    console.error("register error:", e);
+    console.error("[auth] register error:", e?.message || e);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
@@ -96,19 +117,28 @@ router.post("/register", async (req, res) => {
 /* ----------------- Login ----------------- */
 router.post("/login", async (req, res) => {
   try {
+    console.log('[auth] login request', {
+      ip: req.ip,
+      origin: req.headers.origin || null,
+      hasAuthHeader: !!req.headers.authorization,
+      hasAtCookie: !!req.cookies?.at,
+    });
     const parsed = LoginSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.warn('[auth] login invalid payload', parsed.error?.issues || []);
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
 
     const { email, password, ispId } = parsed.data;
     const user = await User.findOne({ email });
     if (!user || !user.isActive) {
+      console.warn('[auth] login invalid user or inactive', { email, isActive: user?.isActive ?? null });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash || "");
     if (!ok) {
+      console.warn('[auth] login bad password', { userId: String(user._id) });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
@@ -119,17 +149,33 @@ router.post("/login", async (req, res) => {
       tenantId = m?.tenant;
     }
     if (!tenantId) {
+      console.warn('[auth] login no tenant context', { userId: String(user._id) });
       return res.status(400).json({ ok: false, error: "No tenant context" });
     }
 
     const mem = await Membership.findOne({ user: user._id, tenant: tenantId }).lean();
     if (!mem) {
+      console.warn('[auth] login no membership', { userId: String(user._id), tenantId: String(tenantId) });
       return res.status(403).json({ ok: false, error: "No access to tenant" });
     }
 
     const accessToken = signTenantAccessToken({ user, tenantId });
     const refreshToken = await issueRefreshToken({ userId: user._id, tenantId });
 
+    // Log token issuance (no secrets)
+    try {
+      console.log('[auth] tokens issued', {
+        flow: 'login',
+        userId: String(user._id),
+        tenantId: String(tenantId),
+        hasAccess: !!accessToken,
+        hasRefresh: !!refreshToken,
+        accessBytes: accessToken ? accessToken.length : 0,
+        refreshBytes: refreshToken ? refreshToken.length : 0,
+      });
+    } catch {}
+
+    console.log('[auth] login success', { userId: String(user._id), tenantId: String(tenantId) });
     return res.json({
       ok: true,
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
@@ -138,7 +184,7 @@ router.post("/login", async (req, res) => {
       refreshToken,
     });
   } catch (e) {
-    console.error("login error:", e);
+    console.error("[auth] login error:", e?.message || e);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
@@ -146,13 +192,20 @@ router.post("/login", async (req, res) => {
 /* ----------------- Refresh (rotate) ----------------- */
 router.post("/refresh", async (req, res) => {
   try {
+    console.log('[auth] refresh request', {
+      ip: req.ip,
+      hasBodyToken: !!req.body?.refreshToken,
+      hasRtCookie: !!req.cookies?.rt,
+    });
     const parsed = RefreshSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.warn('[auth] refresh invalid payload', parsed.error?.issues || []);
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
 
     const current = await RefreshToken.findOne({ token: parsed.data.refreshToken });
     if (!current || current.isRevoked || current.expiresAt < new Date()) {
+      console.warn('[auth] refresh invalid token', { reason: !current ? 'not_found' : current.isRevoked ? 'revoked' : 'expired' });
       return res.status(401).json({ ok: false, error: "Invalid refresh" });
     }
 
@@ -175,6 +228,20 @@ router.post("/refresh", async (req, res) => {
 
     const accessToken = signTenantAccessToken({ user, tenantId: current.tenant });
 
+    // Log token issuance (no secrets)
+    try {
+      console.log('[auth] tokens issued', {
+        flow: 'refresh',
+        userId: String(user._id),
+        tenantId: String(current.tenant),
+        hasAccess: !!accessToken,
+        hasRefresh: !!nextRaw,
+        accessBytes: accessToken ? accessToken.length : 0,
+        refreshBytes: nextRaw ? nextRaw.length : 0,
+      });
+    } catch {}
+
+    console.log('[auth] refresh success', { userId: String(user._id), tenantId: String(current.tenant) });
     return res.json({
       ok: true,
       accessToken,
@@ -183,7 +250,7 @@ router.post("/refresh", async (req, res) => {
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
     });
   } catch (e) {
-    console.error("refresh error:", e);
+    console.error("[auth] refresh error:", e?.message || e);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
@@ -195,9 +262,14 @@ router.post("/logout", async (req, res) => {
     if (token) {
       await RefreshToken.updateMany({ token }, { $set: { isRevoked: true } });
     }
+    console.log('[auth] logout', {
+      ip: req.ip,
+      hadBodyToken: !!req.body?.refreshToken,
+      hadRtCookie: !!req.cookies?.rt,
+    });
     return res.json({ ok: true });
   } catch (e) {
-    console.error("logout error:", e);
+    console.error("[auth] logout error:", e?.message || e);
     return res.json({ ok: true });
   }
 });
