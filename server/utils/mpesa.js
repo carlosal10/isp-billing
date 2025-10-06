@@ -2,6 +2,19 @@
 const axios = require('axios');
 const PaymentConfig = require('../models/PaymentConfig');
 
+// Lightweight masking helpers for logging (avoid leaking secrets)
+function maskMid(s, keep = 3) {
+  if (!s) return null;
+  const str = String(s);
+  if (str.length <= keep * 2) return '*'.repeat(str.length);
+  return str.slice(0, keep) + '***' + str.slice(-keep);
+}
+function maskPhone(msisdn) {
+  if (!msisdn) return null;
+  const s = String(msisdn);
+  return s.replace(/^(\d{6})(\d+)(\d{2})$/, (_, a, mid, b) => a + '***' + b);
+}
+
 /* ---------- helpers ---------- */
 function pickEnvHost(env) {
   const e = String(env || '').toLowerCase();
@@ -47,7 +60,10 @@ async function getAccessToken({ consumerKey, consumerSecret, environment }) {
   const host = pickEnvHost(environment || process.env.MPESA_ENV);
   const url  = `${host}/oauth/v1/generate?grant_type=client_credentials`;
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+  // Log token request (host only, no secrets)
+  console.log('[mpesa:getAccessToken] requesting token', { host, env: environment || process.env.MPESA_ENV });
   const { data } = await axios.get(url, { headers: { Authorization: `Basic ${auth}` }, timeout: 10000 });
+  console.log('[mpesa:getAccessToken] token acquired');
   return data.access_token;
 }
 
@@ -113,9 +129,28 @@ async function initiateSTKPush({ ispId, amount, phone, accountReference, callbac
   };
 
   try {
+    console.log('[mpesa:initiateSTKPush] request', {
+      ispId: String(ispId),
+      env: environment,
+      method: payMethod,
+      host,
+      shortcode: maskMid(shortcode),
+      phone: maskPhone(msisdn),
+      amount: amt,
+      callbackURL,
+      accountReference: payload.AccountReference,
+      ts,
+    });
     const { data } = await axios.post(`${host}/mpesa/stkpush/v1/processrequest`, payload, {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       timeout: 10000,
+    });
+    console.log('[mpesa:initiateSTKPush] response', {
+      MerchantRequestID: data?.MerchantRequestID,
+      CheckoutRequestID: data?.CheckoutRequestID,
+      ResponseCode: data?.ResponseCode,
+      ResponseDescription: data?.ResponseDescription,
+      CustomerMessage: data?.CustomerMessage,
     });
     return data;
   } catch (err) {
@@ -125,6 +160,11 @@ async function initiateSTKPush({ ispId, amount, phone, accountReference, callbac
     const e = new Error(message);
     e.darajaStatus = err.response?.status || null;
     e.darajaResponse = daraja || null;
+    console.error('[mpesa:initiateSTKPush] error', {
+      message: e.message,
+      status: e.darajaStatus,
+      daraja: e.darajaResponse,
+    });
     throw e;
   }
 }

@@ -27,7 +27,15 @@ function parseDurationToDays(v) {
 // -------------------- Safaricom STK Callback --------------------
 async function handleStkCallback(req, res) {
   const body = req.body;
-  console.log('M-Pesa Callback:', JSON.stringify(body, null, 2));
+  console.log('M-Pesa Callback: body', JSON.stringify(body, null, 2));
+  try {
+    console.log('M-Pesa Callback: headers', {
+      'x-forwarded-for': req.headers['x-forwarded-for'] || null,
+      'user-agent': req.headers['user-agent'] || null,
+      host: req.headers['host'] || null,
+      contentType: req.headers['content-type'] || null,
+    });
+  } catch {}
 
   try {
     // Safaricom sends response under Body.stkCallback
@@ -47,12 +55,33 @@ async function handleStkCallback(req, res) {
     const checkoutRequestId = stkCallback.CheckoutRequestID;
     const merchantRequestId = stkCallback.MerchantRequestID;
 
-    // Find payment (primary: by stored CheckoutRequestID)
-    let payment = await Payment.findOne({ checkoutRequestId }).populate('customer plan');
+    console.log('M-Pesa Callback: extracted', {
+      resultCode,
+      resultDesc,
+      mpesaReceipt,
+      amount,
+      phone,
+      checkoutRequestId,
+      merchantRequestId,
+    });
+
+    // Find payment (primary: by stored CheckoutRequestID, fallback by MerchantRequestID)
+    let payment = null;
+    if (checkoutRequestId) {
+      payment = await Payment.findOne({ checkoutRequestId }).populate('customer plan');
+    }
+    if (!payment && merchantRequestId) {
+      payment = await Payment.findOne({ merchantRequestId }).populate('customer plan');
+    }
 
     // Fallback: recent pending MPesa payment by phone+amount (last 2h)
     if (!payment && phone && amount) {
       const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      console.log('M-Pesa Callback: attempting fallback match by phone+amount', {
+        phone,
+        amount: Number(amount),
+        since,
+      });
       payment = await Payment.findOne({
         method: 'mpesa',
         status: 'Pending',
@@ -62,10 +91,11 @@ async function handleStkCallback(req, res) {
       })
         .sort({ createdAt: -1 })
         .populate('customer plan');
+      console.log('M-Pesa Callback: fallback match result', { found: !!payment, paymentId: payment?._id?.toString() || null });
     }
 
     if (!payment) {
-      console.error('Payment not found for checkout id:', checkoutRequestId);
+      console.error('Payment not found for checkout/merchant id', { checkoutRequestId, merchantRequestId });
     } else {
       // Always persist the gateway correlation ids if missing
       if (!payment.checkoutRequestId && checkoutRequestId) payment.checkoutRequestId = checkoutRequestId;
@@ -87,6 +117,7 @@ async function handleStkCallback(req, res) {
           }
         }
 
+        console.log('M-Pesa Callback: saving payment success', { paymentId: String(payment._id) });
         await payment.save();
 
         try {
@@ -112,6 +143,7 @@ async function handleStkCallback(req, res) {
       } else {
         // Failed
         payment.status = 'Failed';
+        console.log('M-Pesa Callback: saving payment failure', { paymentId: String(payment._id), resultDesc });
         await payment.save();
         console.warn(`Payment ${payment._id} failed: ${resultDesc}`);
       }

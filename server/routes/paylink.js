@@ -36,6 +36,13 @@ router.post('/stk', async (req, res) => {
     const decoded = verifyPayToken(token);
     const { tenantId, customerId, planId } = decoded;
 
+    console.log('[paylink:/stk] request', {
+      tenantId: String(tenantId),
+      customerId: String(customerId),
+      planId: String(planId),
+      phoneRaw: String(phone),
+    });
+
     // 1) Load tenant config (fallback to env for legacy)
     const cfg = await PaymentConfig.findOne({ ispId: String(tenantId), provider: 'mpesa' }).lean();
 
@@ -80,10 +87,18 @@ router.post('/stk', async (req, res) => {
       status: 'Pending',
     });
 
+    console.log('[paylink:/stk] created payment', {
+      paymentId: String(payment._id),
+      tenantId: String(tenantId),
+      amount,
+      phoneNorm: msisdn,
+    });
+
     // 5) Compute callback base
     const apiBase = process.env.VITE_API_URL || '';
     const serverBase = apiBase.replace(/\/?api\/?$/, '');
     const callbackUrl = process.env.MPESA_CALLBACK_URL || `${serverBase}/api/payment/callback/callback`;
+    console.log('[paylink:/stk] callback URL', { callbackUrl });
 
     // 6) Pick TransactionType per payMethod
     const transactionType = payMethod === 'buygoods'
@@ -106,6 +121,15 @@ router.post('/stk', async (req, res) => {
       transactionDesc: 'Subscription Payment',
     });
 
+    console.log('[paylink:/stk] STK response', {
+      paymentId: String(payment._id),
+      MerchantRequestID: resp?.MerchantRequestID,
+      CheckoutRequestID: resp?.CheckoutRequestID,
+      ResponseCode: resp?.ResponseCode,
+      ResponseDescription: resp?.ResponseDescription,
+      CustomerMessage: resp?.CustomerMessage,
+    });
+
     // Persist Daraja correlation ids so callback can match this payment
     try {
       const checkoutRequestId = resp?.CheckoutRequestID;
@@ -115,6 +139,11 @@ router.post('/stk', async (req, res) => {
           { _id: payment._id },
           { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
         );
+        console.log('[paylink:/stk] saved STK ids to payment', {
+          paymentId: String(payment._id),
+          CheckoutRequestID: checkoutRequestId || null,
+          MerchantRequestID: merchantRequestId || null,
+        });
       }
     } catch (e) {
       console.warn('Could not persist STK ids to payment:', e?.message || e);

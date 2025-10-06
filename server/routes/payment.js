@@ -8,6 +8,7 @@ const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const { initiateSTKPush } = require('../utils/mpesa');
+const { normalizeMsisdn } = require('../utils/stkPush');
 const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
@@ -131,10 +132,24 @@ router.post('/stk', async (req, res) => {
     const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!customer || !plan) return res.status(404).json({ error: 'Invalid customer or plan' });
 
+    const msisdn = normalizeMsisdn(phone);
+    if (!msisdn) {
+      console.warn('[payments:/stk] invalid phone format from client', { tenantId: String(req.tenantId), raw: String(phone) });
+    }
+
+    console.log('[payments:/stk] create pending payment', {
+      tenantId: String(req.tenantId),
+      customerId: String(customer._id),
+      planId: String(plan._id),
+      amount: Number(amount),
+      phoneRaw: String(phone),
+      phoneNorm: msisdn || null,
+    });
+
     const payment = await Payment.create({
       tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
-      phoneNumber: phone,
+      phoneNumber: msisdn || phone,
       customer: customer._id,
       plan: plan._id,
       amount,
@@ -147,13 +162,28 @@ router.post('/stk', async (req, res) => {
     const serverBase = apiBase.replace(/\/?api\/?$/, '');
     const cbUrl = callbackURL || process.env.MPESA_CALLBACK_URL || `${serverBase}/api/payment/callback/callback`;
 
+    console.log('[payments:/stk] initiating STK push', {
+      paymentId: String(payment._id),
+      tenantId: String(req.tenantId),
+      cbUrl,
+      env: process.env.MPESA_ENV || 'sandbox',
+    });
+
     const stkResponse = await initiateSTKPush({
       ispId: req.tenantId,
       amount,
-      phone,
+      phone: msisdn || phone,
       // Use human-friendly reference (truncated safely by gateway util)
       accountReference: customer.accountNumber,
       callbackURL: cbUrl,
+    });
+    console.log('[payments:/stk] STK response', {
+      paymentId: String(payment._id),
+      MerchantRequestID: stkResponse?.MerchantRequestID,
+      CheckoutRequestID: stkResponse?.CheckoutRequestID,
+      ResponseCode: stkResponse?.ResponseCode,
+      ResponseDescription: stkResponse?.ResponseDescription,
+      CustomerMessage: stkResponse?.CustomerMessage,
     });
 
     // Persist Daraja correlation ids so callback can match this payment
@@ -165,6 +195,11 @@ router.post('/stk', async (req, res) => {
           { _id: payment._id },
           { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
         );
+        console.log('[payments:/stk] saved STK ids to payment', {
+          paymentId: String(payment._id),
+          CheckoutRequestID: checkoutRequestId || null,
+          MerchantRequestID: merchantRequestId || null,
+        });
       }
     } catch (e) {
       console.warn('Could not persist STK ids to payment:', e?.message || e);
@@ -172,7 +207,11 @@ router.post('/stk', async (req, res) => {
 
     res.json({ message: 'STK Push initiated', paymentId: payment._id, stkResponse });
   } catch (err) {
-    console.error('stk error:', err);
+    console.error('stk error:', {
+      message: err?.message,
+      darajaStatus: err?.darajaStatus || err?.response?.status || null,
+      darajaResponse: err?.darajaResponse || err?.response?.data || null,
+    });
     res.status(500).json({ error: 'STK Push failed' });
   }
 });

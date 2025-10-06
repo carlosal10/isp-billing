@@ -1,6 +1,19 @@
 // utils/stkPush.js
 const axios = require('axios');
 
+// --- simple masking helpers for logs ---
+function maskMid(s, keep = 3) {
+  if (!s) return null;
+  const str = String(s);
+  if (str.length <= keep * 2) return '*'.repeat(str.length);
+  return str.slice(0, keep) + '***' + str.slice(-keep);
+}
+function maskPhone(msisdn) {
+  if (!msisdn) return null;
+  const s = String(msisdn);
+  return s.replace(/^(\d{6})(\d+)(\d{2})$/, (_, a, mid, b) => a + '***' + b);
+}
+
 /** ---- helpers ---- */
 function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -127,6 +140,8 @@ async function sendSTKPush({
   const Timestamp = generateTimestampEAT(new Date());
   const Password = generatePassword(shortcode, passkey, Timestamp);
   const token = await getAccessToken({ consumerKey, consumerSecret, environment });
+  const refSource = (accountReference && String(accountReference).trim()) || transactionId;
+  const sanitizedRef = safeRef(refSource);
 
   const payload = {
     BusinessShortCode: shortcode,
@@ -138,16 +153,36 @@ async function sendSTKPush({
     PartyB: shortcode,
     PhoneNumber: msisdn,
     CallBackURL: callbackUrl,
-    AccountReference: safeRef(transactionId || accountReference),
+    AccountReference: sanitizedRef,
     TransactionDesc: safeDesc(transactionDesc),
   };
 
   try {
+    console.log('[stkPush] request', {
+      env: environment,
+      host,
+      shortcode: maskMid(shortcode),
+      phone: maskPhone(msisdn),
+      amount: amt,
+      callbackUrl,
+      accountReference: payload.AccountReference,
+      accountReferenceRaw: refSource || null,
+      internalTransactionId: transactionId || null,
+      transactionType,
+      ts: Timestamp,
+    });
     const { data } = await axios.post(
       `${host}/mpesa/stkpush/v1/processrequest`,
       payload,
       { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
     );
+    console.log('[stkPush] response', {
+      MerchantRequestID: data?.MerchantRequestID,
+      CheckoutRequestID: data?.CheckoutRequestID,
+      ResponseCode: data?.ResponseCode,
+      ResponseDescription: data?.ResponseDescription,
+      CustomerMessage: data?.CustomerMessage,
+    });
     return data;
   } catch (err) {
     // Bubble up Daraja's exact error so callers/logs see the cause
@@ -156,6 +191,11 @@ async function sendSTKPush({
     const e = new Error(message);
     e.darajaStatus = err.response?.status || null;
     e.darajaResponse = darajaBody || null;
+    console.error('[stkPush] error', {
+      message: e.message,
+      status: e.darajaStatus,
+      daraja: e.darajaResponse,
+    });
     throw e;
   }
 }
