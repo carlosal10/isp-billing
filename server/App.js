@@ -89,6 +89,19 @@ mongoose
 // ----------------- Auth Middlewares -----------------
 const authenticate = (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
+  try {
+    const url = req.originalUrl || req.url || '';
+    // Public endpoints: allow without auth
+    const isPublic =
+      url.startsWith('/api/auth') ||
+      url.startsWith('/api/paylink') ||
+      url.startsWith('/api/payment/callback') ||
+      url.startsWith('/api/payments/callback') ||
+      url.startsWith('/api/payment/stripe') ||
+      url === '/api/health' ||
+      url === '/api/docs/openapi.yaml';
+    if (isPublic) return next();
+  } catch {}
   const bearer = req.headers.authorization || "";
   const [, headerToken] = bearer.split(" ");
   // Fallback to access token cookie (set on login/refresh)
