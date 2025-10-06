@@ -1,3 +1,4 @@
+// routes/tenantAuth.js
 const express = require("express");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
@@ -7,6 +8,7 @@ const User = require("../models/User");
 const Membership = require("../models/Membership");
 const RefreshToken = require("../models/RefreshToken");
 const { signTenantAccessToken } = require("../utils/jwt");
+const msPerDay = 86400 * 1000;
 
 const router = express.Router();
 
@@ -55,6 +57,11 @@ router.post("/register", async (req, res) => {
     const accessToken = signTenantAccessToken({ user, tenantId: tenant._id });
     const refreshToken = await issueRefreshToken({ userId: user._id, tenantId: tenant._id });
 
+    // Set cookies (access token readable by JS for SPA convenience; refresh HttpOnly)
+    const refreshDays = Number(process.env.REFRESH_TTL_DAYS || 30);
+    res.cookie('at', accessToken, { httpOnly: false, secure: true, sameSite: 'None', maxAge: 15 * 60 * 1000, path: '/' });
+    res.cookie('rt', refreshToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: refreshDays * msPerDay, path: '/api/auth' });
+
     res.json({
       ok: true,
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
@@ -95,6 +102,10 @@ router.post("/login", async (req, res) => {
     const accessToken = signTenantAccessToken({ user, tenantId });
     const refreshToken = await issueRefreshToken({ userId: user._id, tenantId });
 
+    const refreshDays = Number(process.env.REFRESH_TTL_DAYS || 30);
+    res.cookie('at', accessToken, { httpOnly: false, secure: true, sameSite: 'None', maxAge: 15 * 60 * 1000, path: '/' });
+    res.cookie('rt', refreshToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: refreshDays * msPerDay, path: '/api/auth' });
+
     res.json({
       ok: true,
       user: { id: String(user._id), email: user.email, displayName: user.displayName },
@@ -110,7 +121,10 @@ router.post("/login", async (req, res) => {
 
 router.post("/refresh", async (req, res) => {
   try {
-    const parsed = RefreshSchema.safeParse(req.body);
+    // Accept refresh from body or httpOnly cookie 'rt'
+    let raw = req.body?.refreshToken;
+    if (!raw && req.cookies?.rt) raw = req.cookies.rt;
+    const parsed = RefreshSchema.safeParse({ refreshToken: raw });
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
     const current = await RefreshToken.findOne({ token: parsed.data.refreshToken });
@@ -133,6 +147,10 @@ router.post("/refresh", async (req, res) => {
     });
 
     const accessToken = signTenantAccessToken({ user, tenantId: current.tenant });
+
+    const refreshDays = Number(process.env.REFRESH_TTL_DAYS || 30);
+    res.cookie('at', accessToken, { httpOnly: false, secure: true, sameSite: 'None', maxAge: 15 * 60 * 1000, path: '/' });
+    res.cookie('rt', nextRaw, { httpOnly: true, secure: true, sameSite: 'None', maxAge: refreshDays * msPerDay, path: '/api/auth' });
     return res.json({
       ok: true,
       accessToken,
@@ -151,6 +169,10 @@ router.post("/logout", async (req, res) => {
   try {
     const token = req.body?.refreshToken;
     if (token) await RefreshToken.updateMany({ token }, { $set: { isRevoked: true } });
+    try {
+      res.clearCookie('at', { httpOnly: false, secure: true, sameSite: 'None', path: '/' });
+      res.clearCookie('rt', { httpOnly: true, secure: true, sameSite: 'None', path: '/api/auth' });
+    } catch {}
     res.json({ ok: true });
   } catch {
     res.json({ ok: true });

@@ -10,8 +10,9 @@ export const API_BASE =
     ? "http://localhost:5000/api"
     : "https://isp-billing-uq58.onrender.com/api");
 
-// Flip this to true if you ever switch to cookie-based auth/refresh.
-const USE_COOKIES = false;
+// Enable cookie-based auth transport so the server can fall back to cookies
+// if Authorization header is briefly missing.
+const USE_COOKIES = true;
 
 /** ================================
  *  Minimal local storage helpers

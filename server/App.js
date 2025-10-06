@@ -7,6 +7,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
 const path = require("path");
 require("./jobs/expireAccess");
 require("./jobs/expireStatic");
@@ -43,6 +44,7 @@ const io = new Server(server, {
 // ----------------- Middleware -----------------
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
 
 // CORS (HTTP)
 app.use(
@@ -87,7 +89,10 @@ mongoose
 const authenticate = (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   const bearer = req.headers.authorization || "";
-  const [, token] = bearer.split(" ");
+  const [, headerToken] = bearer.split(" ");
+  // Fallback to access token cookie (set on login/refresh)
+  const cookieToken = req.cookies?.at;
+  const token = headerToken || cookieToken;
   if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET); // { sub/email/ispId, ... }
