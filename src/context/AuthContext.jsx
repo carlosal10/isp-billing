@@ -43,9 +43,9 @@ export const useAuth = () => useContext(AuthContext);
 /**
  * AuthProvider with:
  * - status gating: "unknown" | "auth" | "guest"
- * - strict-mode-safe init
- * - proactive refresh (30s before exp) + reactive (on 401)
- * - refresh-token rotation support
+ * - strict-mode-safe init (no double side effects)
+ * - proactive refresh (30s before exp) + reactive (on 401 via api client)
+ * - refresh-token rotation support (persists new refreshToken from /refresh)
  */
 export function AuthProvider({ children }) {
   // public state
@@ -70,6 +70,7 @@ export function AuthProvider({ children }) {
   const scheduleRefresh = useCallback((decoded) => {
     clearRefreshTimer();
     if (!decoded?.exp) return;
+    // Try to refresh 30s before expiry; never schedule in the past.
     const delay = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
     refreshTimerRef.current = setTimeout(() => {
       refresh().catch(() => logout());
@@ -91,7 +92,7 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
 
-      // persist only when both tokens exist; otherwise clear
+      // Persist only when we have both tokens; otherwise clear.
       if (access && r) {
         const existing = loadPersisted() || {};
         const toSave = {
@@ -123,16 +124,24 @@ export function AuthProvider({ children }) {
       if (!r) throw new Error("No refresh token");
 
       const { data } = await api.post("/auth/refresh", { refreshToken: r });
-      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Refresh failed");
+      if (!data?.ok || !data?.accessToken) {
+        throw new Error(data?.error || "Refresh failed");
+      }
 
       const saved = loadPersisted() || {};
-      const nextUser = data.user ?? saved.user ?? userFromToken(data.accessToken) ?? user ?? null;
+      const nextUser =
+        data.user ?? saved.user ?? userFromToken(data.accessToken) ?? user ?? null;
       const dec = decodeToken(data.accessToken);
       const nextIsp = data.ispId ?? ispId ?? saved.ispId ?? dec?.ispId ?? null;
-      // rotation support: use new refresh if provided, else keep old
+      // Rotation support: backend may return a new refresh token
       const nextRefresh = data.refreshToken ?? r;
 
-      setAuthState({ access: data.accessToken, refresh: nextRefresh, isp: nextIsp, usr: nextUser });
+      setAuthState({
+        access: data.accessToken,
+        refresh: nextRefresh,
+        isp: nextIsp,
+        usr: nextUser,
+      });
       setStatus("auth");
       return data.accessToken;
     })();
@@ -149,7 +158,9 @@ export function AuthProvider({ children }) {
     try {
       const r = refreshToken || loadPersisted()?.refreshToken;
       if (r) await api.post("/auth/logout", { refreshToken: r });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore network errors on logout */
+    }
     clearRefreshTimer();
     setAuthState({ access: null, refresh: null, isp: null, usr: null });
     setStatus("guest");
@@ -157,14 +168,25 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async ({ email, password, ispId: ispOverride }) => {
-      const { data } = await api.post("/auth/login", { email, password, ispId: ispOverride });
-      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Login failed");
+      const { data } = await api.post("/auth/login", {
+        email,
+        password,
+        ispId: ispOverride,
+      });
+      if (!data?.ok || !data?.accessToken || !data?.refreshToken) {
+        throw new Error(data?.error || "Login failed");
+      }
 
       const dec = decodeToken(data.accessToken);
       const isp = data.ispId ?? dec?.ispId ?? ispOverride ?? null;
       const u = data.user ?? userFromToken(data.accessToken) ?? null;
 
-      setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
+      setAuthState({
+        access: data.accessToken,
+        refresh: data.refreshToken,
+        isp,
+        usr: u,
+      });
       setStatus("auth");
     },
     [setAuthState]
@@ -172,14 +194,26 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(
     async ({ tenantName, displayName, email, password }) => {
-      const { data } = await api.post("/auth/register", { tenantName, displayName, email, password });
-      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Registration failed");
+      const { data } = await api.post("/auth/register", {
+        tenantName,
+        displayName,
+        email,
+        password,
+      });
+      if (!data?.ok || !data?.accessToken || !data?.refreshToken) {
+        throw new Error(data?.error || "Registration failed");
+      }
 
       const dec = decodeToken(data.accessToken);
       const isp = data.ispId ?? dec?.ispId ?? null;
       const u = data.user ?? userFromToken(data.accessToken) ?? null;
 
-      setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
+      setAuthState({
+        access: data.accessToken,
+        refresh: data.refreshToken,
+        isp,
+        usr: u,
+      });
       setStatus("auth");
     },
     [setAuthState]
@@ -190,7 +224,7 @@ export function AuthProvider({ children }) {
     if (didInitRef.current) return; // StrictMode-safe
     didInitRef.current = true;
 
-    // Wire api accessors once (used by axios interceptors)
+    // Wire axios accessors once (used by interceptors for auth headers/refresh)
     setApiAccessors({
       getAccessToken: () => loadPersisted()?.accessToken || null,
       getIspId:       () => loadPersisted()?.ispId || null,
@@ -220,12 +254,13 @@ export function AuthProvider({ children }) {
         if (nearExpiry) {
           await refresh(); // sets status to "auth" on success
         } else {
+          // quick validation; if it fails, try refresh; else mark auth
           try {
-            await api.get("/auth/me");      // quick validation
+            await api.get("/auth/me");
             scheduleRefresh(dec);
             setStatus("auth");
           } catch {
-            await refresh();                // will throw if refresh fails
+            await refresh();
           }
         }
       } catch {
@@ -243,7 +278,7 @@ export function AuthProvider({ children }) {
     () => ({
       status,
       isAuthed,
-      isAuthenticated: isAuthed, // alias
+      isAuthenticated: isAuthed, // alias for convenience
       user,
       ispId,
       token: accessToken,
