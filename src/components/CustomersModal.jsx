@@ -56,6 +56,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [email, setEmail] = useState(customer?.email || "");
   const [phone, setPhone] = useState(customer?.phone || "");
   const [address, setAddress] = useState(customer?.address || "");
+  const [accountNumber, setAccountNumber] = useState(customer?.accountNumber || "");
   const [plan, setPlan] = useState(customer?.plan?._id || "");
   const [networkType, setNetworkType] = useState(customer?.connectionType || "pppoe");
 
@@ -210,6 +211,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       email,
       phone,
       address,
+      accountNumber: accountNumber || undefined,
       plan,
       connectionType: networkType,
       ...(networkType === "pppoe"
@@ -237,6 +239,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email" required />
       <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone Number" required />
       <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" required />
+      <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account Number (optional)" />
 
       <select value={plan} onChange={(e) => setPlan(e.target.value)} required>
         <option value="">Select Plan</option>

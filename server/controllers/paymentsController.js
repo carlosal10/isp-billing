@@ -34,9 +34,21 @@ exports.initiatePayment = async (req, res) => {
                     ispId: customer._id,
                     amount: paymentEntry.amount,
                     phone: phone || customer.phone,
-                    accountReference: customer.accountNumber,
+                    accountReference: paymentEntry._id.toString(),
                     callbackURL: `${process.env.BASE_URL}/api/payment/callback`
                 });
+                try {
+                    const checkoutRequestId = stkResponse?.CheckoutRequestID;
+                    const merchantRequestId = stkResponse?.MerchantRequestID;
+                    if (checkoutRequestId || merchantRequestId) {
+                        await Payment.updateOne(
+                            { _id: paymentEntry._id },
+                            { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
+                        );
+                    }
+                } catch (e) {
+                    console.warn('[payments] could not persist STK ids:', e?.message || e);
+                }
                 return res.json({ payment: paymentEntry, providerResponse: stkResponse });
 
             case 'stripe':

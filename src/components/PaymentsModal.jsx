@@ -20,6 +20,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
     transactionId: "",
     amount: "",
     method: "",
+    // Backdating/extension controls
+    paidAt: "",       // datetime-local
+    backdateTo: "",   // date
+    expiryDate: "",   // date override
+    extendDays: "",   // number
   });
 
   // ------- Edit/Delete state -------
@@ -121,12 +126,27 @@ export default function PaymentsModal({ isOpen, onClose }) {
         transactionId: manualPayment.transactionId,
         amount: manualPayment.amount !== "" ? Number(manualPayment.amount) : undefined,
         method: manualPayment.method || "manual",
+        // Backdating
+        paidAt: manualPayment.paidAt ? new Date(manualPayment.paidAt).toISOString() : undefined,
+        backdateTo: manualPayment.backdateTo || undefined,
+        expiryDate: manualPayment.expiryDate || undefined,
+        extendDays: manualPayment.extendDays !== "" ? Number(manualPayment.extendDays) : undefined,
         validatedBy: "Admin Panel",
         notes: "Manual validation from PaymentsModal",
       });
 
       alert("Payment validated successfully!");
-      setManualPayment({ customerId: null, accountNumber: "", transactionId: "", amount: "", method: "" });
+      setManualPayment({
+        customerId: null,
+        accountNumber: "",
+        transactionId: "",
+        amount: "",
+        method: "",
+        paidAt: "",
+        backdateTo: "",
+        expiryDate: "",
+        extendDays: "",
+      });
       setSearchTerm("");
       setCustomerResults([]);
       fetchPayments();
@@ -179,6 +199,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
       method: p.method || "manual",
       notes: p.notes || "",
       status: p.status || "Validated",
+      // Backdating fields
+      validatedAt: "",
+      backdateTo: "",
+      expiryDate: "",
+      extendDays: "",
     });
     setEditOpen(true);
   };
@@ -195,6 +220,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
         method: editPayment.method || "manual",
         notes: editPayment.notes || undefined,
         status: editPayment.status || undefined, // e.g., Validated/Failed/Refunded
+        // Backdating controls for edit
+        validatedAt: editPayment.validatedAt ? new Date(editPayment.validatedAt).toISOString() : undefined,
+        backdateTo: editPayment.backdateTo || undefined,
+        expiryDate: editPayment.expiryDate || undefined,
+        extendDays: editPayment.extendDays !== "" ? Number(editPayment.extendDays) : undefined,
       });
 
       // Optimistic refresh
@@ -383,6 +413,24 @@ export default function PaymentsModal({ isOpen, onClose }) {
                 </select>
               </div>
 
+              {/* Backdating & Extension */}
+              <fieldset className="field">
+                <legend>Backdate & Extension (optional)</legend>
+                <label>Paid At (timestamp)
+                  <input type="datetime-local" value={manualPayment.paidAt} onChange={(e) => setManualPayment((p) => ({ ...p, paidAt: e.target.value }))} />
+                </label>
+                <label>Backdate To (cycle anchor)
+                  <input type="date" value={manualPayment.backdateTo} onChange={(e) => setManualPayment((p) => ({ ...p, backdateTo: e.target.value }))} />
+                </label>
+                <label>Expiry Override
+                  <input type="date" value={manualPayment.expiryDate} onChange={(e) => setManualPayment((p) => ({ ...p, expiryDate: e.target.value }))} />
+                </label>
+                <label>Extend Days
+                  <input type="number" min="0" step="1" value={manualPayment.extendDays} onChange={(e) => setManualPayment((p) => ({ ...p, extendDays: e.target.value }))} />
+                </label>
+                <p className="help-text">Use these to preserve a customer’s billing cycle (backdate) or add goodwill days.</p>
+              </fieldset>
+
               <button type="submit" className="primary">
                 <MdAdd className="inline-icon" /> Validate Payment
               </button>
@@ -497,6 +545,23 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   />
                 </div>
 
+                {/* Backdating in edit */}
+                <fieldset className="field">
+                  <legend>Backdate & Extension</legend>
+                  <label>Validated At
+                    <input type="datetime-local" value={editPayment.validatedAt} onChange={(e) => setEditPayment((p) => ({ ...p, validatedAt: e.target.value }))} />
+                  </label>
+                  <label>Backdate To
+                    <input type="date" value={editPayment.backdateTo} onChange={(e) => setEditPayment((p) => ({ ...p, backdateTo: e.target.value }))} />
+                  </label>
+                  <label>Expiry Override
+                    <input type="date" value={editPayment.expiryDate} onChange={(e) => setEditPayment((p) => ({ ...p, expiryDate: e.target.value }))} />
+                  </label>
+                  <label>Extend Days
+                    <input type="number" min="0" step="1" value={editPayment.extendDays} onChange={(e) => setEditPayment((p) => ({ ...p, extendDays: e.target.value }))} />
+                  </label>
+                </fieldset>
+
                 <div className="drawer-actions">
                   <button type="button" className="secondary" onClick={() => setEditOpen(false)}>
                     Cancel
@@ -505,7 +570,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                     {editSaving ? "Saving…" : "Save Changes"}
                   </button>
                 </div>
-              </form>
+            </form>
             </div>
           </div>
         )}

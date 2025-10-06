@@ -12,6 +12,7 @@ const path = require("path");
 require("./jobs/expireAccess");
 require("./jobs/expireStatic");
 require("./jobs/smsReminders");
+require("./jobs/enforceInactiveCustomers");
 
 const app = express();
 
@@ -92,9 +93,11 @@ const authenticate = (req, res, next) => {
   try {
     const url = req.originalUrl || req.url || '';
     // Public endpoints: allow without auth
+    const isPaylink = url.startsWith('/api/paylink');
+    const isPaylinkAdmin = url.startsWith('/api/paylink/admin');
     const isPublic =
       url.startsWith('/api/auth') ||
-      url.startsWith('/api/paylink') ||
+      (isPaylink && !isPaylinkAdmin) ||
       url.startsWith('/api/payment/callback') ||
       url.startsWith('/api/payments/callback') ||
       url.startsWith('/api/payment/stripe') ||
@@ -129,9 +132,11 @@ const requireTenant = (req, res, next) => {
   try {
     const url = req.originalUrl || req.url || '';
     // Public endpoints that do not require tenant
+    const isPaylink = url.startsWith('/api/paylink');
+    const isPaylinkAdmin = url.startsWith('/api/paylink/admin');
     const isPublic =
       url.startsWith('/api/auth') ||
-      url.startsWith('/api/paylink') ||
+      (isPaylink && !isPaylinkAdmin) ||
       url.startsWith('/api/payment/callback') ||
       url.startsWith('/api/payments/callback') ||
       url.startsWith('/api/payment/stripe') ||

@@ -20,6 +20,10 @@ export default function AccountSettings() {
   const [subMsg, setSubMsg] = useState("");
   const [savingSub, setSavingSub] = useState(false);
 
+  // Tenant account number prefix
+  const [prefix, setPrefix] = useState("");
+  const [prefixMsg, setPrefixMsg] = useState("");
+
   async function saveProfile(e) {
     e.preventDefault();
     setMsgEmail("");
@@ -60,6 +64,7 @@ export default function AccountSettings() {
       try {
         const { data } = await api.get("/tenant/me");
         setSubdomain(data?.subdomain || "");
+        setPrefix(data?.accountPrefix || "");
         setSubMsg("");
       } catch (e) {
         setSubMsg(e?.message || "Failed to load tenant");
@@ -99,6 +104,30 @@ export default function AccountSettings() {
         <button type="submit" disabled={savingSub}>{savingSub ? 'Saving…' : 'Save subdomain'}</button>
         {subMsg && (
           <div className="helper-text" style={{ color: subMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{subMsg}</div>
+        )}
+      </form>
+
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        setPrefixMsg("");
+        try {
+          const { data } = await api.put('/tenant/account/prefix', { prefix });
+          setPrefixMsg('Prefix saved');
+        } catch (e) {
+          setPrefixMsg(e?.message || 'Failed to save prefix');
+        }
+      }} className="space-y-3" aria-label="Account Number Prefix">
+        <h3 style={{ margin: 0 }}>Account Number Prefix</h3>
+        <p className="helper-text">Optional prefix prepended to generated account numbers (e.g., FML- or FUNNET-)</p>
+        <input
+          type="text"
+          value={prefix}
+          onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+          placeholder="e.g., FML-"
+        />
+        <button type="submit">Save prefix</button>
+        {prefixMsg && (
+          <div className="helper-text" style={{ color: prefixMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{prefixMsg}</div>
         )}
       </form>
 
