@@ -1,54 +1,74 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, setApiAccessors } from '../lib/apiClient';
+// src/context/ServerContext.jsx
+import React, {
+  createContext, useCallback, useContext, useEffect, useMemo, useState
+} from "react";
+import { api, setApiAccessors } from "../lib/apiClient";
+import { useAuth } from "./AuthContext";
 
-function readAuth() {
-  try { return JSON.parse(localStorage.getItem('auth') || 'null'); } catch { return null; }
+function readSelected() {
+  try { return localStorage.getItem("serverId") || ""; } catch { return ""; }
+}
+function writeSelected(id) {
+  try { id ? localStorage.setItem("serverId", id) : localStorage.removeItem("serverId"); } catch {}
 }
 
 const Ctx = createContext({
   servers: [],
-  selected: '',
-  setSelected: () => {},
+  selected: "",
+  setSelected: (_id) => {},
   reload: () => {},
 });
 
-function readSelected() {
-  try { return localStorage.getItem('serverId') || ''; } catch { return ''; }
-}
-function writeSelected(id) {
-  try { if (id) localStorage.setItem('serverId', id); else localStorage.removeItem('serverId'); } catch {}
-}
-
 export function ServerProvider({ children }) {
+  const { status, ispId } = useAuth(); // ← know when auth is ready and tenant changes
   const [servers, setServers] = useState([]);
   const [selected, setSelected] = useState(readSelected());
 
   const load = useCallback(async () => {
+    // Only fetch when authenticated and we have a tenant id
+    if (status !== "auth" || !ispId) {
+      setServers([]);
+      return;
+    }
     try {
-      const auth = readAuth();
-      if (!auth?.accessToken) { setServers([]); return; }
-      const { data } = await api.get('/mikrotik/servers');
-      setServers(Array.isArray(data) ? data : []);
-      // auto-select primary if none
-      if (!selected && Array.isArray(data) && data.length) {
-        const primary = data.find(s => s.primary) || data[0];
-        if (primary?.id) setSelected(primary.id);
+      const { data } = await api.get("/mikrotik/servers");
+      const list = Array.isArray(data) ? data : [];
+      setServers(list);
+
+      // Auto-select: prefer primary; else first; reset if previous selection vanished
+      const ids = new Set(list.map(s => s.id || s._id || s.serverId));
+      const currentId = selected && ids.has(selected) ? selected : "";
+      if (!currentId) {
+        const primary = list.find(s => s.primary || s.isPrimary);
+        const first = list[0];
+        const next = (primary && (primary.id || primary._id || primary.serverId))
+          || (first && (first.id || first._id || first.serverId))
+          || "";
+        if (next) setSelected(String(next));
       }
     } catch (e) {
-      // ignore 401 pre-login; clear list
-      if (String(e?.message || '').includes('401')) setServers([]);
+      // If we hit 401 due to a race, let auth layer handle refresh; just clear for now
+      if ((e?.response?.status ?? 0) === 401) setServers([]);
+      else console.error("Failed to load servers:", e);
     }
-  }, [selected]);
+  }, [status, ispId, selected]);
 
+  // Load whenever auth becomes ready or tenant changes
   useEffect(() => { load(); }, [load]);
+
+  // Persist selection
   useEffect(() => { writeSelected(selected); }, [selected]);
 
-  // feed header accessor
+  // Provide x-isp-server header to all requests (merges with existing accessors)
   useEffect(() => {
-    setApiAccessors({ getServerId: () => selected || null });
+    setApiAccessors({ getServerId: () => (selected || null) });
   }, [selected]);
 
-  const ctx = useMemo(() => ({ servers, selected, setSelected, reload: load }), [servers, selected, load]);
+  const ctx = useMemo(
+    () => ({ servers, selected, setSelected, reload: load }),
+    [servers, selected, load]
+  );
+
   return <Ctx.Provider value={ctx}>{children}</Ctx.Provider>;
 }
 

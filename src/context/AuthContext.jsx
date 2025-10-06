@@ -11,7 +11,7 @@ import React, {
 import { jwtDecode } from "jwt-decode";
 import { api, setApiAccessors } from "../lib/apiClient";
 
-/* ---------- helpers ---------- */
+/** ---------- storage helpers ---------- **/
 const AUTH_KEY = "auth"; // { accessToken, refreshToken, ispId, user }
 
 const safeParse = (s) => {
@@ -23,11 +23,9 @@ const persistAuth = (obj) => {
   else localStorage.setItem(AUTH_KEY, JSON.stringify(obj));
 };
 
-const decodeToken = (t) => {
-  try { return jwtDecode(t); } catch { return null; }
-};
+/** ---------- token utils ---------- **/
+const decodeToken = (t) => { try { return jwtDecode(t); } catch { return null; } };
 const msUntil = (exp) => Math.max(exp * 1000 - Date.now(), 0);
-
 const userFromToken = (token) => {
   const d = decodeToken(token);
   if (!d) return null;
@@ -38,16 +36,16 @@ const userFromToken = (token) => {
   };
 };
 
-/* ---------- context ---------- */
+/** ---------- context ---------- **/
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 /**
- * Drop-in AuthProvider with:
- * - status: "unknown" | "auth" | "guest" to gate routing
- * - strict-mode-safe single init
- * - refresh-before-logout flow
- * - scheduled silent refresh
+ * AuthProvider with:
+ * - status gating: "unknown" | "auth" | "guest"
+ * - strict-mode-safe init
+ * - proactive refresh (30s before exp) + reactive (on 401)
+ * - refresh-token rotation support
  */
 export function AuthProvider({ children }) {
   // public state
@@ -59,8 +57,8 @@ export function AuthProvider({ children }) {
 
   // internals
   const refreshTimerRef = useRef(null);
-  const inFlightRefreshRef = useRef(null); // Promise when refreshing
-  const didInitRef = useRef(false);        // guard StrictMode double-run
+  const inFlightRefreshRef = useRef(null);
+  const didInitRef = useRef(false);
 
   const clearRefreshTimer = useCallback(() => {
     if (refreshTimerRef.current) {
@@ -72,7 +70,6 @@ export function AuthProvider({ children }) {
   const scheduleRefresh = useCallback((decoded) => {
     clearRefreshTimer();
     if (!decoded?.exp) return;
-    // refresh 30s before expiry, minimum 1s from now
     const delay = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
     refreshTimerRef.current = setTimeout(() => {
       refresh().catch(() => logout());
@@ -117,10 +114,8 @@ export function AuthProvider({ children }) {
     [scheduleRefresh]
   );
 
-  /* ---------- core ops ---------- */
-
+  /** ---------- core ops ---------- **/
   const refresh = useCallback(async () => {
-    // de-duplicate concurrent refreshes
     if (inFlightRefreshRef.current) return inFlightRefreshRef.current;
 
     const run = (async () => {
@@ -128,16 +123,16 @@ export function AuthProvider({ children }) {
       if (!r) throw new Error("No refresh token");
 
       const { data } = await api.post("/auth/refresh", { refreshToken: r });
-      if (!data?.ok || !data?.accessToken) {
-        throw new Error(data?.error || "Refresh failed");
-      }
+      if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Refresh failed");
 
       const saved = loadPersisted() || {};
-      const nextUser = saved.user || userFromToken(data.accessToken) || user || null;
+      const nextUser = data.user ?? saved.user ?? userFromToken(data.accessToken) ?? user ?? null;
       const dec = decodeToken(data.accessToken);
-      const nextIsp = ispId || saved.ispId || dec?.ispId || null;
+      const nextIsp = data.ispId ?? ispId ?? saved.ispId ?? dec?.ispId ?? null;
+      // rotation support: use new refresh if provided, else keep old
+      const nextRefresh = data.refreshToken ?? r;
 
-      setAuthState({ access: data.accessToken, refresh: r, isp: nextIsp, usr: nextUser });
+      setAuthState({ access: data.accessToken, refresh: nextRefresh, isp: nextIsp, usr: nextUser });
       setStatus("auth");
       return data.accessToken;
     })();
@@ -166,8 +161,8 @@ export function AuthProvider({ children }) {
       if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Login failed");
 
       const dec = decodeToken(data.accessToken);
-      const isp = data.ispId || dec?.ispId || ispOverride || null;
-      const u = data.user || userFromToken(data.accessToken) || null;
+      const isp = data.ispId ?? dec?.ispId ?? ispOverride ?? null;
+      const u = data.user ?? userFromToken(data.accessToken) ?? null;
 
       setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
       setStatus("auth");
@@ -181,8 +176,8 @@ export function AuthProvider({ children }) {
       if (!data?.ok || !data?.accessToken) throw new Error(data?.error || "Registration failed");
 
       const dec = decodeToken(data.accessToken);
-      const isp = data.ispId || dec?.ispId || null;
-      const u = data.user || userFromToken(data.accessToken) || null;
+      const isp = data.ispId ?? dec?.ispId ?? null;
+      const u = data.user ?? userFromToken(data.accessToken) ?? null;
 
       setAuthState({ access: data.accessToken, refresh: data.refreshToken, isp, usr: u });
       setStatus("auth");
@@ -190,12 +185,12 @@ export function AuthProvider({ children }) {
     [setAuthState]
   );
 
-  /* ---------- mount/bootstrap ---------- */
+  /** ---------- mount/bootstrap ---------- **/
   useEffect(() => {
     if (didInitRef.current) return; // StrictMode-safe
     didInitRef.current = true;
 
-    // Wire api accessors once
+    // Wire api accessors once (used by axios interceptors)
     setApiAccessors({
       getAccessToken: () => loadPersisted()?.accessToken || null,
       getIspId:       () => loadPersisted()?.ispId || null,
@@ -214,24 +209,23 @@ export function AuthProvider({ children }) {
       }
 
       const dec = decodeToken(saved.accessToken);
-      setIspId(saved.ispId || dec?.ispId || null);
+      setIspId(saved.ispId ?? dec?.ispId ?? null);
       setAccessToken(saved.accessToken);
       setRefreshToken(saved.refreshToken);
-      setUser(saved.user || userFromToken(saved.accessToken));
+      setUser(saved.user ?? userFromToken(saved.accessToken));
 
       const nearExpiry = !dec?.exp || msUntil(dec.exp) < 30_000;
 
       try {
         if (nearExpiry) {
-          await refresh(); // will set status to "auth"
+          await refresh(); // sets status to "auth" on success
         } else {
-          // quick validation; if it fails, refresh; if that fails, guest
           try {
-            await api.get("/auth/me");
+            await api.get("/auth/me");      // quick validation
             scheduleRefresh(dec);
             setStatus("auth");
           } catch {
-            await refresh(); // throws if refresh fails
+            await refresh();                // will throw if refresh fails
           }
         }
       } catch {
@@ -243,7 +237,7 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- context value ---------- */
+  /** ---------- value ---------- **/
   const isAuthed = status === "auth";
   const value = useMemo(
     () => ({
