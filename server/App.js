@@ -126,8 +126,28 @@ const authenticate = (req, res, next) => {
 };
 
 const requireTenant = (req, res, next) => {
+  try {
+    const url = req.originalUrl || req.url || '';
+    // Public endpoints that do not require tenant
+    const isPublic =
+      url.startsWith('/api/auth') ||
+      url.startsWith('/api/paylink') ||
+      url.startsWith('/api/payment/callback') ||
+      url.startsWith('/api/payments/callback') ||
+      url.startsWith('/api/payment/stripe') ||
+      url === '/api/health' ||
+      url === '/api/docs/openapi.yaml';
+    if (isPublic) return next();
+  } catch {}
   const tenantId = req.headers["x-isp-id"] || req.user?.ispId;
-  if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
+  if (!tenantId) {
+    console.warn('[tenant] Missing tenant id', {
+      url: req.originalUrl,
+      hasUser: !!req.user,
+      hasHeader: !!req.headers["x-isp-id"],
+    });
+    return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
+  }
   req.tenantId = String(tenantId);
   next();
 };
@@ -198,11 +218,7 @@ app.get('/api/docs/openapi.yaml', (req, res) => {
     fs.createReadStream(p).pipe(res);
   } catch { res.status(404).end(); }
 });
-app.use("/api", authenticate, requireTenant, eventsRoutes);
-app.use("/api", authenticate, requireTenant, jobsRoutes);
-app.use("/api/api-keys", authenticate, requireTenant, apiKeysRoutes);
-app.use("/api/flags", authenticate, requireTenant, flagsRoutes);
-app.use("/api", authenticate, requireTenant, archiveRoutes);
+// NOTE: Defer mounting any generic '/api' guarded stacks until after public routes
 
 // ----------------- Mount APIs -----------------
 // Tenant realm auth
@@ -211,6 +227,20 @@ app.use("/api/invites", authenticate, requireTenant, invitesRoutes);
 
 // Platform-admin realm
 app.use("/platform-api/auth", platformAuthRoutes);
+
+// Public paylink endpoints (must be before any generic /api auth wrappers)
+app.use("/api/paylink", paylinkRoutes);
+// Public payment provider callbacks (support both singular/plural path variations)
+app.use("/api/payment/callback", paymentCallbackRoutes);
+app.use("/api/payments/callback", paymentCallbackRoutes);
+app.use("/api/payment/stripe", stripeWebhook);
+
+// Now mount generic '/api' stacks and protected APIs
+app.use("/api", authenticate, requireTenant, eventsRoutes);
+app.use("/api", authenticate, requireTenant, jobsRoutes);
+app.use("/api/api-keys", authenticate, requireTenant, apiKeysRoutes);
+app.use("/api/flags", authenticate, requireTenant, flagsRoutes);
+app.use("/api", authenticate, requireTenant, archiveRoutes);
 
 // Tenant-protected app APIs
 app.use("/api/customers", authenticate, requireTenant, customerRoutes);
@@ -227,13 +257,6 @@ app.use("/api/customers", authenticate, requireTenant, customersProfilesRoutes);
 app.use("/api/mikrotik", authenticate, requireTenant, mikrotikProfilesRoutes);
 app.use("/api/static-candidates", authenticate, requireTenant, staticCandidatesRoutes);
 
-
-// Public paylink endpoints (must be before any generic /api auth wrappers)
-app.use("/api/paylink", paylinkRoutes);
-// Public payment provider callbacks (support both singular/plural path variations)
-app.use("/api/payment/callback", paymentCallbackRoutes);
-app.use("/api/payments/callback", paymentCallbackRoutes);
-app.use("/api/payment/stripe", stripeWebhook);
 
 // MikroTik PPPoE & connectivity
 app.use("/api/pppoe", authenticate, requireTenant, mikrotikUserRoutes);
