@@ -1,6 +1,9 @@
 require('./jobs/exports');
 // App.js
 require("dotenv").config();
+if (process.env.MPESA_CALLBACK_URL) {
+  process.env.MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL.trim();
+}
 const { validateEnv } = require("./utils/env");
 validateEnv();
 const express = require("express");
