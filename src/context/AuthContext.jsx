@@ -12,15 +12,109 @@ import { jwtDecode } from "jwt-decode";
 import { api, setApiAccessors } from "../lib/apiClient";
 
 /** ---------- storage helpers ---------- **/
-const AUTH_KEY = "auth"; // { accessToken, refreshToken, ispId, user }
+const SESSIONS_KEY = "auth.sessions.v1";
+const ACTIVE_SESSION_KEY = "auth.active.tenant";
+const LAST_TENANT_KEY = "auth.last.tenant";
 
 const safeParse = (s) => {
-  try { return JSON.parse(s || "null"); } catch { return null; }
+  try {
+    return JSON.parse(s || "null");
+  } catch {
+    return null;
+  }
 };
-const loadPersisted = () => safeParse(localStorage.getItem(AUTH_KEY));
-const persistAuth = (obj) => {
-  if (!obj) localStorage.removeItem(AUTH_KEY);
-  else localStorage.setItem(AUTH_KEY, JSON.stringify(obj));
+
+const loadSessions = () => safeParse(localStorage.getItem(SESSIONS_KEY)) || {};
+
+const saveSessions = (sessions) => {
+  try {
+    if (!sessions || Object.keys(sessions).length === 0) {
+      localStorage.removeItem(SESSIONS_KEY);
+    } else {
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    }
+  } catch {}
+};
+
+const setActiveTenantId = (tenantId) => {
+  try {
+    if (tenantId) {
+      sessionStorage.setItem(ACTIVE_SESSION_KEY, tenantId);
+    } else {
+      sessionStorage.removeItem(ACTIVE_SESSION_KEY);
+    }
+  } catch {}
+
+  try {
+    if (tenantId) {
+      localStorage.setItem(LAST_TENANT_KEY, tenantId);
+    }
+  } catch {}
+};
+
+const resolveActiveTenant = () => {
+  const sessions = loadSessions();
+  let tenantId = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  if (tenantId && sessions[tenantId]) return { tenantId, sessions };
+
+  const last = localStorage.getItem(LAST_TENANT_KEY);
+  if (last && sessions[last]) {
+    setActiveTenantId(last);
+    return { tenantId: last, sessions };
+  }
+
+  const keys = Object.keys(sessions);
+  if (keys.length) {
+    setActiveTenantId(keys[0]);
+    return { tenantId: keys[0], sessions };
+  }
+
+  setActiveTenantId(null);
+  try {
+    localStorage.removeItem(LAST_TENANT_KEY);
+  } catch {}
+  return { tenantId: null, sessions };
+};
+
+const getActiveAuth = () => {
+  const { tenantId, sessions } = resolveActiveTenant();
+  if (!tenantId) return null;
+  const session = sessions[tenantId];
+  if (!session) return null;
+  return { ...session, ispId: session.ispId ?? tenantId, tenantId };
+};
+
+const persistSession = (tenantId, payload) => {
+  if (!tenantId) return;
+  const sessions = loadSessions();
+  sessions[tenantId] = { ...payload, ispId: payload.ispId ?? tenantId };
+  saveSessions(sessions);
+  setActiveTenantId(tenantId);
+};
+
+const removeSession = (tenantId) => {
+  if (!tenantId) return;
+  const sessions = loadSessions();
+  if (sessions[tenantId]) {
+    delete sessions[tenantId];
+    saveSessions(sessions);
+  }
+
+  let active = null;
+  try {
+    active = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {}
+  if (active === tenantId) {
+    const keys = Object.keys(sessions);
+    if (keys.length) {
+      setActiveTenantId(keys[0]);
+    } else {
+      setActiveTenantId(null);
+      try {
+        localStorage.removeItem(LAST_TENANT_KEY);
+      } catch {}
+    }
+  }
 };
 
 /** ---------- token utils ---------- **/
@@ -80,9 +174,21 @@ export function AuthProvider({ children }) {
 
   const setAuthState = useCallback(
     ({ access, refresh: r, isp, usr }) => {
+      const decoded = access ? decodeToken(access) : null;
+      const activeBefore = getActiveAuth();
+      const tenantKey =
+        isp ??
+        decoded?.ispId ??
+        activeBefore?.ispId ??
+        null;
+
+      if (tenantKey) {
+        setActiveTenantId(tenantKey);
+      }
+
       setAccessToken(access || null);
       setRefreshToken(r || null);
-      setIspId(isp || null);
+      setIspId(tenantKey || null);
 
       if (usr !== undefined) {
         setUser(usr);
@@ -92,27 +198,34 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
 
-      // Persist only when we have both tokens; otherwise clear.
-      if (access && r) {
-        const existing = loadPersisted() || {};
-        const toSave = {
+      if (access && r && tenantKey) {
+        const existing = getActiveAuth() || activeBefore;
+        const payload = {
           accessToken: access,
           refreshToken: r,
-          ispId: isp ?? existing.ispId ?? null,
+          ispId: tenantKey,
           user:
             usr !== undefined
               ? usr
-              : existing.user ?? userFromToken(access) ?? null,
+              : existing?.user ?? userFromToken(access) ?? null,
         };
-        persistAuth(toSave);
+        persistSession(tenantKey, payload);
+      } else if (tenantKey) {
+        removeSession(tenantKey);
+        clearRefreshTimer();
       } else {
-        persistAuth(null);
+        const active = getActiveAuth();
+        if (active?.tenantId) removeSession(active.tenantId);
+        clearRefreshTimer();
       }
 
-      const decoded = access ? decodeToken(access) : null;
-      if (decoded) scheduleRefresh(decoded);
+      if (access && decoded) {
+        scheduleRefresh(decoded);
+      } else if (!access) {
+        clearRefreshTimer();
+      }
     },
-    [scheduleRefresh]
+    [scheduleRefresh, clearRefreshTimer]
   );
 
   /** ---------- core ops ---------- **/
@@ -120,19 +233,18 @@ export function AuthProvider({ children }) {
     if (inFlightRefreshRef.current) return inFlightRefreshRef.current;
 
     const run = (async () => {
-      const r = refreshToken || loadPersisted()?.refreshToken;
+      const saved = getActiveAuth();
+      const r = refreshToken || saved?.refreshToken;
       if (!r) throw new Error("No refresh token");
 
       const { data } = await api.post("/auth/refresh", { refreshToken: r });
       if (!data?.ok || !data?.accessToken) {
         throw new Error(data?.error || "Refresh failed");
       }
-
-      const saved = loadPersisted() || {};
       const nextUser =
-        data.user ?? saved.user ?? userFromToken(data.accessToken) ?? user ?? null;
+        data.user ?? saved?.user ?? userFromToken(data.accessToken) ?? user ?? null;
       const dec = decodeToken(data.accessToken);
-      const nextIsp = data.ispId ?? ispId ?? saved.ispId ?? dec?.ispId ?? null;
+      const nextIsp = data.ispId ?? ispId ?? saved?.ispId ?? dec?.ispId ?? null;
       // Rotation support: backend may return a new refresh token
       const nextRefresh = data.refreshToken ?? r;
 
@@ -156,13 +268,15 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      const r = refreshToken || loadPersisted()?.refreshToken;
+      const saved = getActiveAuth();
+      const r = refreshToken || saved?.refreshToken;
       if (r) await api.post("/auth/logout", { refreshToken: r });
     } catch {
       /* ignore network errors on logout */
     }
     clearRefreshTimer();
-    setAuthState({ access: null, refresh: null, isp: null, usr: null });
+    const active = getActiveAuth();
+    setAuthState({ access: null, refresh: null, isp: active?.ispId ?? null, usr: null });
     setStatus("guest");
   }, [refreshToken, clearRefreshTimer, setAuthState]);
 
@@ -226,18 +340,18 @@ export function AuthProvider({ children }) {
 
     // Wire axios accessors once (used by interceptors for auth headers/refresh)
     setApiAccessors({
-      getAccessToken: () => loadPersisted()?.accessToken || null,
-      getIspId:       () => loadPersisted()?.ispId || null,
+      getAccessToken: () => getActiveAuth()?.accessToken || null,
+      getIspId:       () => getActiveAuth()?.ispId || null,
       tryRefresh:     () => refresh(),
       forceLogout:    () => logout(),
     });
 
-    const saved = loadPersisted();
+    const saved = getActiveAuth();
     const haveBoth = Boolean(saved?.accessToken && saved?.refreshToken);
 
     (async () => {
       if (!haveBoth) {
-        persistAuth(null);
+        if (saved?.ispId) removeSession(saved.ispId);
         setStatus("guest");
         return;
       }

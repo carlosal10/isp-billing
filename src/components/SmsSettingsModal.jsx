@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FaTimes } from "react-icons/fa";
+import { MdContentCopy } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
 
@@ -56,8 +57,22 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   const [customers, setCustomers] = useState([]);
   const [plans, setPlans] = useState([]);
   const [pick, setPick] = useState({ customerId: "", planId: "", dueAt: "" });
-  const [created, setCreated] = useState({ url: "", token: "" });
+  const [created, setCreated] = useState({ url: "", token: "", shortUrl: "", shortPath: "" });
   const [sendMsg, setSendMsg] = useState("");
+
+  const shortLink = useMemo(() => {
+    if (!created) return "";
+    if (created.shortUrl) return created.shortUrl;
+    if (created.shortPath) {
+      if (typeof window !== "undefined" && window.location?.origin) {
+        return `${window.location.origin.replace(/\/$/, "")}${created.shortPath}`;
+      }
+      return created.shortPath;
+    }
+    return created.url || "";
+  }, [created]);
+
+  const longLink = created?.url || "";
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -81,7 +96,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     if (!isOpen) return;
     setMsg("");
     setSendMsg("");
-    setCreated({ url: "", token: "" });
+    setCreated({ url: "", token: "", shortUrl: "", shortPath: "" });
     loadAll();
   }, [isOpen, loadAll]);
 
@@ -152,7 +167,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   async function createPaylink() {
     setLoading(true);
     setMsg("");
-    setCreated({ url: "", token: "" });
+    setCreated({ url: "", token: "", shortUrl: "", shortPath: "" });
     try {
       const { data } = await api.post("/paylink/admin/create", pick);
       setCreated(data || {});
@@ -180,6 +195,31 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
       setLoading(false);
     }
   }
+
+  const copyLink = useCallback(async (link) => {
+    if (!link) {
+      setMsg("Nothing to copy");
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const el = document.createElement("textarea");
+        el.value = link;
+        el.setAttribute("readonly", "");
+        el.style.position = "absolute";
+        el.style.left = "-9999px";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setMsg("Paylink copied to clipboard");
+    } catch (e) {
+      setMsg(e?.message || "Unable to copy link");
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -673,10 +713,28 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                 </button>
               </div>
 
-              {created.url && (
+              {shortLink && (
                 <div className="sms-card">
                   <div className="sms-muted">Paylink</div>
-                  <div className="sms-break">{created.url}</div>
+                  <div className="sms-break" title={shortLink}>{shortLink}</div>
+                  <div className="sms-card-actions">
+                    <button
+                      type="button"
+                      className="ps-tab"
+                      onClick={() => copyLink(shortLink)}
+                    >
+                      <MdContentCopy size={16} /> Copy short link
+                    </button>
+                    {longLink && longLink !== shortLink && (
+                      <button
+                        type="button"
+                        className="ps-tab ghost"
+                        onClick={() => copyLink(longLink)}
+                      >
+                        Copy full URL
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

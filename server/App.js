@@ -12,6 +12,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');
 const path = require("path");
+const { buildBaseUrl } = require("./utils/paylink");
 require("./jobs/expireAccess");
 require("./jobs/expireStatic");
 require("./jobs/smsReminders");
@@ -225,6 +226,22 @@ app.get('/api/docs/openapi.yaml', (req, res) => {
     res.setHeader('Content-Type', 'application/yaml');
     fs.createReadStream(p).pipe(res);
   } catch { res.status(404).end(); }
+});
+// Short paylink redirect (e.g., https://server/pl/<token>)
+app.get('/pl/:token', (req, res) => {
+  const token = req.params.token;
+  if (!token) return res.status(400).send('Missing pay token');
+  try {
+    const base = buildBaseUrl();
+    if (!base) {
+      return res.redirect(302, `/pay?token=${encodeURIComponent(token)}`);
+    }
+    const target = `${base}/pay?token=${encodeURIComponent(token)}`;
+    return res.redirect(302, target);
+  } catch (err) {
+    console.warn('[paylink-short] redirect failed', err?.message || err);
+    return res.redirect(302, `/pay?token=${encodeURIComponent(token)}`);
+  }
 });
 // NOTE: Defer mounting any generic '/api' guarded stacks until after public routes
 

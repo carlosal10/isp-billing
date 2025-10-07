@@ -18,16 +18,58 @@ const USE_COOKIES = true;
  *  Minimal local storage helpers
  *  (kept here so api works before AuthContext mounts)
  *  ================================ */
-const KEY = "auth";
-const read = () => {
+const SESSIONS_KEY = "auth.sessions.v1";
+const ACTIVE_SESSION_KEY = "auth.active.tenant";
+const LAST_TENANT_KEY = "auth.last.tenant";
+
+const safeParse = (value) => {
   try {
-    return JSON.parse(localStorage.getItem(KEY) || "null");
+    return JSON.parse(value || "null");
   } catch {
     return null;
   }
 };
-const getAccess = () => read()?.accessToken || null;
-const getIspId = () => read()?.ispId || null;
+
+const loadSessions = () => safeParse(localStorage.getItem(SESSIONS_KEY)) || {};
+
+const ensureActiveTenant = (sessions) => {
+  const all = sessions || loadSessions();
+  let tenantId = null;
+  try {
+    tenantId = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {}
+  if (tenantId && all[tenantId]) return { tenantId, sessions: all };
+
+  let last = null;
+  try {
+    last = localStorage.getItem(LAST_TENANT_KEY);
+  } catch {}
+  if (last && all[last]) {
+    try { sessionStorage.setItem(ACTIVE_SESSION_KEY, last); } catch {}
+    return { tenantId: last, sessions: all };
+  }
+
+  const keys = Object.keys(all);
+  if (keys.length) {
+    const first = keys[0];
+    try {
+      sessionStorage.setItem(ACTIVE_SESSION_KEY, first);
+      localStorage.setItem(LAST_TENANT_KEY, first);
+    } catch {}
+    return { tenantId: first, sessions: all };
+  }
+
+  return { tenantId: null, sessions: all };
+};
+
+const getActiveSession = () => {
+  const { tenantId, sessions } = ensureActiveTenant();
+  if (!tenantId) return null;
+  return sessions[tenantId] || null;
+};
+
+const getAccess = () => getActiveSession()?.accessToken || null;
+const getIspId = () => getActiveSession()?.ispId ?? null;
 
 /** ================================
  *  Axios instance

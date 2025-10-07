@@ -131,6 +131,22 @@
   font-weight:800; color:#0b2545; font-size:1rem;
 }
 .sms-card.is-disabled{ opacity:.6; }
+.sms-card-actions{
+  margin-top:12px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.ps-tab.ghost{
+  background:#f5f8ff;
+  color:#1f2937;
+  border-color:#d6deff;
+}
+.ps-tab.ghost:hover{
+  background:#eef3ff;
+  color:#111827;
+}
 
 .sms-actions{
   display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px;

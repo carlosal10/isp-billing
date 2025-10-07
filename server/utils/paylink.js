@@ -73,7 +73,12 @@ async function createPayLink({ tenantId, customerId, planId, dueAt, baseUrl, ttl
   const base = buildBaseUrl({ override: baseUrl });
   const path = `/pay?token=${encodeURIComponent(token)}`;
   const url = base ? `${base}${path}` : path;
-  return { token, url, expiresIn };
+
+  const shortBase = (process.env.PAYLINK_SHORT_BASE || '').replace(/\/+$/, '');
+  const shortPath = `/pl/${encodeURIComponent(token)}`;
+  const shortUrl = shortBase ? `${shortBase}${shortPath}` : shortPath;
+
+  return { token, url, shortUrl, shortPath, expiresIn };
 }
 
 /**
