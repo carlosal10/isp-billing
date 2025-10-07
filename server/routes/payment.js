@@ -422,6 +422,146 @@ router.post('/manual', async (req, res) => {
   }
 });
 
+// -------------------- Backdate & Goodwill Adjustments --------------------
+router.post('/adjust', async (req, res) => {
+  const debugId = `adjust-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const {
+      customerId,
+      accountNumber,
+      backdateTo,
+      extendDays,
+      notes,
+      validatedBy,
+    } = req.body || {};
+
+    if (!customerId && !accountNumber) {
+      return res.status(400).json({ error: 'Provide customerId or accountNumber', debugId });
+    }
+
+    const backdateStr = backdateTo ? String(backdateTo).trim() : '';
+    const extendProvided = extendDays !== undefined && extendDays !== null && String(extendDays).trim() !== '';
+    const extendValue = extendProvided ? Number(extendDays) : 0;
+    if (extendProvided && !Number.isFinite(extendValue)) {
+      return res.status(400).json({ error: 'extendDays must be a number', debugId });
+    }
+    if (!backdateStr && !extendProvided) {
+      return res.status(400).json({ error: 'Provide backdateTo or extendDays', debugId });
+    }
+
+    let backdateDate = null;
+    if (backdateStr) {
+      backdateDate = new Date(backdateStr);
+      if (Number.isNaN(backdateDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid backdateTo', debugId });
+      }
+    }
+
+    const notesTrim = notes ? String(notes).trim() : '';
+
+    const customer = customerId
+      ? await Customer.findOne({ _id: customerId, tenantId: req.tenantId }).populate('plan')
+      : await Customer.findOne({ accountNumber, tenantId: req.tenantId }).populate('plan');
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found', debugId });
+    }
+    if (!customer.plan) {
+      return res.status(400).json({ error: 'Customer has no plan assigned', debugId });
+    }
+
+    const plan = (await Plan.findOne({ _id: customer.plan._id, tenantId: req.tenantId })) || customer.plan;
+    const durationDays = plan.durationDays ?? parseDurationToDays(plan.duration);
+    if (!Number.isFinite(durationDays) || durationDays <= 0) {
+      return res.status(400).json({ error: 'Invalid plan duration', debugId });
+    }
+
+    const DAY_MS = 86400000;
+    let computedExpiry = null;
+    if (backdateDate) {
+      computedExpiry = new Date(backdateDate.getTime() + durationDays * DAY_MS);
+    } else if (customer.expiryDate) {
+      computedExpiry = new Date(customer.expiryDate);
+    } else {
+      computedExpiry = new Date();
+    }
+
+    if (extendValue) {
+      computedExpiry = new Date(computedExpiry.getTime() + Math.round(extendValue) * DAY_MS);
+    }
+
+    const now = Date.now();
+    customer.expiryDate = computedExpiry;
+    customer.status = computedExpiry.getTime() > now ? 'active' : 'inactive';
+    await customer.save().catch((err) => {
+      console.warn(`[${debugId}] customer save failed:`, err?.message || err);
+    });
+
+    const payment = await Payment.findOne({
+      tenantId: req.tenantId,
+      customer: customer._id,
+      isDeleted: { $ne: true },
+      status: { $in: ['Success', 'Validated'] },
+    }).sort({ validatedAt: -1, createdAt: -1 });
+
+    if (payment) {
+      const before = payment.toObject();
+      payment.expiryDate = computedExpiry;
+      if (backdateDate) payment.validatedAt = backdateDate;
+      if (notesTrim) {
+        const existing = payment.notes ? `${payment.notes} | ` : '';
+        payment.notes = existing + notesTrim;
+      }
+      payment.editedAt = new Date();
+      payment.editedBy = validatedBy || 'Adjustment';
+
+      const changes = diffAllowedFields(before, payment.toObject());
+      if (Object.keys(changes).length) {
+        payment.editLog = payment.editLog || [];
+        payment.editLog.push({ at: new Date(), by: payment.editedBy, changes });
+      }
+
+      try {
+        await payment.save();
+      } catch (saveErr) {
+        console.error(`[${debugId}] payment adjustment save failed:`, saveErr?.message || saveErr);
+      }
+    } else {
+      console.log('[payments:/adjust] no prior payment found', {
+        tenantId: String(req.tenantId),
+        customerId: String(customer._id),
+      });
+    }
+
+    try {
+      if (customer.connectionType === 'static') {
+        await enableCustomerQueue(customer, plan).catch(() => {});
+      } else {
+        await applyCustomerQueue(customer, plan).catch(() => {});
+      }
+    } catch (queueErr) {
+      console.warn(`[${debugId}] queue sync failed:`, queueErr?.message || queueErr);
+    }
+
+    console.log('[payments:/adjust] applied', {
+      tenantId: String(req.tenantId),
+      customerId: String(customer._id),
+      backdateTo: backdateDate || null,
+      extendDays: extendProvided ? extendValue : null,
+      expiry: computedExpiry,
+    });
+
+    return res.json({
+      message: 'Adjustment applied',
+      debugId,
+      expiryDate: computedExpiry,
+    });
+  } catch (err) {
+    console.error('[adjust payment error]', debugId, err);
+    return res.status(500).json({ error: 'Adjustment failed', debugId });
+  }
+});
+
 // -------------------- Stripe Payment --------------------
 router.post('/stripe/create', async (req, res) => {
   const { customerId, planId } = req.body || {};

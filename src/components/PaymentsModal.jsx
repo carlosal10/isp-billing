@@ -27,13 +27,31 @@ export default function PaymentsModal({ isOpen, onClose }) {
     extendDays: "",   // number
   });
 
+  // ------- Backdate / Goodwill state -------
+  const [adjustSearchTerm, setAdjustSearchTerm] = useState("");
+  const [adjustResults, setAdjustResults] = useState([]);
+  const [adjustLoading, setAdjustLoading] = useState(false);
+  const [adjustSearchError, setAdjustSearchError] = useState("");
+  const [adjustForm, setAdjustForm] = useState({
+    customerId: null,
+    accountNumber: "",
+    customerName: "",
+    backdateTo: "",
+    extendDays: "",
+    notes: "",
+  });
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustToast, setAdjustToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
   // ------- Edit/Delete state -------
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editPayment, setEditPayment] = useState(null); // current payment being edited
   const [confirm, setConfirm] = useState({ open: false, id: null, loading: false, message: "" });
 
-  const dropdownRef = useRef(null);
+  const manualDropdownRef = useRef(null);
+  const adjustDropdownRef = useRef(null);
 
   // fetch on open
   useEffect(() => {
@@ -42,12 +60,14 @@ export default function PaymentsModal({ isOpen, onClose }) {
     fetchInvoices();
   }, [isOpen]);
 
-  // close dropdown on outside click
+  // close dropdowns on outside click
   useEffect(() => {
     function onDocClick(e) {
-      if (!dropdownRef.current) return;
-      if (!dropdownRef.current.contains(e.target)) {
+      if (manualDropdownRef.current && !manualDropdownRef.current.contains(e.target)) {
         setCustomerResults([]);
+      }
+      if (adjustDropdownRef.current && !adjustDropdownRef.current.contains(e.target)) {
+        setAdjustResults([]);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -108,6 +128,45 @@ export default function PaymentsModal({ isOpen, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
+  const searchAdjustCustomers = async (q) => {
+    const query = q.trim();
+    if (!query) {
+      setAdjustResults([]);
+      setAdjustSearchError("");
+      return;
+    }
+    setAdjustLoading(true);
+    setAdjustSearchError("");
+    try {
+      const { data } = await api.get(`/customers/search`, { params: { query } });
+      setAdjustResults(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Adjust customer search failed:", err);
+      setAdjustSearchError("Search failed");
+      setAdjustResults([]);
+    } finally {
+      setAdjustLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const id = setTimeout(() => searchAdjustCustomers(adjustSearchTerm), 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjustSearchTerm]);
+
+  useEffect(() => {
+    if (!adjustToast) return () => {};
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setAdjustToast(null), 2500);
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, [adjustToast]);
+
   const handleManualValidation = async (e) => {
     e.preventDefault();
     if (!manualPayment.customerId) {
@@ -154,6 +213,66 @@ export default function PaymentsModal({ isOpen, onClose }) {
     } catch (err) {
       console.error("Validation failed:", err);
       alert(getErrMsg(err, "Error validating payment"));
+    }
+  };
+
+  const handleAdjustment = async (e) => {
+    e.preventDefault();
+    if (!adjustForm.customerId) {
+      setAdjustToast({ type: "error", message: "Select a customer to adjust." });
+      return;
+    }
+
+    const payload = {
+      customerId: adjustForm.customerId,
+      validatedBy: "Adjustment Tool",
+    };
+
+    const backdateTrim = adjustForm.backdateTo ? adjustForm.backdateTo.trim() : "";
+    if (backdateTrim) {
+      payload.backdateTo = backdateTrim;
+    }
+
+    const extendTrim = adjustForm.extendDays !== undefined && adjustForm.extendDays !== null
+      ? String(adjustForm.extendDays).trim()
+      : "";
+    if (extendTrim) {
+      const extendNumber = Number(extendTrim);
+      if (!Number.isFinite(extendNumber)) {
+        setAdjustToast({ type: "error", message: "Goodwill days must be a number." });
+        return;
+      }
+      payload.extendDays = extendNumber;
+    }
+
+    if (!payload.backdateTo && payload.extendDays === undefined) {
+      setAdjustToast({ type: "error", message: "Provide a backdate or goodwill days." });
+      return;
+    }
+
+    if (adjustForm.notes.trim()) {
+      payload.notes = adjustForm.notes.trim();
+    }
+
+    setAdjustSaving(true);
+    try {
+      const { data } = await api.post(`/payments/adjust`, payload);
+      setAdjustToast({ type: "success", message: data?.message || "Adjustment applied." });
+      setAdjustForm({
+        customerId: null,
+        accountNumber: "",
+        customerName: "",
+        backdateTo: "",
+        extendDays: "",
+        notes: "",
+      });
+      setAdjustSearchTerm("");
+      setAdjustResults([]);
+      fetchPayments();
+    } catch (err) {
+      setAdjustToast({ type: "error", message: getErrMsg(err, "Adjustment failed") });
+    } finally {
+      setAdjustSaving(false);
     }
   };
 
@@ -339,8 +458,14 @@ export default function PaymentsModal({ isOpen, onClose }) {
               </table>
             </div>
 
+            {!!adjustToast && (
+              <div className={`payments-toast ${adjustToast.type}`} role="status" aria-live="polite">
+                {adjustToast.message}
+              </div>
+            )}
+
             <h3>Manual Payment Validation</h3>
-            <form onSubmit={handleManualValidation} className="stacked-form" ref={dropdownRef}>
+            <form onSubmit={handleManualValidation} className="stacked-form" ref={manualDropdownRef}>
               {/* Customer search & select */}
               <div className="field">
                 <input
@@ -413,26 +538,113 @@ export default function PaymentsModal({ isOpen, onClose }) {
                 </select>
               </div>
 
-              {/* Backdating & Extension */}
-              <fieldset className="field">
-                <legend>Backdate & Extension (optional)</legend>
-                <label>Paid At (timestamp)
-                  <input type="datetime-local" value={manualPayment.paidAt} onChange={(e) => setManualPayment((p) => ({ ...p, paidAt: e.target.value }))} />
-                </label>
-                <label>Backdate To (cycle anchor)
-                  <input type="date" value={manualPayment.backdateTo} onChange={(e) => setManualPayment((p) => ({ ...p, backdateTo: e.target.value }))} />
-                </label>
-                <label>Expiry Override
-                  <input type="date" value={manualPayment.expiryDate} onChange={(e) => setManualPayment((p) => ({ ...p, expiryDate: e.target.value }))} />
-                </label>
-                <label>Extend Days
-                  <input type="number" min="0" step="1" value={manualPayment.extendDays} onChange={(e) => setManualPayment((p) => ({ ...p, extendDays: e.target.value }))} />
-                </label>
-                <p className="help-text">Use these to preserve a customer’s billing cycle (backdate) or add goodwill days.</p>
-              </fieldset>
-
               <button type="submit" className="primary">
                 <MdAdd className="inline-icon" /> Validate Payment
+              </button>
+            </form>
+
+            <h3>Backdate & Goodwill Adjustment</h3>
+            <form onSubmit={handleAdjustment} className="stacked-form" ref={adjustDropdownRef}>
+              <div className="field">
+                <input
+                  type="text"
+                  placeholder="Search customer by name or account number"
+                  value={adjustSearchTerm}
+                  onChange={(e) => setAdjustSearchTerm(e.target.value)}
+                  autoComplete="off"
+                />
+                {adjustLoading && <div className="help-text">Searching...</div>}
+                {adjustSearchError && <div className="error-text">{adjustSearchError}</div>}
+
+                {adjustResults.length > 0 && (
+                  <ul className="search-dropdown">
+                    {adjustResults.map((c) => (
+                      <li
+                        key={`adjust-${c._id}`}
+                        onClick={() => {
+                          setAdjustForm((prev) => ({
+                            ...prev,
+                            customerId: c._id,
+                            accountNumber: c.accountNumber || "",
+                            customerName: c.name || "",
+                          }));
+                          setAdjustSearchTerm(`${c.name} (${c.accountNumber})`);
+                          setAdjustResults([]);
+                          setAdjustSearchError("");
+                        }}
+                        title={`${c.name} - ${c.accountNumber}`}
+                      >
+                        {c.name} - {c.accountNumber}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {adjustResults.length === 0 && adjustSearchTerm.trim() && !adjustLoading && !adjustSearchError && !adjustForm.customerId && (
+                  <div className="search-empty">No matching customers</div>
+                )}
+
+                {adjustForm.customerId && (
+                  <div className="selected-customer">
+                    <span>
+                      {adjustForm.customerName || "Selected customer"} ({adjustForm.accountNumber || "N/A"})
+                    </span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setAdjustForm({
+                          customerId: null,
+                          accountNumber: "",
+                          customerName: "",
+                          backdateTo: "",
+                          extendDays: "",
+                          notes: "",
+                        });
+                        setAdjustSearchTerm("");
+                        setAdjustResults([]);
+                        setAdjustSearchError("");
+                      }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="field">
+                <label>Backdate To (optional)</label>
+                <input
+                  type="date"
+                  value={adjustForm.backdateTo}
+                  onChange={(e) => setAdjustForm((p) => ({ ...p, backdateTo: e.target.value }))}
+                />
+                <p className="help-text">Sets the billing cycle anchor; expiry = backdate + plan duration.</p>
+              </div>
+
+              <div className="field">
+                <label>Goodwill Days (optional)</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={adjustForm.extendDays}
+                  onChange={(e) => setAdjustForm((p) => ({ ...p, extendDays: e.target.value }))}
+                />
+                <p className="help-text">Adds (or subtracts) days to the computed expiry after backdating.</p>
+              </div>
+
+              <div className="field">
+                <label>Adjustment Notes (optional)</label>
+                <input
+                  type="text"
+                  value={adjustForm.notes}
+                  onChange={(e) => setAdjustForm((p) => ({ ...p, notes: e.target.value }))}
+                  placeholder="Reason for adjustment"
+                />
+              </div>
+
+              <button type="submit" className="primary" disabled={adjustSaving}>
+                {adjustSaving ? "Applying..." : "Apply Adjustment"}
               </button>
             </form>
           </>
