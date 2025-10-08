@@ -52,6 +52,26 @@ async function retry(fn, { attempts = 2, baseDelay = 400 } = {}) {
   }
   throw lastErr;
 }
+
+function accountKeys(value) {
+  const raw = (value == null ? "" : String(value)).trim();
+  if (!raw) return [];
+  const keys = new Set();
+  const push = (key) => {
+    if (key) keys.add(key);
+  };
+  push(raw);
+  push(raw.toUpperCase());
+  push(raw.toLowerCase());
+  const compact = raw.replace(/[^A-Za-z0-9]/g, "");
+  if (compact && compact !== raw) {
+    push(compact);
+    push(compact.toUpperCase());
+    push(compact.toLowerCase());
+  }
+  return Array.from(keys);
+}
+
 function usePageVisibility() {
   const [visible, setVisible] = useState(!document.hidden);
   useEffect(() => {
@@ -494,7 +514,16 @@ export default function Dashboard() {
   const customerByAccount = useMemo(() => {
     const map = new Map();
     for (const c of customers) {
-      if (c?.accountNumber) map.set(String(c.accountNumber), c);
+      const baseKeys = accountKeys(c?.accountNumber);
+      const aliasKeys = Array.isArray(c?.accountAliases)
+        ? c.accountAliases.flatMap((alias) => accountKeys(alias))
+        : [];
+      const keys = [...baseKeys, ...aliasKeys];
+      for (const key of keys) {
+        if (key && !map.has(key)) {
+          map.set(key, c);
+        }
+      }
     }
     return map;
   }, [customers]);
@@ -503,7 +532,13 @@ export default function Dashboard() {
     const map = new Map();
     for (const c of customers) {
       const ip = c?.staticConfig?.ip;
-      if (ip) map.set(String(ip), c);
+      if (!ip) continue;
+      const raw = String(ip).trim();
+      if (raw) {
+        if (!map.has(raw)) map.set(raw, c);
+        const lower = raw.toLowerCase();
+        if (!map.has(lower)) map.set(lower, c);
+      }
     }
     return map;
   }, [customers]);
@@ -513,10 +548,26 @@ export default function Dashboard() {
       const username =
         s.username || s.name || s.user || s.account || s.login || "";
       const acct = String(username || "").trim();
-      let c = customerByAccount.get(acct);
+      const accountCandidates = [
+        ...accountKeys(username),
+        ...accountKeys(s.accountNumber),
+      ];
+      let c = null;
+      for (const key of accountCandidates) {
+        if (!key) continue;
+        c = customerByAccount.get(key);
+        if (c) break;
+      }
       if (!c) {
-        const ipKey = String(s.address || s.ip || s.ipAddress || "");
-        if (ipKey) c = customerByStaticIp.get(ipKey);
+        const ipRaw = s.address || s.ip || s.ipAddress || "";
+        const ipKey = String(ipRaw || "").trim();
+        if (ipKey) {
+          const candidates = [ipKey, ipKey.toLowerCase()];
+          for (const key of candidates) {
+            c = customerByStaticIp.get(key);
+            if (c) break;
+          }
+        }
       }
       const status = (c?.status || "").toString().toLowerCase();
       const apiDisabled =
@@ -536,8 +587,14 @@ export default function Dashboard() {
       const uptimeMs = typeof s.uptimeMs === "number" && Number.isFinite(s.uptimeMs)
         ? s.uptimeMs
         : null;
+      const accountNumberOut =
+        c?.accountNumber ||
+        accountCandidates.find(Boolean) ||
+        acct ||
+        "-";
+
       return {
-        accountNumber: acct || "-",
+        accountNumber: accountNumberOut,
         name: c?.name || s.fullName || "-",
         phone: c?.phone || "-",
         ip: s.address || s.ip || s.ipAddress || "-",

@@ -1,112 +1,196 @@
-// jobs/expireAccess.js
-const cron = require('node-cron');
+'use strict';
+
+/**
+ * Expire router access (Hotspot + ad-hoc PPPoE vouchers)
+ * ------------------------------------------------------
+ * Finds records whose `expiresAt` is in the past, removes the corresponding
+ * MikroTik entries, clears active sessions, and deletes the record.
+ *
+ * This replaces the legacy direct connect logic with the shared pooled
+ * MikroTik connection manager so multi-tenant routing works correctly.
+ */
+
 const RegisteredHotspotUser = require('../models/RegisteredHotspotUser');
 const RegisteredPPPoEUser = require('../models/pppoeUsers');
-const { connectToMikroTik } = require('../routes/mikrotikConnect');
+const { sendCommand } = require('../utils/mikrotikConnectionManager');
+const { scheduleJob } = require('../utils/scheduler');
 
-let running = false; // simple lock to avoid overlapping runs
+const ROUTER_TIMEOUT_MS = 10_000;
 
-// Run every 5 minutes (Kenya time)
-cron.schedule('*/5 * * * *', async () => {
-  if (running) {
-    console.warn('⏳ Expiry job skipped: previous run still in progress');
-    return;
+const getId = (row) => (row ? row['.id'] || row.id || row.numbers || null : null);
+const toTenantId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && typeof value.toString === 'function') return value.toString();
+  return String(value);
+};
+
+async function removeHotspotUser(tenantId, mac) {
+  if (!tenantId || !mac) return;
+
+  const name = String(mac).trim();
+  if (!name) return;
+
+  const list = await sendCommand('/ip/hotspot/user/print', [`?name=${name}`], {
+    tenantId,
+    timeoutMs: ROUTER_TIMEOUT_MS,
+  }).catch(() => []);
+
+  const row = Array.isArray(list) && list[0] ? list[0] : null;
+  const id = getId(row);
+  if (id) {
+    await sendCommand('/ip/hotspot/user/remove', [`=numbers=${id}`], {
+      tenantId,
+      timeoutMs: ROUTER_TIMEOUT_MS,
+    }).catch(() => {});
   }
-  running = true;
 
-  const startedAt = new Date();
-  const stamp = startedAt.toISOString();
-  console.log(`⏰ [${stamp}] Running expiry check...`);
+  const activeByUser = await sendCommand('/ip/hotspot/active/print', [`?user=${name}`], {
+    tenantId,
+    timeoutMs: ROUTER_TIMEOUT_MS,
+  }).catch(() => []);
 
-  let api = null;
+  const activeByMac = await sendCommand('/ip/hotspot/active/print', [`?mac-address=${name}`], {
+    tenantId,
+    timeoutMs: ROUTER_TIMEOUT_MS,
+  }).catch(() => []);
 
-  try {
-    const now = new Date();
+  const active = [
+    ...(Array.isArray(activeByUser) ? activeByUser : []),
+    ...(Array.isArray(activeByMac) ? activeByMac : []),
+  ];
 
-    // Fetch only what we need; lean for speed
-    const [expiredHotspotUsers, expiredPPPoEUsers] = await Promise.all([
-      RegisteredHotspotUser.find({ expiresAt: { $lt: now } })
-        .select('_id mac') // assuming hotspot name == MAC in ROS
-        .lean(),
-      RegisteredPPPoEUser.find({ expiresAt: { $lt: now } })
-        .select('_id username') // assuming PPPoE secret name == username
-        .lean(),
-    ]);
+  const seen = new Set();
+  for (const session of active) {
+    const sessionId = getId(session);
+    if (!sessionId || seen.has(sessionId)) continue;
+    seen.add(sessionId);
+    await sendCommand('/ip/hotspot/active/remove', [`=.id=${sessionId}`], {
+      tenantId,
+      timeoutMs: ROUTER_TIMEOUT_MS,
+    }).catch(() => {});
+  }
+}
 
-    const totalExpired =
-      expiredHotspotUsers.length + expiredPPPoEUsers.length;
+async function removePppoeUser(tenantId, username) {
+  if (!tenantId || !username) return;
 
-    if (totalExpired === 0) {
-      console.log('✅ No expired users found');
-      return;
+  const name = String(username).trim();
+  if (!name) return;
+
+  const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], {
+    tenantId,
+    timeoutMs: ROUTER_TIMEOUT_MS,
+  }).catch(() => []);
+
+  const secret = Array.isArray(secrets) && secrets[0] ? secrets[0] : null;
+  const secretId = getId(secret);
+  if (secretId) {
+    await sendCommand('/ppp/secret/remove', [`=numbers=${secretId}`], {
+      tenantId,
+      timeoutMs: ROUTER_TIMEOUT_MS,
+    }).catch(() => {});
+  }
+
+  const active = await sendCommand('/ppp/active/print', [`?name=${name}`], {
+    tenantId,
+    timeoutMs: ROUTER_TIMEOUT_MS,
+  }).catch(() => []);
+
+  for (const session of Array.isArray(active) ? active : []) {
+    const sessionId = getId(session);
+    if (!sessionId) continue;
+    await sendCommand('/ppp/active/remove', [`=.id=${sessionId}`], {
+      tenantId,
+      timeoutMs: ROUTER_TIMEOUT_MS,
+    }).catch(() => {});
+  }
+}
+
+async function runExpirySweep() {
+  const now = new Date();
+  const summary = {
+    hotspotExpired: 0,
+    hotspotDisconnected: 0,
+    hotspotErrors: 0,
+    pppoeExpired: 0,
+    pppoeDisconnected: 0,
+    pppoeErrors: 0,
+  };
+
+  const hotspot = await RegisteredHotspotUser.find({ expiresAt: { $lte: now } })
+    .select('_id tenantId mac')
+    .lean();
+  summary.hotspotExpired = hotspot.length;
+
+  for (const entry of hotspot) {
+    const tenantId = toTenantId(entry.tenantId);
+    if (!tenantId || !entry.mac) {
+      summary.hotspotErrors += 1;
+      console.warn('[expireAccess] hotspot record missing tenant or mac', {
+        id: entry._id?.toString?.() || entry._id,
+        tenantId,
+        mac: entry.mac,
+      });
+      continue;
     }
-
-    // Connect only if we actually have work
-    api = await connectToMikroTik();
-    if (!api) {
-      console.error('⚠️ Could not connect to MikroTik for expiry job');
-      return;
-    }
-
-    // ----------- Hotspot removals -----------
-    if (expiredHotspotUsers.length) {
-      console.log(`🔥 Expiring ${expiredHotspotUsers.length} Hotspot user(s)`);
-
-      for (const user of expiredHotspotUsers) {
-        try {
-          // Find hotspot user by name (you use MAC as the name)
-          const list = await api.write('/ip/hotspot/user/print', [`?name=${user.mac}`]);
-
-          if (Array.isArray(list) && list.length > 0) {
-            // Remove the first matching entry (.id is RouterOS internal id)
-            await api.write('/ip/hotspot/user/remove', [`=.id=${list[0]['.id']}`]);
-            console.log(`✅ Removed Hotspot user: ${user.mac}`);
-          } else {
-            console.log(`ℹ️ Hotspot user not found on router: ${user.mac}`);
-          }
-
-          await RegisteredHotspotUser.deleteOne({ _id: user._id });
-        } catch (err) {
-          console.error(`❌ Error expiring Hotspot user ${user.mac}:`, err?.message || err);
-          // do not throw; continue others
-        }
-      }
-    }
-
-    // ----------- PPPoE removals -----------
-    if (expiredPPPoEUsers.length) {
-      console.log(`🔥 Expiring ${expiredPPPoEUsers.length} PPPoE user(s)`);
-
-      for (const user of expiredPPPoEUsers) {
-        try {
-          const list = await api.write('/ppp/secret/print', [`?name=${user.username}`]);
-
-          if (Array.isArray(list) && list.length > 0) {
-            await api.write('/ppp/secret/remove', [`=.id=${list[0]['.id']}`]);
-            console.log(`✅ Removed PPPoE user: ${user.username}`);
-          } else {
-            console.log(`ℹ️ PPPoE secret not found on router: ${user.username}`);
-          }
-
-          await RegisteredPPPoEUser.deleteOne({ _id: user._id });
-        } catch (err) {
-          console.error(`❌ Error expiring PPPoE user ${user.username}:`, err?.message || err);
-          // continue others
-        }
-      }
-    }
-
-    console.log(`🏁 Expiry job finished in ${Math.round((Date.now() - startedAt.getTime()) / 1000)}s (processed: ${totalExpired})`);
-  } catch (err) {
-    console.error('⚠️ Unified expiry cron job failed:', err?.message || err);
-  } finally {
     try {
-      if (api?.close) await api.close();
-    } catch (e) {
-      console.error('⚠️ Error closing MikroTik API connection:', e?.message || e);
+      await removeHotspotUser(tenantId, entry.mac);
+      await RegisteredHotspotUser.deleteOne({ _id: entry._id }).catch(() => {});
+      summary.hotspotDisconnected += 1;
+    } catch (err) {
+      summary.hotspotErrors += 1;
+      console.warn('[expireAccess] hotspot disconnect failed', {
+        tenantId,
+        mac: entry.mac,
+        error: err?.message || err,
+      });
     }
-    running = false;
   }
+
+  let pppoe = [];
+  try {
+    pppoe = await RegisteredPPPoEUser.find({ expiresAt: { $lte: now } })
+      .select('_id tenantId username')
+      .lean();
+  } catch (err) {
+    // In legacy setups the schema may not have expiresAt; treat as none.
+    pppoe = [];
+  }
+  summary.pppoeExpired = Array.isArray(pppoe) ? pppoe.length : 0;
+
+  for (const entry of Array.isArray(pppoe) ? pppoe : []) {
+    const tenantId = toTenantId(entry.tenantId);
+    if (!tenantId || !entry.username) {
+      summary.pppoeErrors += 1;
+      console.warn('[expireAccess] pppoe record missing tenant or username', {
+        id: entry._id?.toString?.() || entry._id,
+        tenantId,
+        username: entry.username,
+      });
+      continue;
+    }
+    try {
+      await removePppoeUser(tenantId, entry.username);
+      await RegisteredPPPoEUser.deleteOne({ _id: entry._id }).catch(() => {});
+      summary.pppoeDisconnected += 1;
+    } catch (err) {
+      summary.pppoeErrors += 1;
+      console.warn('[expireAccess] pppoe disconnect failed', {
+        tenantId,
+        username: entry.username,
+        error: err?.message || err,
+      });
+    }
+  }
+
+  return summary;
+}
+
+scheduleJob({
+  name: 'expireAccess',
+  cronExpr: '*/5 * * * *',
+  task: runExpirySweep,
 });
 
-console.log('⏳ Expiry job scheduled (every 5 minutes)');
+module.exports = { runExpirySweep };
