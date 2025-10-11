@@ -379,19 +379,44 @@ router.put('/:id', async (req, res) => {
 
       // Update PPP secret (best-effort but fail if not found)
       try {
-        let list = await sendCommand('/ppp/secret/print', [`?name=${nextAccount}`], { tenantId, timeoutMs: 10000 });
-        if (!Array.isArray(list) || !list[0]) {
-          list = await sendCommand('/ppp/secret/print', [`?name=${prevAccount}`], { tenantId, timeoutMs: 10000 });
+        const searchKeys = [];
+        const pushKey = (value) => {
+          const v = String(value || '').trim();
+          if (!v) return;
+          if (!searchKeys.includes(v)) searchKeys.push(v);
+        };
+        pushKey(nextAccount);
+        pushKey(prevAccount);
+        if (Array.isArray(customer.accountAliases)) {
+          for (const alias of customer.accountAliases) pushKey(alias);
         }
-        if (!Array.isArray(list) || !list[0]) {
+        if (Array.isArray(allowed.accountAliases)) {
+          for (const alias of allowed.accountAliases) pushKey(alias);
+        }
+
+        let secret = null;
+        for (const key of searchKeys) {
+          const list = await sendCommand('/ppp/secret/print', [`?name=${key}`], { tenantId, timeoutMs: 10000 });
+          if (Array.isArray(list) && list[0]) {
+            secret = list[0];
+            break;
+          }
+        }
+
+        if (!secret) {
           return res.status(404).json({ message: 'PPPoE secret not found on MikroTik for this account' });
         }
-        const id = list[0]['.id'] || list[0].id || list[0].numbers;
-        await sendCommand('/ppp/secret/set', [
+        const id = secret['.id'] || secret.id || secret.numbers;
+        const existingName = secret.name || secret.user || secret.username || null;
+        const commands = [
           `=numbers=${id}`,
           `=profile=${allowed.pppoeConfig.profile}`,
           `=comment=Customer: ${nextName}`,
-        ], { tenantId, timeoutMs: 10000 });
+        ];
+        if (existingName && existingName !== nextAccount) {
+          commands.push(`=name=${nextAccount}`);
+        }
+        await sendCommand('/ppp/secret/set', commands, { tenantId, timeoutMs: 10000 });
       } catch (e) {
         return res.status(500).json({ message: 'Failed to update PPPoE secret: ' + (e?.message || e) });
       }
