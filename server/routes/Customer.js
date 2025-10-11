@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const Customer = require('../models/customers');
 const Tenant = require('../models/Tenant');
 const Plan = require('../models/plan');
+const { deriveAccountCode } = require('../utils/accountNumber');
 
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const {
@@ -22,13 +23,6 @@ const { sendSms } = require('../utils/sms');
 
 /* ------------------------- Helpers ------------------------- */
 
-function sanitizeCode(s) {
-  return String(s || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 12);
-}
 const isYes = (v) => {
   const s = String(v ?? '').trim().toLowerCase();
   return s === 'yes' || s === 'true' || s === '1' || s === 'on';
@@ -188,7 +182,7 @@ router.post('/', async (req, res) => {
     try {
       const tenant = await Tenant.findById(req.tenantId).lean();
       const prefix = (tenant?.accountPrefix || '').trim();
-      const baseCode = sanitizeCode(address || name || phone || 'CUST');
+      const baseCode = deriveAccountCode(address || name || phone || 'CUST');
       let candidate = (prefix ? prefix : '') + baseCode;
       // ensure uniqueness per-tenant by suffixing if needed
       let attempt = 0;

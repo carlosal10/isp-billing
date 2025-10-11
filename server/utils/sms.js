@@ -26,6 +26,14 @@ function pickTenantFallback(provider, tenantSettings) {
     if (apiKey && username) return { apiKey, username, from, sandbox: !!sandboxEnv };
     return null;
   }
+  if (provider === 'textsms') {
+    const apiKey = tenantSettings?.textsms?.apiKey || getEnv('TEXTSMS_API_KEY');
+    const partnerId = tenantSettings?.textsms?.partnerId || getEnv('TEXTSMS_PARTNER_ID');
+    const baseUrl = tenantSettings?.textsms?.baseUrl || getEnv('TEXTSMS_BASE_URL');
+    const sender = tenantSettings?.textsms?.sender || tenantSettings?.senderId || getEnv('TEXTSMS_SENDER');
+    if (apiKey && partnerId && baseUrl) return { apiKey, partnerId, baseUrl, sender };
+    return null;
+  }
   return null;
 }
 
@@ -67,6 +75,59 @@ async function sendViaAfricasTalking(creds, to, body) {
   return { id: rec?.messageId || String(Date.now()), provider: 'africastalking', status: rec?.status, cost: rec?.cost, raw: res.data };
 }
 
+async function sendViaTextSms(creds, to, body) {
+  if (!creds.baseUrl) throw new Error('TextSms: Missing API URL');
+  const recipient = Array.isArray(to) ? to.join(',') : to;
+  const payload = {
+    partnerID: creds.partnerId,
+    apikey: creds.apiKey,
+    mobile: recipient,
+    message: body,
+  };
+  if (creds.sender) payload.shortcode = creds.sender;
+
+  const res = await axios.post(
+    creds.baseUrl,
+    qs.stringify(payload),
+    {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000,
+    },
+  );
+
+  const data = res.data;
+  if (data && typeof data === 'object') {
+    const statusValue = data.status || data.Status || data.code || data.Code;
+    const ok = typeof statusValue === 'string'
+      ? /success|accept|queued|ok|sent/i.test(statusValue)
+      : statusValue === 200 || statusValue === 1701 || statusValue === 0 || statusValue === true;
+    if (!ok && data.error) {
+      throw new Error(`TextSms: ${data.error}`);
+    }
+    if (!ok && data.errors) {
+      const first = Array.isArray(data.errors) ? data.errors[0] : data.errors;
+      throw new Error(`TextSms: ${first}`);
+    }
+    if (!ok && data.description) {
+      throw new Error(`TextSms: ${data.description}`);
+    }
+    const id = data.message_id || data.MessageID || data.id || String(Date.now());
+    return { id, provider: 'textsms', raw: data, status: statusValue || 'accepted' };
+  }
+
+  const text = typeof data === 'string' ? data.trim() : '';
+  if (text) {
+    if (/error|invalid|failed/i.test(text) && !/1701|success|ok|queued|accepted/i.test(text)) {
+      throw new Error(`TextSms: ${text}`);
+    }
+    const parts = text.split('|');
+    const id = parts.length > 1 ? parts[1] : text.replace(/[^A-Za-z0-9_-]/g, '');
+    return { id: id || String(Date.now()), provider: 'textsms', raw: text, status: 'accepted' };
+  }
+
+  return { id: String(Date.now()), provider: 'textsms', raw: data, status: 'accepted' };
+}
+
 function normalizePhone(phone) {
   if (!phone) return phone;
   const p = String(phone).trim();
@@ -84,10 +145,11 @@ async function sendSms(tenantId, to, body) {
   const primary = settings?.primaryProvider || 'twilio';
   const normalized = normalizePhone(to);
 
-  // Use fallback only if explicitly enabled
-  const order = settings?.fallbackEnabled
-    ? [primary, primary === 'twilio' ? 'africastalking' : 'twilio']
+  const providers = ['twilio', 'africastalking', 'textsms'];
+  const orderRaw = settings?.fallbackEnabled
+    ? [primary, ...providers.filter((p) => p !== primary)]
     : [primary];
+  const order = Array.from(new Set(orderRaw));
 
   let lastError = null;
   let firstError = null;
@@ -97,6 +159,7 @@ async function sendSms(tenantId, to, body) {
       if (!creds) throw new Error(`Missing credentials for ${p}`);
       if (p === 'twilio') return await sendViaTwilio(creds, normalized, body);
       if (p === 'africastalking') return await sendViaAfricasTalking(creds, normalized, body);
+      if (p === 'textsms') return await sendViaTextSms(creds, normalized, body);
       throw new Error('Unsupported SMS provider');
     } catch (e) {
       if (!firstError) firstError = e;

@@ -9,7 +9,7 @@ const SmsSettingsSchema = new mongoose.Schema(
     defaultLanguage: { type: String, default: 'en' },
     senderId: { type: String, default: '' },
 
-    primaryProvider: { type: String, enum: ['twilio', 'africastalking'], default: 'twilio' },
+    primaryProvider: { type: String, enum: ['twilio', 'africastalking', 'textsms'], default: 'twilio' },
     fallbackEnabled: { type: Boolean, default: false },
 
     // Provider credentials (optional, per-tenant)
@@ -23,6 +23,12 @@ const SmsSettingsSchema = new mongoose.Schema(
       username: String,
       from: String,
       useSandbox: { type: Boolean, default: false },
+    },
+    textsms: {
+      apiKey: String,
+      partnerId: String,
+      sender: String,
+      baseUrl: String,
     },
 
     // Simple schedule config (days/hours before expiry)

@@ -16,6 +16,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     senderId: "",
     twilio: { accountSid: "", authToken: "", from: "" },
     africastalking: { apiKey: "", username: "", from: "", useSandbox: false },
+    textsms: { apiKey: "", partnerId: "", sender: "", baseUrl: "" },
     schedule: { reminder5Days: true, reminder3Days: true, dueWarnHours: 4 },
     autoSendOnCreate: false,
     autoSendOnPlanChange: false,
@@ -300,8 +301,9 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                         }))
                       }
                     >
-                      <option value="twilio">Twilio</option>
-                      <option value="africastalking">Africa's Talking</option>
+                    <option value="twilio">Twilio</option>
+                    <option value="africastalking">Africa's Talking</option>
+                    <option value="textsms">TextSms</option>
                     </select>
                 </div>
                 <div>
@@ -463,6 +465,85 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
                       />
                       <span>Use Africa&apos;s Talking Sandbox</span>
                     </label>
+                  </div>
+                );
+              })()}
+
+              {/* TextSms */}
+              {(() => {
+                const disabled = settings.primaryProvider !== "textsms";
+                return (
+                  <div className={`sms-card ${disabled ? "is-disabled" : ""}`}>
+                    <div className="sms-card-head">
+                      <h3 className="sms-card-title">TextSms</h3>
+                      {disabled && (
+                        <span className="sms-muted">Disabled (not selected)</span>
+                      )}
+                    </div>
+                    <div className="ps-grid">
+                      <input
+                        className="ps-input"
+                        disabled={disabled}
+                        placeholder="API Key"
+                        value={settings.textsms?.apiKey || ""}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            textsms: {
+                              ...s.textsms,
+                              apiKey: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <input
+                        className="ps-input"
+                        disabled={disabled}
+                        placeholder="Partner ID"
+                        value={settings.textsms?.partnerId || ""}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            textsms: {
+                              ...s.textsms,
+                              partnerId: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="ps-grid mt-8">
+                      <input
+                        className="ps-input"
+                        disabled={disabled}
+                        placeholder="Sender / Shortcode"
+                        value={settings.textsms?.sender || ""}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            textsms: {
+                              ...s.textsms,
+                              sender: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <input
+                        className="ps-input"
+                        disabled={disabled}
+                        placeholder="API URL"
+                        value={settings.textsms?.baseUrl || ""}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            textsms: {
+                              ...s.textsms,
+                              baseUrl: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
                   </div>
                 );
               })()}

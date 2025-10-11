@@ -1,25 +1,19 @@
 #!/usr/bin/env node
 
+// Bulk-regenerate tenant-bound account numbers while abbreviating address segments
+// (first letters + numeric suffix) so final codes stay short and user-friendly.
 const mongoose = require('mongoose');
 const path = require('path');
 
 const Customer = require(path.resolve(__dirname, '../server/models/customers'));
 const Tenant = require(path.resolve(__dirname, '../server/models/Tenant'));
+const { deriveAccountCode } = require(path.resolve(__dirname, '../server/utils/accountNumber'));
 
 const MAX_LEN = 16;
 const MAX_ATTEMPTS = 5;
 const RANDOM_LENGTH = 10;
 const RANDOM_TRIES = 50;
 const RANDOM_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-function sanitizeCode(value) {
-  const cleaned = String(value || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 12);
-  return cleaned || 'CUST';
-}
 
 function parseArgs(argv) {
   const options = { overridePrefix: null, dryRun: false };
@@ -75,7 +69,7 @@ function buildCandidate(prefix, base, attempt) {
 
 function generateAccountNumber({ customer, prefix, used }) {
   const baseSource = customer.address || customer.name || customer.phone || customer._id;
-  const baseCode = sanitizeCode(baseSource);
+  const baseCode = deriveAccountCode(baseSource);
 
   let candidate = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
