@@ -155,9 +155,16 @@ async function run() {
 
   console.log(`Applying ${updates.length} updates...`);
   for (const u of updates) {
+    const oldAlias = typeof u.old === 'string' ? u.old.trim() : '';
+    const updateDoc = {
+      $set: { accountNumber: u.accountNumber },
+    };
+    if (oldAlias) {
+      updateDoc.$addToSet = { accountAliases: oldAlias };
+    }
     await Customer.updateOne(
       { _id: u.id, tenantId },
-      { $set: { accountNumber: u.accountNumber } }
+      updateDoc
     );
   }
 

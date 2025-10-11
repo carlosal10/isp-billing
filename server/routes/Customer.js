@@ -33,6 +33,40 @@ const isYes = (v) => {
   const s = String(v ?? '').trim().toLowerCase();
   return s === 'yes' || s === 'true' || s === '1' || s === 'on';
 };
+function accountKeys(value) {
+  const raw = (value == null ? '' : String(value)).trim();
+  if (!raw) return [];
+  const keys = new Set();
+  const push = (key) => {
+    if (key) keys.add(key);
+  };
+  push(raw);
+  push(raw.toUpperCase());
+  push(raw.toLowerCase());
+  const compact = raw.replace(/[^A-Za-z0-9]/g, '');
+  if (compact && compact !== raw) {
+    push(compact);
+    push(compact.toUpperCase());
+    push(compact.toLowerCase());
+  }
+  return Array.from(keys);
+}
+function sanitizeAliases(list, excludeValue = '') {
+  const skip = String(excludeValue || '').trim();
+  const out = [];
+  const seen = new Set();
+  for (const entry of Array.isArray(list) ? list : []) {
+    const alias = String(entry || '').trim();
+    if (!alias) continue;
+    if (skip && alias === skip) continue;
+    const key = alias.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(alias);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
 
 /* --------------------- List & Search ----------------------- */
 
@@ -126,6 +160,7 @@ router.post('/', async (req, res) => {
       connectionType, // 'pppoe' | 'static'
       pppoeConfig,
       staticConfig,
+      accountAliases,
     } = req.body || {};
 
     // Validate plan
@@ -174,6 +209,8 @@ router.post('/', async (req, res) => {
       accountNumber = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
+    const initialAliases = sanitizeAliases(accountAliases, accountNumber);
+
     const customer = new Customer({
       tenantId: req.tenantId,
       name,
@@ -195,6 +232,7 @@ router.post('/', async (req, res) => {
             }
           : undefined,
       staticConfig: connectionType === 'static' ? staticConfig : undefined,
+      accountAliases: initialAliases,
     });
 
     const saved = await customer.save();
@@ -267,8 +305,8 @@ router.put('/:id', async (req, res) => {
 
     // Allowlist fields
     const allowed = (({
-      name, email, phone, address, status, plan, connectionType, pppoeConfig, staticConfig, accountNumber
-    }) => ({ name, email, phone, address, status, plan, connectionType, pppoeConfig, staticConfig, accountNumber }))(req.body || {});
+      name, email, phone, address, status, plan, connectionType, pppoeConfig, staticConfig, accountNumber, accountAliases
+    }) => ({ name, email, phone, address, status, plan, connectionType, pppoeConfig, staticConfig, accountNumber, accountAliases }))(req.body || {});
     Object.keys(allowed).forEach(k => allowed[k] === undefined && delete allowed[k]);
 
     // Validate plan (either provided or keep existing)
@@ -312,6 +350,24 @@ router.put('/:id', async (req, res) => {
       } catch (e) {
         console.warn('Queue rename failed:', e?.message || e);
       }
+    }
+
+    const manualAliases =
+      allowed.accountAliases !== undefined
+        ? sanitizeAliases(allowed.accountAliases, nextAccount)
+        : null;
+
+    // Maintain alias history so legacy PPPoE usernames (old account numbers) still map in the UI.
+    if (prevAccount && prevAccount !== nextAccount) {
+      const baseAliases =
+        manualAliases !== null
+          ? manualAliases
+          : sanitizeAliases(customer.accountAliases, nextAccount);
+      const aliasSet = new Set(baseAliases);
+      aliasSet.add(prevAccount);
+      customer.accountAliases = Array.from(aliasSet).slice(0, 10);
+    } else if (manualAliases !== null) {
+      customer.accountAliases = manualAliases;
     }
 
     // Connection-type specifics
@@ -575,12 +631,45 @@ router.get('/disabled', async (req, res) => {
 
     // Attach customer info
     const allAccounts = [...pppoe, ...staticQ].map((x) => x.accountNumber);
-    const customers = await Customer.find({ tenantId, accountNumber: { $in: allAccounts } })
-      .select('accountNumber name phone email address plan connectionType')
+    const customers = await Customer.find({
+      tenantId,
+      $or: [
+        { accountNumber: { $in: allAccounts } },
+        { accountAliases: { $in: allAccounts } },
+      ],
+    })
+      .select('accountNumber name phone email address plan connectionType accountAliases')
       .populate('plan', 'name speed price')
       .lean();
-    const byAcct = new Map(customers.map((c) => [String(c.accountNumber), c]));
-    const attach = (arr) => arr.map((x) => ({ ...x, customer: byAcct.get(x.accountNumber) || null }));
+    const byKey = new Map();
+    const register = (key, customer) => {
+      const raw = String(key || '').trim();
+      if (!raw) return;
+      for (const variant of accountKeys(raw)) {
+        if (!byKey.has(variant)) byKey.set(variant, customer);
+      }
+    };
+    for (const customer of customers) {
+      register(customer.accountNumber, customer);
+      if (Array.isArray(customer.accountAliases)) {
+        for (const alias of customer.accountAliases) {
+          register(alias, customer);
+        }
+      }
+    }
+    const attach = (arr) =>
+      arr.map((x) => {
+        let customer = null;
+        for (const key of accountKeys(x.accountNumber)) {
+          customer = byKey.get(key);
+          if (customer) break;
+        }
+        if (!customer) {
+          const fallback = String(x.accountNumber || '').trim();
+          if (fallback) customer = byKey.get(fallback);
+        }
+        return { ...x, customer: customer || null };
+      });
 
     res.json({ ok: true, pppoe: attach(pppoe), static: attach(staticQ) });
   } catch (e) {

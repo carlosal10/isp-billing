@@ -12,6 +12,10 @@ const customerSchema = new mongoose.Schema({
   expiryDate: { type: Date },
   // Unique per-tenant (not globally unique)
   accountNumber: { type: String },
+  accountAliases: {
+    type: [String],
+    default: [],
+  },
 
   // Link to plan
   plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan' },
