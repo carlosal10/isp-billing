@@ -86,14 +86,24 @@ async function sendViaTextSms(creds, to, body) {
   };
   if (creds.sender) payload.shortcode = creds.sender;
 
-  const res = await axios.post(
-    creds.baseUrl,
-    qs.stringify(payload),
-    {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-    },
-  );
+  let res;
+  try {
+    res = await axios.post(
+      creds.baseUrl,
+      qs.stringify(payload),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
+      },
+    );
+  } catch (err) {
+    const data = err?.response?.data;
+    if (data && typeof data === 'object') {
+      const friendly = describeTextSmsError(data);
+      if (friendly) throw new Error(friendly);
+    }
+    throw err;
+  }
 
   const data = res.data;
   if (data && typeof data === 'object') {
@@ -106,7 +116,9 @@ async function sendViaTextSms(creds, to, body) {
     }
     if (!ok && data.errors) {
       const first = Array.isArray(data.errors) ? data.errors[0] : data.errors;
-      throw new Error(`TextSms: ${first}`);
+      const friendly = describeTextSmsError({ errors: first });
+      if (friendly) throw new Error(friendly);
+      throw new Error(`TextSms: ${String(first)}`);
     }
     if (!ok && data.description) {
       throw new Error(`TextSms: ${data.description}`);
@@ -167,6 +179,32 @@ async function sendSms(tenantId, to, body) {
     }
   }
   throw firstError || lastError || new Error('No SMS provider configured');
+}
+
+function describeTextSmsError(data) {
+  if (!data || typeof data !== 'object') return null;
+  const desc = data['response-description'] || data.description || data.message || null;
+
+  function findFirstMessage(value) {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const inner = findFirstMessage(entry);
+        if (inner) return inner;
+      }
+    } else if (typeof value === 'object') {
+      for (const val of Object.values(value)) {
+        const inner = findFirstMessage(val);
+        if (inner) return inner;
+      }
+    }
+    return null;
+  }
+
+  const specific = findFirstMessage(data.errors);
+  const combined = [desc, specific].filter(Boolean).join(': ');
+  return combined ? `TextSms: ${combined}` : null;
 }
 
 module.exports = { sendSms, normalizePhone };
