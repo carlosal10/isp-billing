@@ -1120,7 +1120,7 @@ export default function Dashboard() {
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Connection</th>
-                  <th>Date Created</th>
+                  <th>Last Paid</th>
                   <th>Expiry Date</th>
                   <th>Days Left</th>
                 </tr>
