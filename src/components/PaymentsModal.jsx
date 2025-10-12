@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd, MdEdit, MdDelete, MdClose } from "react-icons/md";
 import { api } from "../lib/apiClient";
+import { exportRows } from "../lib/exporters";
 
 export default function PaymentsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices"
@@ -81,6 +82,14 @@ export default function PaymentsModal({ isOpen, onClose }) {
     err?.message ||
     fallback;
 
+  const formatDateTime = (value) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (!Number.isFinite(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const fetchPayments = async () => {
     try {
       const { data } = await api.get(`/payments`);
@@ -96,6 +105,44 @@ export default function PaymentsModal({ isOpen, onClose }) {
       setInvoices(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
+    }
+  };
+
+  const handleExportPayments = async () => {
+    if (!Array.isArray(payments) || payments.length === 0) return;
+    const headers = [
+      "Payment ID",
+      "Account #",
+      "Customer",
+      "Plan",
+      "Amount (KES)",
+      "Method",
+      "Status",
+      "Validated At",
+      "Created At",
+      "Expiry Date",
+    ];
+    const rows = payments.map((p) => ({
+      "Payment ID": p._id || "",
+      "Account #": p.accountNumber || p.customer?.accountNumber || "",
+      Customer: p.customerName || p.customer?.name || "",
+      Plan: p.plan?.name || "",
+      "Amount (KES)": Number.isFinite(Number(p.amount)) ? Number(p.amount).toFixed(2) : p.amount || "",
+      Method: p.method || "",
+      Status: p.status || "",
+      "Validated At": formatDateTime(p.validatedAt),
+      "Created At": formatDateTime(p.createdAt),
+      "Expiry Date": formatDateTime(p.expiryDate),
+    }));
+    try {
+      await exportRows({
+        rows,
+        headers,
+        filename: `payments-${new Date().toISOString().slice(0, 10)}`,
+        sheetName: "Payments",
+      });
+    } catch (err) {
+      console.error("Payments export failed:", err);
     }
   };
 
@@ -410,7 +457,17 @@ export default function PaymentsModal({ isOpen, onClose }) {
         {/* ===== Payments Tab ===== */}
         {activeTab === "payments" && (
           <>
-            <h2>Payments</h2>
+            <div className="payments-header">
+              <h2>Payments</h2>
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleExportPayments}
+                disabled={!payments.length}
+              >
+                Export
+              </button>
+            </div>
             <div className="table-wrapper">
               <table className="data-table">
                 <thead>

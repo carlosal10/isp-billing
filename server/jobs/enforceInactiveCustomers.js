@@ -46,10 +46,39 @@ async function runOnce() {
   const tenants = await Customer.distinct('tenantId').catch(() => []);
   for (const tid of tenants) {
     const tenantId = String(tid);
-    const list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
+    const now = new Date();
+    const newlyExpired = await Customer.find({
+      tenantId,
+      expiryDate: { $lt: now },
+      status: { $nin: ['inactive', 'expired'] },
+    })
       .select('tenantId accountNumber connectionType staticConfig')
       .lean()
       .catch(() => []);
+
+    for (const c of newlyExpired) {
+      await Customer.updateOne(
+        { _id: c._id, tenantId },
+        { $set: { status: 'inactive', updatedAt: now } }
+      ).catch(() => {});
+    }
+
+    let list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
+      .select('tenantId accountNumber connectionType staticConfig')
+      .lean()
+      .catch(() => []);
+
+    if (Array.isArray(newlyExpired) && newlyExpired.length) {
+      const seen = new Set(list.map((c) => String(c._id)));
+      for (const c of newlyExpired) {
+        const key = String(c._id);
+        if (!seen.has(key)) {
+          list.push(c);
+          seen.add(key);
+        }
+      }
+    }
+
     for (const c of list) {
       if (c.connectionType === 'pppoe') await enforcePppoe(tenantId, c);
       else if (c.connectionType === 'static') await enforceStatic(tenantId, c);
@@ -71,4 +100,3 @@ cron.schedule('*/5 * * * *', async () => {
 console.log('[enforce] inactive customers enforcement scheduled (*/5)');
 
 module.exports = {};
-

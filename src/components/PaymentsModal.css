@@ -70,6 +70,13 @@
 .modal-content h3{
   margin:14px 16px 8px; color:#0f172a; font-weight:800; font-size:1.05rem;
 }
+.payments-header{
+  margin:14px 16px 6px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.payments-header h2{
+  margin:0;
+}
 
 /* ============= TABLES ============= */
 .table-wrapper{
@@ -329,6 +336,10 @@ button.secondary {
   transition: box-shadow .18s, transform .18s;
 }
 button.secondary:hover { box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+button.secondary:disabled{
+  opacity:0.6; cursor:not-allowed;
+  box-shadow:none; transform:none;
+}
 
 button.danger {
   background: #b91c1c; color: #fff; border: none;

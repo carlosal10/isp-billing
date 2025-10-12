@@ -657,15 +657,29 @@ export default function Dashboard() {
     [onlinePageItems]
   );
 
-  const expiryByCustomerId = useMemo(() => {
+  const paymentMetaByCustomerId = useMemo(() => {
     const map = new Map();
     for (const p of payments) {
       if (!p?.customer) continue;
       const cid = typeof p.customer === "string" ? p.customer : p.customer._id;
-      const existing = map.get(cid);
-      const e = p.expiryDate ? new Date(p.expiryDate).getTime() : null;
-      const existingT = existing ? new Date(existing).getTime() : null;
-      if (e && (!existingT || e > existingT)) map.set(cid, p.expiryDate);
+      if (!cid) continue;
+      const meta = map.get(cid) || { expiryDate: null, lastPaymentAt: null };
+      if (p.expiryDate) {
+        const nextExpiryTs = new Date(p.expiryDate).getTime();
+        const currentExpiryTs = meta.expiryDate ? new Date(meta.expiryDate).getTime() : null;
+        if (Number.isFinite(nextExpiryTs) && (!Number.isFinite(currentExpiryTs) || nextExpiryTs > currentExpiryTs)) {
+          meta.expiryDate = p.expiryDate;
+        }
+      }
+      const paidAt = p.validatedAt || p.createdAt;
+      if (paidAt) {
+        const nextPaidTs = new Date(paidAt).getTime();
+        const currentPaidTs = meta.lastPaymentAt ? new Date(meta.lastPaymentAt).getTime() : null;
+        if (Number.isFinite(nextPaidTs) && (!Number.isFinite(currentPaidTs) || nextPaidTs > currentPaidTs)) {
+          meta.lastPaymentAt = paidAt;
+        }
+      }
+      map.set(cid, meta);
     }
     return map;
   }, [payments]);
@@ -676,7 +690,8 @@ export default function Dashboard() {
     const horizon = now + DUE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     for (const c of customers) {
       const cid = c._id;
-      const expiry = expiryByCustomerId.get(cid);
+      const meta = paymentMetaByCustomerId.get(cid);
+      const expiry = meta?.expiryDate;
       if (!expiry) continue;
       const t = new Date(expiry).getTime();
       if (t >= now && t <= horizon) {
@@ -688,18 +703,20 @@ export default function Dashboard() {
           daysLeft: daysUntil(expiry),
           connectionType: c.connectionType || "",
           createdAt: deriveCreatedAt(c),
+          lastPaymentAt: meta?.lastPaymentAt || null,
         });
       }
     }
     return out.sort((a, b) => a.daysLeft - b.daysLeft);
-  }, [customers, expiryByCustomerId]);
+  }, [customers, paymentMetaByCustomerId]);
 
   const expired = useMemo(() => {
     const out = [];
     const now = Date.now();
     for (const c of customers) {
       const cid = c._id;
-      const expiry = expiryByCustomerId.get(cid);
+      const meta = paymentMetaByCustomerId.get(cid);
+      const expiry = meta?.expiryDate;
       if (!expiry) continue;
       if (new Date(expiry).getTime() < now) {
         out.push({
@@ -710,11 +727,12 @@ export default function Dashboard() {
           daysAgo: daysSince(expiry),
           connectionType: c.connectionType || "",
           createdAt: deriveCreatedAt(c),
+          lastPaymentAt: meta?.lastPaymentAt || null,
         });
       }
     }
     return out.sort((a, b) => b.daysAgo - a.daysAgo);
-  }, [customers, expiryByCustomerId]);
+  }, [customers, paymentMetaByCustomerId]);
 
   const computed = useMemo(() => {
     const onlineCount = enrichedOnline.length;
@@ -1143,6 +1161,7 @@ export default function Dashboard() {
                   <th>Connection</th>
                   <th>Date Created</th>
                   <th>Expired On</th>
+                  <th>Last Payment</th>
                   <th>Days Ago</th>
                 </tr>
               </thead>
@@ -1155,12 +1174,13 @@ export default function Dashboard() {
                     <td>{(u.connectionType || "").toUpperCase() || "-"}</td>
                     <td>{u.createdAt ? formatDate(u.createdAt) : "-"}</td>
                     <td>{formatDate(u.expiryDate)}</td>
+                    <td>{u.lastPaymentAt ? formatDate(u.lastPaymentAt) : "-"}</td>
                     <td className="num">{u.daysAgo}</td>
                   </tr>
                 ))}
                 {expired.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center" }}>
+                    <td colSpan={8} style={{ textAlign: "center" }}>
                       No expired accounts.
                     </td>
                   </tr>
