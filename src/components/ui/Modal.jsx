@@ -1,7 +1,21 @@
-import React from "react";
+import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { FaTimes } from "react-icons/fa";
+import useDragResize from "../../hooks/useDragResize";
 
-export function Modal({ open, onClose, title, children }) {
+export function Modal({ open, onClose, title, children, minWidth = 520, minHeight = 420, defaultSize }) {
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen: open,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth,
+    minHeight,
+    defaultSize: defaultSize || { width: 640, height: 480 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
   return (
     <AnimatePresence>
       {open && (
@@ -12,17 +26,30 @@ export function Modal({ open, onClose, title, children }) {
           exit={{ opacity: 0 }}
         >
           <motion.div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative"
+            ref={containerRef}
+            className="bg-white rounded-2xl shadow-xl p-6 relative draggable-modal"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
           >
+            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
             {/* Close Button */}
             <button
               onClick={onClose}
               className="absolute top-3 right-3 text-gray-500 hover:text-black"
+              aria-label="Close"
+              data-modal-no-drag
             >
-              ✕
+              <FaTimes />
             </button>
 
             {/* Title */}

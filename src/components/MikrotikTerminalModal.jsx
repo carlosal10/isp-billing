@@ -1,13 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import "./MikrotikTerminalModal.css";
 import { api } from "../lib/apiClient";
 import { useServer } from "../context/ServerContext";
+import useDragResize from "../hooks/useDragResize";
 
 export default function MikrotikTerminalModal({ isOpen, onClose }) {
   const [cmd, setCmd] = useState("/system/resource/print");
   const [out, setOut] = useState([]);
   const { servers, selected, setSelected, reload } = useServer();
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 680,
+    minHeight: 560,
+    defaultSize: { width: 920, height: 640 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   if (!isOpen) return null;
 
@@ -37,9 +49,21 @@ export default function MikrotikTerminalModal({ isOpen, onClose }) {
       className="ps-overlay"
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
-      <div className="ps-modal">
+      <div ref={containerRef} className="ps-modal draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
         {/* Close */}
-        <button className="ps-close" onClick={onClose} aria-label="Close">
+        <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
           <FaTimes size={18} />
         </button>
 

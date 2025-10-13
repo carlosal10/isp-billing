@@ -1,11 +1,12 @@
 // src/components/CustomersModal.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import "./CustomersModal.css";
 import { api } from "../lib/apiClient";
+import useDragResize from "../hooks/useDragResize";
 
 /** ---------- utils ---------- */
 
@@ -429,6 +430,18 @@ export default function CustomersModal({ isOpen, onClose }) {
   const [autoAcc, setAutoAcc] = useState(true);
   const [trustLists, setTrustLists] = useState(true);
 
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 780,
+    minHeight: 560,
+    defaultSize: { width: 1024, height: 720 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
     const detail =
@@ -510,8 +523,20 @@ export default function CustomersModal({ isOpen, onClose }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content customers-modal">
-        <span className="close" onClick={onClose}>
+      <div ref={containerRef} className="modal-content customers-modal draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
+        <span className="close" onClick={onClose} data-modal-no-drag>
           <FaTimes />
         </span>
         <h2>Manage Customers</h2>

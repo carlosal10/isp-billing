@@ -70,7 +70,14 @@ export default function CustomerDetailsModal({ open, onClose, customer }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Customer Details">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Customer Details"
+      minWidth={520}
+      minHeight={440}
+      defaultSize={{ width: 720, height: 580 }}
+    >
       <div style={{ display: 'grid', gap: 14 }}>
         {/* Header & status */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

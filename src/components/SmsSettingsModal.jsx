@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdContentCopy } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
+import useDragResize from "../hooks/useDragResize";
 
 export default function SmsSettingsModal({ isOpen, onClose }) {
   const [tab, setTab] = useState("settings"); // settings | templates | paylink
@@ -60,6 +61,17 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   const [pick, setPick] = useState({ customerId: "", planId: "", dueAt: "" });
   const [created, setCreated] = useState({ url: "", token: "", shortUrl: "", shortPath: "" });
   const [sendMsg, setSendMsg] = useState("");
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 780,
+    minHeight: 640,
+    defaultSize: { width: 980, height: 760 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   const shortLink = useMemo(() => {
     if (!created) return "";
@@ -229,9 +241,21 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
       className="ps-overlay"
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
-      <div className="ps-modal">
+      <div ref={containerRef} className="ps-modal draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
         {/* Close */}
-        <button onClick={onClose} className="ps-close" aria-label="Close">
+        <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
           <FaTimes size={18} />
         </button>
 

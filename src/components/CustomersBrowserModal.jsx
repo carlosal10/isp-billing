@@ -135,7 +135,14 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
   if (!open) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Customers">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Customers"
+      minWidth={720}
+      minHeight={560}
+      defaultSize={{ width: 960, height: 680 }}
+    >
       <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
         <button
           className="btn"

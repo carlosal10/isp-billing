@@ -437,15 +437,30 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content large">
-        <span className="close" onClick={onClose} role="button" aria-label="Close">
+      <div ref={containerRef} className="modal-content large draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
+
+        <span className="close" onClick={onClose} role="button" aria-label="Close" data-modal-no-drag>
           <FaTimes />
         </span>
 
         {/* Tabs */}
-        <div className="tabs">
+        <div className="tabs" data-modal-no-drag>
           <button className={activeTab === "payments" ? "active" : ""} onClick={() => setActiveTab("payments")}>
             Payments
           </button>

@@ -20,19 +20,18 @@
 /* ============= SHELL ============= */
 .modal-content{
   background:var(--ec-bg); color:var(--ec-text);
-  width:100%; height:auto; max-height:92vh;
-  margin:auto; border-radius:18px; overflow:hidden;
+  border-radius:18px; overflow:hidden;
   box-shadow:var(--shadow-hard); border:1px solid var(--ec-line);
   position:relative; display:flex; flex-direction:column;
   padding:0; /* we’ll pad inner sections */
 }
 
 /* Payments modal is “large” by class; center on desktop */
-.modal-content.large{ width:min(1020px, 94vw); }
+.modal-content.large{ border-radius:18px; }
 
 /* Full-screen on small devices */
 @media (max-width: 720px){
-  .modal-content{ width:100%; height:100%; max-height:100vh; border-radius:0; }
+  .modal-content{ border-radius:12px; }
 }
 
 /* Close button */
@@ -380,3 +379,4 @@ button.danger:focus-visible {
   .drawer { width: 100%; }
   .data-table td.actions { text-align: left; }
 }
+

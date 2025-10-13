@@ -1,11 +1,12 @@
 // src/components/PlanModal.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PlanModal.css";
+import useDragResize from "../hooks/useDragResize";
 
 export default function PlanModal({ isOpen, onClose }) {
   const [plans, setPlans] = useState([]);
@@ -22,6 +23,17 @@ export default function PlanModal({ isOpen, onClose }) {
     rateLimit: "",
     dataCap: "",
   });
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 640,
+    minHeight: 560,
+    defaultSize: { width: 920, height: 640 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   useEffect(() => {
     if (isOpen) fetchPlans();
@@ -128,8 +140,18 @@ export default function PlanModal({ isOpen, onClose }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content plan-modal">
-        <span className="close" onClick={onClose}><FaTimes /></span>
+      <div ref={containerRef} className="modal-content plan-modal draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
+        <span className="close" onClick={onClose} data-modal-no-drag><FaTimes /></span>
         <h2>Manage Plans</h2>
         {msg && <p className="status-msg">{msg}</p>}
 

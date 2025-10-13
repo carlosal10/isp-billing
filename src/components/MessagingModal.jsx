@@ -1,8 +1,9 @@
 // src/components/MessagingModal.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { api } from "../lib/apiClient";
 import "./MessagingModal.css";
+import useDragResize from "../hooks/useDragResize";
 
 const TEMPLATES = [
   { id: "due_5", label: "Due in 5 days", body: "Hi {name}, your {plan} plan (KES {amount}) is due on {expiry}. Pay via {paylink}. Reply STOP to opt out." },
@@ -48,6 +49,17 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
   );
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState("");
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 540,
+    minHeight: 520,
+    defaultSize: { width: 720, height: 640 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,9 +124,21 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
         if (e.target === e.currentTarget) onClose?.();
       }}
     >
-      <div className="ps-modal">
+      <div ref={containerRef} className="ps-modal draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
         {/* Close */}
-        <button onClick={onClose} className="ps-close" aria-label="Close">
+        <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
           <FaTimes size={18} />
         </button>
 

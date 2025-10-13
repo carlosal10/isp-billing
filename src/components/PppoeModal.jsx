@@ -1,11 +1,12 @@
 // src/components/PppoeModal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PppoeModal.css";
+import useDragResize from "../hooks/useDragResize";
 
 export default function PppoeModal({ isOpen, onClose }) {
   const [profiles, setProfiles] = useState([]);
@@ -22,9 +23,20 @@ export default function PppoeModal({ isOpen, onClose }) {
   const [newPassword, setNewPassword] = useState("");
 
   // remove
-  const [removeUser, setRemoveUser] = useState("");
+const [removeUser, setRemoveUser] = useState("");
 
-  const [loading, setLoading] = useState(false);
+const [loading, setLoading] = useState(false);
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 560,
+    minHeight: 520,
+    defaultSize: { width: 760, height: 600 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   // Load PPPoE profiles from backend (protected route)
   useEffect(() => {
@@ -113,8 +125,18 @@ export default function PppoeModal({ isOpen, onClose }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <span className="close" onClick={onClose}>
+      <div ref={containerRef} className="modal-content draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+        {resizeHandles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
+        <span className="close" onClick={onClose} data-modal-no-drag>
           <FaTimes />
         </span>
 

@@ -21,3 +21,89 @@ body {
 
 .success { color: var(--success); }
 
+.draggable-modal {
+  box-sizing: border-box;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.modal-drag-bar {
+  height: 16px;
+  cursor: move;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0));
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(15, 23, 42, 0.45);
+  user-select: none;
+}
+
+.modal-resize-handle {
+  position: absolute;
+  z-index: 20;
+}
+
+.modal-resize-handle.corner {
+  width: 14px;
+  height: 14px;
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 50%;
+}
+
+.modal-resize-handle.edge {
+  background: transparent;
+}
+
+.modal-resize-handle.edge.horizontal {
+  height: 10px;
+  left: 8px;
+  right: 8px;
+}
+
+.modal-resize-handle.edge.vertical {
+  width: 10px;
+  top: 8px;
+  bottom: 8px;
+}
+
+.modal-resize-handle.n {
+  top: -4px;
+  cursor: ns-resize;
+}
+.modal-resize-handle.s {
+  bottom: -4px;
+  cursor: ns-resize;
+}
+.modal-resize-handle.e {
+  right: -4px;
+  cursor: ew-resize;
+}
+.modal-resize-handle.w {
+  left: -4px;
+  cursor: ew-resize;
+}
+.modal-resize-handle.ne {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.modal-resize-handle.nw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.modal-resize-handle.se {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+.modal-resize-handle.sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+

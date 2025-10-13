@@ -1,16 +1,42 @@
-import React from "react";
+import React, { useRef } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
+import useDragResize from "../hooks/useDragResize";
 
 export default function BillingModal({ isOpen, onClose }) {
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 420,
+    minHeight: 420,
+    defaultSize: { width: 520, height: 560 },
+  });
+
   if (!isOpen) return null;
+
+  const handles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <span className="close" onClick={onClose}>
+      <div ref={containerRef} className="modal-content draggable-modal">
+        <div className="modal-drag-bar" ref={dragHandleRef}>
+          Drag
+        </div>
+        {handles.map((dir) => (
+          <div
+            key={dir}
+            className={`modal-resize-handle ${
+              dir.length === 1 ? "edge" : "corner"
+            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+            {...getResizeHandleProps(dir)}
+          />
+        ))}
+        <span className="close" onClick={onClose} data-modal-no-drag>
           <FaTimes />
         </span>
 
