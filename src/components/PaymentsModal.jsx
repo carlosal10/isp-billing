@@ -57,7 +57,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen,
     containerRef,
     handleRef: dragHandleRef,
@@ -65,7 +65,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     minHeight: 520,
     defaultSize: { width: 980, height: 680 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   // fetch on open
   useEffect(() => {
@@ -453,18 +453,22 @@ export default function PaymentsModal({ isOpen, onClose }) {
   return (
     <div className="modal-overlay">
       <div ref={containerRef} className="modal-content large draggable-modal">
-        <div className="modal-drag-bar" ref={dragHandleRef}>
-          Drag
-        </div>
-        {resizeHandles.map((dir) => (
-          <div
-            key={dir}
-            className={`modal-resize-handle ${
-              dir.length === 1 ? "edge" : "corner"
-            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-            {...getResizeHandleProps(dir)}
-          />
-        ))}
+        {isDraggingEnabled && (
+          <>
+            <div className="modal-drag-bar" ref={dragHandleRef}>
+              Drag
+            </div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
+          </>
+        )}
 
         <span className="close" onClick={onClose} role="button" aria-label="Close" data-modal-no-drag>
           <FaTimes />

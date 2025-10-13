@@ -432,7 +432,7 @@ export default function CustomersModal({ isOpen, onClose }) {
 
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen,
     containerRef,
     handleRef: dragHandleRef,
@@ -440,7 +440,7 @@ export default function CustomersModal({ isOpen, onClose }) {
     minHeight: 560,
     defaultSize: { width: 1024, height: 720 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
@@ -524,18 +524,22 @@ export default function CustomersModal({ isOpen, onClose }) {
   return (
     <div className="modal-overlay">
       <div ref={containerRef} className="modal-content customers-modal draggable-modal">
-        <div className="modal-drag-bar" ref={dragHandleRef}>
-          Drag
-        </div>
-        {resizeHandles.map((dir) => (
-          <div
-            key={dir}
-            className={`modal-resize-handle ${
-              dir.length === 1 ? "edge" : "corner"
-            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-            {...getResizeHandleProps(dir)}
-          />
-        ))}
+        {isDraggingEnabled && (
+          <>
+            <div className="modal-drag-bar" ref={dragHandleRef}>
+              Drag
+            </div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
+          </>
+        )}
         <span className="close" onClick={onClose} data-modal-no-drag>
           <FaTimes />
         </span>

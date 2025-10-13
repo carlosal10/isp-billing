@@ -25,6 +25,13 @@ const toTenantId = (value) => {
   return String(value);
 };
 
+function logCommandError(label, context, err) {
+  console.warn(`[expireAccess] ${label}`, {
+    ...context,
+    error: err?.message || err,
+  });
+}
+
 async function removeHotspotUser(tenantId, mac) {
   if (!tenantId || !mac) return;
 
@@ -34,7 +41,10 @@ async function removeHotspotUser(tenantId, mac) {
   const list = await sendCommand('/ip/hotspot/user/print', [`?name=${name}`], {
     tenantId,
     timeoutMs: ROUTER_TIMEOUT_MS,
-  }).catch(() => []);
+  }).catch((err) => {
+    logCommandError('hotspot user lookup failed', { tenantId, mac: name }, err);
+    return [];
+  });
 
   const row = Array.isArray(list) && list[0] ? list[0] : null;
   const id = getId(row);
@@ -42,18 +52,26 @@ async function removeHotspotUser(tenantId, mac) {
     await sendCommand('/ip/hotspot/user/remove', [`=numbers=${id}`], {
       tenantId,
       timeoutMs: ROUTER_TIMEOUT_MS,
-    }).catch(() => {});
+    }).catch((err) => {
+      logCommandError('hotspot user remove failed', { tenantId, mac: name, id }, err);
+    });
   }
 
   const activeByUser = await sendCommand('/ip/hotspot/active/print', [`?user=${name}`], {
     tenantId,
     timeoutMs: ROUTER_TIMEOUT_MS,
-  }).catch(() => []);
+  }).catch((err) => {
+    logCommandError('hotspot active lookup by user failed', { tenantId, user: name }, err);
+    return [];
+  });
 
   const activeByMac = await sendCommand('/ip/hotspot/active/print', [`?mac-address=${name}`], {
     tenantId,
     timeoutMs: ROUTER_TIMEOUT_MS,
-  }).catch(() => []);
+  }).catch((err) => {
+    logCommandError('hotspot active lookup by mac failed', { tenantId, mac: name }, err);
+    return [];
+  });
 
   const active = [
     ...(Array.isArray(activeByUser) ? activeByUser : []),
@@ -68,7 +86,9 @@ async function removeHotspotUser(tenantId, mac) {
     await sendCommand('/ip/hotspot/active/remove', [`=.id=${sessionId}`], {
       tenantId,
       timeoutMs: ROUTER_TIMEOUT_MS,
-    }).catch(() => {});
+    }).catch((err) => {
+      logCommandError('hotspot active remove failed', { tenantId, sessionId, mac: name }, err);
+    });
   }
 }
 
@@ -81,7 +101,10 @@ async function removePppoeUser(tenantId, username) {
   const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], {
     tenantId,
     timeoutMs: ROUTER_TIMEOUT_MS,
-  }).catch(() => []);
+  }).catch((err) => {
+    logCommandError('pppoe secret lookup failed', { tenantId, username: name }, err);
+    return [];
+  });
 
   const secret = Array.isArray(secrets) && secrets[0] ? secrets[0] : null;
   const secretId = getId(secret);
@@ -89,13 +112,18 @@ async function removePppoeUser(tenantId, username) {
     await sendCommand('/ppp/secret/remove', [`=numbers=${secretId}`], {
       tenantId,
       timeoutMs: ROUTER_TIMEOUT_MS,
-    }).catch(() => {});
+    }).catch((err) => {
+      logCommandError('pppoe secret remove failed', { tenantId, username: name, secretId }, err);
+    });
   }
 
   const active = await sendCommand('/ppp/active/print', [`?name=${name}`], {
     tenantId,
     timeoutMs: ROUTER_TIMEOUT_MS,
-  }).catch(() => []);
+  }).catch((err) => {
+    logCommandError('pppoe active lookup failed', { tenantId, username: name }, err);
+    return [];
+  });
 
   for (const session of Array.isArray(active) ? active : []) {
     const sessionId = getId(session);
@@ -103,7 +131,9 @@ async function removePppoeUser(tenantId, username) {
     await sendCommand('/ppp/active/remove', [`=.id=${sessionId}`], {
       tenantId,
       timeoutMs: ROUTER_TIMEOUT_MS,
-    }).catch(() => {});
+    }).catch((err) => {
+      logCommandError('pppoe active remove failed', { tenantId, username: name, sessionId }, err);
+    });
   }
 }
 
@@ -184,6 +214,7 @@ async function runExpirySweep() {
     }
   }
 
+  console.log('[expireAccess] sweep summary', summary);
   return summary;
 }
 

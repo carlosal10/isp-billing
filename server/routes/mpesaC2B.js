@@ -63,25 +63,47 @@ function normalizeMsisdn(msisdn) {
 }
 
 router.post('/validation', async (req, res) => {
+  const { BusinessShortCode, BillRefNumber } = req.body || {};
+  const context = {
+    shortcode: BusinessShortCode || null,
+    account: BillRefNumber || null,
+  };
   try {
-    const { BusinessShortCode, BillRefNumber } = req.body || {};
     const config = await resolveConfig(BusinessShortCode);
     if (!config) {
+      console.warn('[mpesa:c2b:validation] rejected - shortcode not registered', context);
       return res.json({ ResultCode: 1, ResultDesc: 'Shortcode not registered' });
     }
     if (!BillRefNumber) {
+      console.warn('[mpesa:c2b:validation] rejected - missing account reference', {
+        ...context,
+        tenantId: config.ispId ? config.ispId.toString() : null,
+      });
       return res.json({ ResultCode: 1, ResultDesc: 'Missing account reference' });
     }
+    const accountRef = String(BillRefNumber).trim();
     const customer = await Customer.findOne({
       tenantId: config.ispId,
-      accountNumber: String(BillRefNumber).trim(),
+      accountNumber: accountRef,
     }).lean();
     if (!customer) {
+      console.warn('[mpesa:c2b:validation] rejected - account not found', {
+        ...context,
+        tenantId: config.ispId ? config.ispId.toString() : null,
+      });
       return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
     }
+    console.log('[mpesa:c2b:validation] accepted', {
+      ...context,
+      tenantId: config.ispId ? config.ispId.toString() : null,
+      customerId: customer._id?.toString?.() || customer._id,
+    });
     return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   } catch (err) {
-    console.error('[mpesa:c2b:validation] error', err?.message || err);
+    console.error('[mpesa:c2b:validation] error', {
+      ...context,
+      error: err?.message || err,
+    });
     return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   }
 });
@@ -106,8 +128,14 @@ router.post('/confirmation', async (req, res) => {
 
   try {
     const config = await resolveConfig(BusinessShortCode);
+    const context = {
+      transId: TransID || null,
+      shortcode: BusinessShortCode || null,
+      account: BillRefNumber || null,
+      tenantId: config?.ispId ? config.ispId.toString() : null,
+    };
     if (!config) {
-      console.warn('[mpesa:c2b] unknown shortcode', BusinessShortCode);
+      console.warn('[mpesa:c2b] unknown shortcode', context);
       return res.json({ ResultCode: 1, ResultDesc: 'Shortcode not registered' });
     }
 
@@ -116,11 +144,11 @@ router.post('/confirmation', async (req, res) => {
     const msisdn = normalizeMsisdn(MSISDN);
 
     if (!accountRef) {
-      console.warn('[mpesa:c2b] missing bill reference', payload);
+      console.warn('[mpesa:c2b] missing bill reference', context);
       return res.json({ ResultCode: 1, ResultDesc: 'Missing account reference' });
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      console.warn('[mpesa:c2b] invalid amount', { amount, payload });
+      console.warn('[mpesa:c2b] invalid amount', { ...context, amount });
       return res.json({ ResultCode: 1, ResultDesc: 'Invalid amount' });
     }
 
@@ -130,7 +158,10 @@ router.post('/confirmation', async (req, res) => {
     });
 
     if (!customer) {
-      console.warn('[mpesa:c2b] customer not found', { accountRef, shortcode: BusinessShortCode });
+      console.warn('[mpesa:c2b] customer not found', {
+        ...context,
+        accountRef,
+      });
       return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
     }
 
@@ -140,21 +171,34 @@ router.post('/confirmation', async (req, res) => {
       method: 'mpesa',
     }).lean();
     if (existing) {
+      console.info('[mpesa:c2b] duplicate transaction', {
+        ...context,
+        paymentId: existing._id?.toString?.() || existing._id,
+      });
       return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     }
 
     const planId = customer.plan;
     if (!planId) {
-      console.warn('[mpesa:c2b] customer has no plan', { customerId: customer._id, accountRef });
+      console.warn('[mpesa:c2b] customer has no plan', {
+        ...context,
+        customerId: customer._id?.toString?.() || customer._id,
+        accountRef,
+      });
       return res.json({ ResultCode: 1, ResultDesc: 'Customer missing plan' });
     }
 
     const plan = await Plan.findById(planId);
     if (!plan) {
-      console.warn('[mpesa:c2b] plan not found', { planId, customerId: customer._id });
+      console.warn('[mpesa:c2b] plan not found', {
+        ...context,
+        planId: planId?.toString?.() || planId,
+        customerId: customer._id?.toString?.() || customer._id,
+      });
       return res.json({ ResultCode: 1, ResultDesc: 'Plan not found' });
     }
 
+    const validatedAt = parseMpesaTimestamp(TransTime) || new Date();
     const payment = new Payment({
       tenantId: customer.tenantId,
       customer: customer._id,
@@ -165,7 +209,7 @@ router.post('/confirmation', async (req, res) => {
       transactionId: TransID,
       method: 'mpesa',
       status: 'Success',
-      validatedAt: parseMpesaTimestamp(TransTime),
+      validatedAt,
       validatedBy: 'mpesa-c2b',
       notes: `C2B ${TransactionType || ''}`.trim(),
       merchantRequestId: ThirdPartyTransID || null,
@@ -195,13 +239,33 @@ router.post('/confirmation', async (req, res) => {
     await customer.save().catch(() => {});
 
     try {
+      const reconnectCtx = {
+        tenantId: customer.tenantId?.toString?.() || customer.tenantId,
+        account: customer.accountNumber,
+        connectionType: customer.connectionType || 'unknown',
+        paymentId: payment._id?.toString?.() || payment._id,
+      };
       if (customer.connectionType === 'static') {
-        await enableCustomerQueue(customer, plan).catch(() => {});
+        await enableCustomerQueue(customer, plan);
+        console.log('[mpesa:c2b] queue re-enabled', {
+          ...reconnectCtx,
+          action: 'enable-static',
+        });
       } else {
-        await applyCustomerQueue(customer, plan).catch(() => {});
+        await applyCustomerQueue(customer, plan);
+        console.log('[mpesa:c2b] queue reapplied', {
+          ...reconnectCtx,
+          action: 'apply-non-static',
+        });
       }
     } catch (queueError) {
-      console.warn('[mpesa:c2b] queue apply failed', queueError?.message || queueError);
+      console.warn('[mpesa:c2b] queue apply failed', {
+        tenantId: customer.tenantId?.toString?.() || customer.tenantId,
+        account: customer.accountNumber,
+        connectionType: customer.connectionType || 'unknown',
+        paymentId: payment._id?.toString?.() || payment._id,
+        error: queueError?.message || queueError,
+      });
     }
 
     console.log('[mpesa:c2b] payment recorded', {
@@ -211,11 +275,17 @@ router.post('/confirmation', async (req, res) => {
       amount,
       transId: TransID,
       balance: OrgAccountBalance,
+      validatedAt,
     });
 
     return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   } catch (err) {
-    console.error('[mpesa:c2b] confirmation error', err?.message || err);
+    console.error('[mpesa:c2b] confirmation error', {
+      transId: TransID || null,
+      shortcode: BusinessShortCode || null,
+      account: BillRefNumber || null,
+      error: err?.message || err,
+    });
     return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   }
 });

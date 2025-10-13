@@ -44,9 +44,13 @@ async function enforceStatic(tenantId, customer) {
 async function runOnce() {
   // Find all inactive customers per tenant and enforce
   const tenants = await Customer.distinct('tenantId').catch(() => []);
+  let totalStatic = 0;
+  let totalPppoe = 0;
   for (const tid of tenants) {
     const tenantId = String(tid);
     const now = new Date();
+    let tenantStatic = 0;
+    let tenantPppoe = 0;
     const newlyExpired = await Customer.find({
       tenantId,
       expiryDate: { $lt: now },
@@ -80,11 +84,24 @@ async function runOnce() {
     }
 
     for (const c of list) {
-      if (c.connectionType === 'pppoe') await enforcePppoe(tenantId, c);
-      else if (c.connectionType === 'static') await enforceStatic(tenantId, c);
+      if (c.connectionType === 'pppoe') {
+        await enforcePppoe(tenantId, c);
+        tenantPppoe += 1;
+        totalPppoe += 1;
+      } else if (c.connectionType === 'static') {
+        await enforceStatic(tenantId, c);
+        tenantStatic += 1;
+        totalStatic += 1;
+      }
     }
+
+    console.log('[enforce] tenant enforcement summary', {
+      tenantId,
+      staticEnforced: tenantStatic,
+      pppoeEnforced: tenantPppoe,
+    });
   }
-  return { tenants: tenants.length };
+  return { tenants: tenants.length, staticEnforced: totalStatic, pppoeEnforced: totalPppoe };
 }
 
 // Every 5 minutes

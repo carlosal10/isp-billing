@@ -329,11 +329,18 @@ router.post('/manual', async (req, res) => {
         const customerDoc = payment.customer;
         const planDoc = payment.plan;
         if (customerDoc) {
+          const queueCtx = {
+            tenantId: String(customerDoc.tenantId || req.tenantId),
+            account: customerDoc.accountNumber || null,
+            connectionType: customerDoc.connectionType || 'unknown',
+          };
           await Customer.updateOne({ _id: customerDoc._id, tenantId: req.tenantId }, { $set: { status: 'active', expiryDate: payment.expiryDate } });
           if (customerDoc.connectionType === 'static') {
-            await enableCustomerQueue(customerDoc, planDoc).catch(() => {});
+            await enableCustomerQueue(customerDoc, planDoc);
+            console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'enable-static' });
           } else {
-            await applyCustomerQueue(customerDoc, planDoc).catch(() => {});
+            await applyCustomerQueue(customerDoc, planDoc);
+            console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'apply-non-static' });
           }
         }
       } catch (e) {
@@ -405,11 +412,20 @@ router.post('/manual', async (req, res) => {
       await Customer.updateOne(
         { _id: customer._id, tenantId: req.tenantId },
         { $set: { status: 'active', expiryDate: doc.expiryDate } }
-      ).catch(() => {});
+      ).catch((err) => {
+        console.warn(`[${debugId}] customer status update failed:`, err?.message || err);
+      });
+      const queueCtx = {
+        tenantId: String(customer.tenantId || req.tenantId),
+        account: customer.accountNumber || null,
+        connectionType: customer.connectionType || 'unknown',
+      };
       if (customer.connectionType === 'static') {
-        await enableCustomerQueue(customer, plan).catch(() => {});
+        await enableCustomerQueue(customer, plan);
+        console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'enable-static' });
       } else {
-        await applyCustomerQueue(customer, plan).catch(() => {});
+        await applyCustomerQueue(customer, plan);
+        console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'apply-non-static' });
       }
     } catch (e) {
       console.warn(`[${debugId}] queue sync failed:`, e?.message || e);
@@ -534,10 +550,17 @@ router.post('/adjust', async (req, res) => {
     }
 
     try {
+      const queueCtx = {
+        tenantId: String(customer.tenantId || req.tenantId),
+        account: customer.accountNumber || null,
+        connectionType: customer.connectionType || 'unknown',
+      };
       if (customer.connectionType === 'static') {
-        await enableCustomerQueue(customer, plan).catch(() => {});
+        await enableCustomerQueue(customer, plan);
+        console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'enable-static' });
       } else {
-        await applyCustomerQueue(customer, plan).catch(() => {});
+        await applyCustomerQueue(customer, plan);
+        console.log(`[${debugId}] queue sync complete`, { ...queueCtx, action: 'apply-non-static' });
       }
     } catch (queueErr) {
       console.warn(`[${debugId}] queue sync failed:`, queueErr?.message || queueErr);

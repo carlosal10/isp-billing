@@ -63,7 +63,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   const [sendMsg, setSendMsg] = useState("");
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen,
     containerRef,
     handleRef: dragHandleRef,
@@ -71,7 +71,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     minHeight: 640,
     defaultSize: { width: 980, height: 760 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   const shortLink = useMemo(() => {
     if (!created) return "";
@@ -242,18 +242,22 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
       <div ref={containerRef} className="ps-modal draggable-modal">
-        <div className="modal-drag-bar" ref={dragHandleRef}>
-          Drag
-        </div>
-        {resizeHandles.map((dir) => (
-          <div
-            key={dir}
-            className={`modal-resize-handle ${
-              dir.length === 1 ? "edge" : "corner"
-            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-            {...getResizeHandleProps(dir)}
-          />
-        ))}
+        {isDraggingEnabled && (
+          <>
+            <div className="modal-drag-bar" ref={dragHandleRef}>
+              Drag
+            </div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
+          </>
+        )}
         {/* Close */}
         <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
           <FaTimes size={18} />

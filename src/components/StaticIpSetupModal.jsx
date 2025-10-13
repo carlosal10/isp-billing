@@ -27,7 +27,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const [cleanPreview, setCleanPreview] = useState(null);
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen,
     containerRef,
     handleRef: dragHandleRef,
@@ -35,7 +35,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
     minHeight: 680,
     defaultSize: { width: 1100, height: 780 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   // Persist seed options between sessions
   useEffect(() => {
@@ -254,16 +254,20 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   return (
     <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div ref={containerRef} className="ps-modal staticip-modal draggable-modal">
-        <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-        {resizeHandles.map((dir) => (
-          <div
-            key={dir}
-            className={`modal-resize-handle ${
-              dir.length === 1 ? "edge" : "corner"
-            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-            {...getResizeHandleProps(dir)}
-          />
-        ))}
+        {isDraggingEnabled && (
+          <>
+            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
+          </>
+        )}
         {/* Close */}
         <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
           <FaTimes size={18} />

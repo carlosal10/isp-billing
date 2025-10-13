@@ -6,7 +6,7 @@ import useDragResize from "../../hooks/useDragResize";
 export function Modal({ open, onClose, title, children, minWidth = 520, minHeight = 420, defaultSize }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen: open,
     containerRef,
     handleRef: dragHandleRef,
@@ -14,7 +14,7 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
     minHeight,
     defaultSize: defaultSize || { width: 640, height: 480 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   return (
     <AnimatePresence>
@@ -32,16 +32,20 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
           >
-            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
+            {isDraggingEnabled && (
+              <>
+                <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+                {resizeHandles.map((dir) => (
+                  <div
+                    key={dir}
+                    className={`modal-resize-handle ${
+                      dir.length === 1 ? "edge" : "corner"
+                    } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                    {...getResizeHandleProps(dir)}
+                  />
+                ))}
+              </>
+            )}
             {/* Close Button */}
             <button
               onClick={onClose}

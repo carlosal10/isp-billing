@@ -28,7 +28,7 @@ const [removeUser, setRemoveUser] = useState("");
 const [loading, setLoading] = useState(false);
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
-  const { getResizeHandleProps } = useDragResize({
+  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
     isOpen,
     containerRef,
     handleRef: dragHandleRef,
@@ -36,7 +36,7 @@ const [loading, setLoading] = useState(false);
     minHeight: 520,
     defaultSize: { width: 760, height: 600 },
   });
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   // Load PPPoE profiles from backend (protected route)
   useEffect(() => {
@@ -126,16 +126,20 @@ const [loading, setLoading] = useState(false);
   return (
     <div className="modal-overlay">
       <div ref={containerRef} className="modal-content draggable-modal">
-        <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-        {resizeHandles.map((dir) => (
-          <div
-            key={dir}
-            className={`modal-resize-handle ${
-              dir.length === 1 ? "edge" : "corner"
-            } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-            {...getResizeHandleProps(dir)}
-          />
-        ))}
+        {isDraggingEnabled && (
+          <>
+            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
+            {resizeHandles.map((dir) => (
+              <div
+                key={dir}
+                className={`modal-resize-handle ${
+                  dir.length === 1 ? "edge" : "corner"
+                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                {...getResizeHandleProps(dir)}
+              />
+            ))}
+          </>
+        )}
         <span className="close" onClick={onClose} data-modal-no-drag>
           <FaTimes />
         </span>

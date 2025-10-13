@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const VIEWPORT_MARGIN = 16;
+const MOBILE_BREAKPOINT = 768;
 
 function coerceNumber(value, fallback) {
   const n = Number(value);
@@ -37,6 +38,11 @@ function clampBox(box, { minWidth, minHeight }) {
   return { width, height, top, left };
 }
 
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth <= MOBILE_BREAKPOINT;
+}
+
 export function useDragResize({
   isOpen,
   containerRef,
@@ -51,6 +57,7 @@ export function useDragResize({
       height: defaultSize?.height || 480,
     })
   );
+  const [isTouchLayout, setIsTouchLayout] = useState(() => isMobileViewport());
   const dragStateRef = useRef(null);
 
   const ensureBoxWithinViewport = useCallback(() => {
@@ -58,17 +65,24 @@ export function useDragResize({
   }, [minWidth, minHeight]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isTouchLayout) return;
     const next = centerBox({
       width: defaultSize?.width || box.width,
       height: defaultSize?.height || box.height,
     });
     setBox(clampBox(next, { minWidth, minHeight }));
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, isTouchLayout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const onResize = () => ensureBoxWithinViewport();
+    const onResize = () => {
+      const mobile = isMobileViewport();
+      setIsTouchLayout(mobile);
+      if (!mobile) {
+        ensureBoxWithinViewport();
+      }
+    };
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [ensureBoxWithinViewport]);
@@ -76,16 +90,24 @@ export function useDragResize({
   useEffect(() => {
     const el = containerRef?.current;
     if (!el) return;
+    if (isTouchLayout) {
+      el.style.position = "";
+      el.style.width = "";
+      el.style.height = "";
+      el.style.left = "";
+      el.style.top = "";
+      return;
+    }
     el.style.position = "absolute";
     el.style.width = `${Math.round(box.width)}px`;
     el.style.height = `${Math.round(box.height)}px`;
     el.style.left = `${Math.round(box.left)}px`;
     el.style.top = `${Math.round(box.top)}px`;
-  }, [box, containerRef]);
+  }, [box, containerRef, isTouchLayout]);
 
   useEffect(() => {
     const el = handleRef?.current || containerRef?.current;
-    if (!isOpen || !el) return undefined;
+    if (!isOpen || !el || isTouchLayout) return undefined;
 
     const onPointerDown = (event) => {
       if (event.button !== 0) return;
@@ -128,10 +150,11 @@ export function useDragResize({
 
     el.addEventListener("pointerdown", onPointerDown);
     return () => el.removeEventListener("pointerdown", onPointerDown);
-  }, [box, containerRef, handleRef, isOpen, minHeight, minWidth]);
+  }, [box, containerRef, handleRef, isOpen, isTouchLayout, minHeight, minWidth]);
 
   const startResize = useCallback(
     (event, direction) => {
+      if (isTouchLayout) return;
       if (event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
@@ -193,17 +216,21 @@ export function useDragResize({
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [box, minHeight, minWidth]
+    [box, isTouchLayout, minHeight, minWidth]
   );
 
   const getResizeHandleProps = useCallback(
-    (direction) => ({
-      onPointerDown: (event) => startResize(event, direction),
-    }),
-    [startResize]
+    (direction) =>
+      isTouchLayout
+        ? {}
+        : {
+            onPointerDown: (event) => startResize(event, direction),
+          },
+    [isTouchLayout, startResize]
   );
 
   const reset = useCallback(() => {
+    if (isTouchLayout) return;
     setBox((prev) =>
       clampBox(
         centerBox({
@@ -213,14 +240,15 @@ export function useDragResize({
         { minWidth, minHeight }
       )
     );
-  }, [defaultSize, minHeight, minWidth]);
+  }, [defaultSize, isTouchLayout, minHeight, minWidth]);
 
   return useMemo(
     () => ({
       getResizeHandleProps,
       reset,
+      isDraggingEnabled: !isTouchLayout,
     }),
-    [getResizeHandleProps, reset]
+    [getResizeHandleProps, isTouchLayout, reset]
   );
 }
 
