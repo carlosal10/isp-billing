@@ -216,7 +216,12 @@ legend {
     background: #fff; /* make it feel like a full sheet */
   }
 
-  .modal-content {\r\n    border-radius: 12px;\r\n    box-shadow: none;\r\n    padding: 12px 12px 8px;\r\n    grid-template-rows: auto auto auto 1fr;\r\n  }
+  .modal-content {
+    border-radius: 12px;
+    box-shadow: none;
+    padding: 12px 12px 8px;
+    grid-template-rows: auto auto auto 1fr;
+  }
 
   /* Sticky header */
   .modal-content h2 {
