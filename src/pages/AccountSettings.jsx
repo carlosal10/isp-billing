@@ -111,7 +111,7 @@ export default function AccountSettings() {
         e.preventDefault();
         setPrefixMsg("");
         try {
-          const { data } = await api.put('/tenant/account/prefix', { prefix });
+          await api.put('/tenant/account/prefix', { prefix });
           setPrefixMsg('Prefix saved');
         } catch (e) {
           setPrefixMsg(e?.message || 'Failed to save prefix');

@@ -4,6 +4,7 @@ import { FaTimes } from "react-icons/fa";
 import { MdAdd, MdEdit, MdDelete, MdClose } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import { exportRows } from "../lib/exporters";
+import useDragResize from "../hooks/useDragResize";
 
 export default function PaymentsModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices"
@@ -53,6 +54,18 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const manualDropdownRef = useRef(null);
   const adjustDropdownRef = useRef(null);
+
+  const containerRef = useRef(null);
+  const dragHandleRef = useRef(null);
+  const { getResizeHandleProps } = useDragResize({
+    isOpen,
+    containerRef,
+    handleRef: dragHandleRef,
+    minWidth: 720,
+    minHeight: 520,
+    defaultSize: { width: 980, height: 680 },
+  });
+  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   // fetch on open
   useEffect(() => {
@@ -436,8 +449,6 @@ export default function PaymentsModal({ isOpen, onClose }) {
   );
 
   if (!isOpen) return null;
-
-  const resizeHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
   return (
     <div className="modal-overlay">

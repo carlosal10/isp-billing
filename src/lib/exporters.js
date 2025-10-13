@@ -18,9 +18,31 @@ function toCSV({ rows, headers }) {
   return `${head}\n${body}`;
 }
 
+async function loadXLSXRuntime() {
+  const scope = (typeof window !== "undefined" && window)
+    
+    || (typeof global !== "undefined" && global)
+    || undefined;
+
+  if (scope && scope.XLSX) return scope.XLSX;
+
+  try {
+    const mod = await import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js");
+    const lib = mod && (mod.XLSX || mod.default);
+    if (lib) {
+      if (scope) scope.XLSX = lib;
+      return lib;
+    }
+  } catch (err) {
+    console.warn("XLSX dynamic load failed; falling back to CSV.", err);
+  }
+  return null;
+}
+
 async function tryXLSX({ rows, headers, filename, sheetName }) {
   try {
-    const XLSX = (await import("xlsx")).default || (await import("xlsx"));
+    const XLSX = await loadXLSXRuntime();
+    if (!XLSX || !XLSX.utils) return false;
     const aoa = [
       headers,
       ...rows.map(r => headers.map(h => r[h] ?? "")),
@@ -54,3 +76,6 @@ export function exportRowsCSV({ rows, headers, filename }) {
   const csv = toCSV({ rows, headers });
   downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename.endsWith(".csv") ? filename : `${filename}.csv`);
 }
+
+
+

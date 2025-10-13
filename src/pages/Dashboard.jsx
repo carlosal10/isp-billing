@@ -7,7 +7,6 @@ import "./Dashboard.css";
 import StatsCards from "../components/StatsCards";
 import UsageModal from "../components/UsageModal";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
-import CustomerDetailsPanel from "../components/CustomerDetailsPanel";
 import CustomersBrowserModal from "../components/CustomersBrowserModal";
 
 import { useAuth } from "../context/AuthContext";
@@ -129,46 +128,6 @@ function deriveCreatedAt(customer) {
     if (Number.isFinite(ts)) return new Date(ts * 1000);
   }
   return null;
-}
-
-function exportCustomers(customers) {
-  if (!Array.isArray(customers) || customers.length === 0) return;
-  const headers = [
-    "Account",
-    "Name",
-    "Phone",
-    "Email",
-    "Connection",
-    "Status",
-    "Plan",
-    "Created",
-  ];
-  const rows = customers.map((c) => {
-    const createdAt = deriveCreatedAt(c);
-    const planName = typeof c.plan === "object" && c.plan ? c.plan.name : c.plan;
-    return [
-      c.accountNumber || "-",
-      c.name || "-",
-      c.phone || "-",
-      c.email || "-",
-      (c.connectionType || "").toUpperCase(),
-      (c.status || "").toUpperCase(),
-      planName || "-",
-      createdAt ? createdAt.toLocaleString() : "-",
-    ];
-  });
-
-  const out = [headers, ...rows]
-    .map((entry) => entry.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-
-  const blob = new Blob([out], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 /* -----------------------------------
@@ -1242,3 +1201,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

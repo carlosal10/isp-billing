@@ -49,7 +49,6 @@ export default function PayLink() {
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
-  const [paymentId, setPaymentId] = useState("");
   const [status, setStatus] = useState("");
 
   const plan = info?.plan || null;
@@ -63,9 +62,9 @@ export default function PayLink() {
       const res = await api.get("/paylink/info", { params: { token } });
       setInfo(res.data);
       // prefill phone if server shares a recent MSISDN
-      if (res?.data?.customer?.phone && !phone) {
-        const suggested = res.data.customer.phone;
-        setPhone(String(suggested));
+      if (res?.data?.customer?.phone) {
+        const suggested = String(res.data.customer.phone);
+        setPhone((prev) => prev || suggested);
       }
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || "Failed to load");
@@ -81,8 +80,7 @@ export default function PayLink() {
       return;
     }
     fetchInfo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, fetchInfo]);
 
   const msisdn = normalizeMsisdn(phone);
   const canPay = Boolean(plan?.price) && Boolean(msisdn) && !sending;
@@ -95,7 +93,6 @@ export default function PayLink() {
     try {
       const resp = await api.post("/paylink/stk", { token, phone: msisdn });
       const pid = resp?.data?.paymentId;
-      if (pid) setPaymentId(pid);
       setMessage("Payment request sent. Check your phone to approve.");
       if (pid) pollStatus(pid);
     } catch (e) {
@@ -373,3 +370,4 @@ export default function PayLink() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import "./MikrotikTerminalModal.css";
 import { api } from "../lib/apiClient";
