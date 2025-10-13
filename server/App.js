@@ -197,6 +197,7 @@ const hotspotRoutes = require("./routes/hotspot");
 const paymentRoutes = require("./routes/payment");
 const paymentCallbackRoutes = require("./routes/paymentCallback");
 const paymentConfigRoutes = require("./routes/paymentConfig");
+const mpesaC2BRoutes = require("./routes/mpesaC2B");
 const mpesaSettingsRoutes = require("./routes/mpesaSettings");
 const stripeWebhook = require("./routes/stripeWebhook");
 const smsRoutes = require("./routes/sms");
@@ -259,6 +260,7 @@ app.use("/api/paylink", paylinkRoutes);
 app.use("/api/payment/callback", paymentCallbackRoutes);
 app.use("/api/payments/callback", paymentCallbackRoutes);
 app.use("/api/payment/stripe", stripeWebhook);
+app.use("/api/mpesa/c2b", mpesaC2BRoutes);
 
 // Now mount generic '/api' stacks and protected APIs
 app.use("/api", authenticate, requireTenant, eventsRoutes);
