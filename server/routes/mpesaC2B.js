@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PaymentConfig = require('../models/PaymentConfig');
+const MpesaSettings = require('../models/MpesaSettings');
 const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
@@ -44,13 +45,29 @@ async function resolveConfig(shortcode) {
   if (!shortcode) return null;
   const code = String(shortcode).trim();
   if (!code) return null;
-  return PaymentConfig.findOne({
+
+  const config = await PaymentConfig.findOne({
     provider: 'mpesa',
-    $or: [
-      { paybillShortcode: code },
-      { buyGoodsTill: code },
-    ],
+    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
   }).lean();
+  if (config) return config;
+
+  const settings = await MpesaSettings.findOne({
+    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
+  }).lean();
+  if (!settings) return null;
+
+  return {
+    provider: 'mpesa',
+    ispId: settings.ispId || null,
+    businessName: settings.businessName || null,
+    payMethod:
+      settings.payMethod ||
+      (settings.buyGoodsTill ? 'buygoods' : 'paybill'),
+    environment: settings.environment || 'sandbox',
+    paybillShortcode: settings.paybillShortcode || null,
+    buyGoodsTill: settings.buyGoodsTill || null,
+  };
 }
 
 function normalizeMsisdn(msisdn) {
@@ -82,20 +99,26 @@ router.post('/validation', async (req, res) => {
       return res.json({ ResultCode: 1, ResultDesc: 'Missing account reference' });
     }
     const accountRef = String(BillRefNumber).trim();
-    const customer = await Customer.findOne({
-      tenantId: config.ispId,
-      accountNumber: accountRef,
-    }).lean();
+    let customer = null;
+    if (config.ispId) {
+      customer = await Customer.findOne({
+        tenantId: config.ispId,
+        accountNumber: accountRef,
+      }).lean();
+    }
+    if (!customer) {
+      customer = await Customer.findOne({ accountNumber: accountRef }).lean();
+    }
     if (!customer) {
       console.warn('[mpesa:c2b:validation] rejected - account not found', {
         ...context,
-        tenantId: config.ispId ? config.ispId.toString() : null,
+        tenantId: config.ispId ? String(config.ispId) : null,
       });
       return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
     }
+    if (customer?.tenantId) context.tenantId = customer.tenantId.toString();
     console.log('[mpesa:c2b:validation] accepted', {
       ...context,
-      tenantId: config.ispId ? config.ispId.toString() : null,
       customerId: customer._id?.toString?.() || customer._id,
     });
     return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
@@ -152,10 +175,16 @@ router.post('/confirmation', async (req, res) => {
       return res.json({ ResultCode: 1, ResultDesc: 'Invalid amount' });
     }
 
-    const customer = await Customer.findOne({
-      tenantId: config.ispId,
-      accountNumber: accountRef,
-    });
+    let customer = null;
+    if (config.ispId) {
+      customer = await Customer.findOne({
+        tenantId: config.ispId,
+        accountNumber: accountRef,
+      });
+    }
+    if (!customer) {
+      customer = await Customer.findOne({ accountNumber: accountRef });
+    }
 
     if (!customer) {
       console.warn('[mpesa:c2b] customer not found', {
@@ -164,6 +193,7 @@ router.post('/confirmation', async (req, res) => {
       });
       return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
     }
+    if (customer?.tenantId) context.tenantId = customer.tenantId.toString();
 
     const existing = await Payment.findOne({
       tenantId: customer.tenantId,
