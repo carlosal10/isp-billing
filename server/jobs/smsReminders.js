@@ -95,8 +95,8 @@ async function processTenantReminders(now) {
 
       let templateBody = 'Dear Customer your internet subscription plan [Plan Name] will expire on [Expiry Date].\\nRenew early to stay connected.\\n\\nKindly make payments through our PayBill [PayBill Shortcode] your account number [Customer\'s Account Number] or click on the payment link below: [Payment Link]';
       if (type === 'T-5') templateBody = await getTemplate(tenantId, 'reminder-5', templateBody);
-      else if (type === 'T-3') templateBody = await getTemplate(tenantId, 'reminder-3', '[Customer Name], your [Plan Name] plan ([Price], [Plan Speed]) is expiring on [Expiry Date]. PayBill [PayBill Shortcode] • Account [Customer\'s Account Number] • [Payment Link]');
-      else if (type === 'T-0') templateBody = await getTemplate(tenantId, 'reminder-0', 'Final notice: [Customer Name], your [Plan Name] plan ([Price]) expires today ([Expiry Date]). PayBill [PayBill Shortcode] • Account [Customer\'s Account Number] • [Payment Link]');
+      else if (type === 'T-3') templateBody = await getTemplate(tenantId, 'reminder-3', '[Customer Name], your [Plan Name] plan ([Price], [Plan Speed]) is expiring on [Expiry Date]. PayBill [PayBill Shortcode] - Account [Customer\'s Account Number] - [Payment Link]');
+      else if (type === 'T-0') templateBody = await getTemplate(tenantId, 'reminder-0', 'Final notice: [Customer Name], your [Plan Name] plan ([Price]) expires today ([Expiry Date]). PayBill [PayBill Shortcode] - Account [Customer\'s Account Number] - [Payment Link]');
 
       const variables = buildTemplateVariables({
         customer: custDoc,
@@ -137,4 +137,6 @@ scheduleJob({ name: 'smsReminders', cronExpr: '0 9 * * *', task: async () => {
 console.log('SMS reminder job scheduled (09:00 Africa/Nairobi)');
 
 module.exports = {};
+
+
 

@@ -61,7 +61,7 @@ function buildTemplateVariables({
   const summaryParts = [planName, amountFormatted, speed, durationText].filter(Boolean);
   const planSummary = summaryParts.join(' • ');
 
-  return {
+  const map = {
     name,
     customer_name: name,
     customer_full_name: name,
@@ -110,6 +110,17 @@ function buildTemplateVariables({
     till: tillNumber || '',
     lipa_na_mpesa: resolvedPaybill,
   };
+
+  map["customer's account number"] = account;
+  map["Customer's Account Number"] = account;
+  map["customers account number"] = account;
+  map["Customers Account Number"] = account;
+  map['PayBill Shortcode'] = resolvedPaybill;
+  map['Paybill Shortcode'] = resolvedPaybill;
+  map['paybill Shortcode'] = resolvedPaybill;
+  map['pay bill shortcode'] = resolvedPaybill;
+
+  return map;
 }
 
 function buildTokenVariants(key) {
@@ -239,3 +250,4 @@ module.exports = {
   buildTemplateVariables,
   parseDurationToDays,
 };
+
