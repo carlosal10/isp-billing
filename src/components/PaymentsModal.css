@@ -81,6 +81,11 @@
 .table-wrapper{
   padding:10px 16px 16px;
   overflow:auto;
+  flex-grow:1;
+  display:flex; align-items:flex-start; justify-content:center;
+  -webkit-overflow-scrolling:touch; /* smooth scrolling on iOS */
+  min-height:0; /* for flexbox */
+  height: 70vh;
 }
 .data-table{
   width:100%; border-collapse:separate; border-spacing:0; background:#fff;

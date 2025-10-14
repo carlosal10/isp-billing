@@ -200,7 +200,8 @@ function normalizeDurationText(durationDays) {
   return `${durationDays} day${durationDays === 1 ? '' : 's'}`;
 }
 
-function determineDurationDays(plan) {
+function determineDurationDays(plan) 
+{
   if (!plan) return null;
   if (Number.isFinite(plan.durationDays)) return Number(plan.durationDays);
   if (plan.duration != null) {
