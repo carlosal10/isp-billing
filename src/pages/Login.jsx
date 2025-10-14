@@ -56,7 +56,7 @@ export default function Login() {
           "radial-gradient(1200px 380px at 80% -10%, rgba(230,57,70,.20), transparent 60%)," +
           "radial-gradient(900px 320px at 0% 30%, rgba(241,196,15,.18), transparent 60%)," +
           "linear-gradient(180deg, rgba(11,37,69,.93), rgba(11,37,69,.82))," +
-          "url('/images/login/hero.jpg')"
+          "url('/images/hero.jpg')"
       }}>
         <div className="login-left-inner">
           <span className="login-chip">KT-SwiftBridge</span>

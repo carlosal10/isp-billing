@@ -6,9 +6,21 @@ import "./MessagingModal.css";
 import useDragResize from "../hooks/useDragResize";
 
 const TEMPLATES = [
-  { id: "due_5", label: "Due in 5 days", body: "Hi {name}, your {plan} plan (KES {amount}) is due on {expiry}. Pay via {paylink}. Reply STOP to opt out." },
-  { id: "due_3", label: "Due in 3 days", body: "Reminder: {name}, your {plan} (KES {amount}) expires on {expiry}. Tap to renew: {paylink}" },
-  { id: "due_today", label: "Due today (final)", body: "Final notice: {name}, your {plan} (KES {amount}) expires today {expiry}. Renew now: {paylink}" },
+  {
+    id: "due_5",
+    label: "Due in 5 days",
+    body: "Your plan [Plan Name] ([Price] • [Plan Speed] • [Plan Duration]) will expire on [Expiry Date]. Renew early to stay connected 👉 [Payment Link]",
+  },
+  {
+    id: "due_3",
+    label: "Due in 3 days",
+    body: "Reminder: [Customer Name], your [Plan Name] plan ([Price], [Plan Speed]) expires on [Expiry Date]. Tap to renew: [Payment Link]",
+  },
+  {
+    id: "due_today",
+    label: "Due today (final)",
+    body: "Final notice: [Customer Name], your [Plan Name] plan ([Price]) expires today ([Expiry Date]). Renew now: [Payment Link]",
+  },
 ];
 
 function countSmsSegments(text) {
@@ -24,28 +36,142 @@ function countSmsSegments(text) {
   return { segments: Math.ceil((text || "").length / concatPerSeg), perSeg: concatPerSeg, isGsm };
 }
 
-function replaceTokens(template, vars) {
-  return template
-    .replaceAll("{name}", vars.name || "")
-    .replaceAll("{plan}", vars.plan || "")
-    .replaceAll("{amount}", vars.amount != null ? String(vars.amount) : "")
-    .replaceAll("{expiry}", vars.expiry || "")
-    .replaceAll("{paylink}", vars.paylink || "");
+function replaceTokens(template, vars = {}) {
+  const map = {
+    name: vars.name,
+    customer_name: vars.name,
+    plan: vars.plan,
+    plan_name: vars.plan,
+    planName: vars.plan,
+    price: vars.price || vars.amountFormatted || vars.amount,
+    amount: vars.amount != null ? String(vars.amount) : undefined,
+    amount_formatted: vars.amountFormatted,
+    plan_price: vars.price || vars.amountFormatted,
+    speed: vars.speed,
+    plan_speed: vars.speed,
+    duration: vars.duration,
+    plan_duration: vars.duration,
+    expiry: vars.expiry,
+    expiry_date: vars.expiry,
+    paylink: vars.paylink,
+    payment_link: vars.paylink,
+    link: vars.paylink,
+  };
+
+  let result = String(template || "");
+  for (const [key, value] of Object.entries(map)) {
+    if (value == null) continue;
+    const variants = buildTokenVariants(key);
+    for (const variant of variants) {
+      const replacement = String(value);
+      const curly = new RegExp(`\\{\\{?\\s*${escapeRegExp(variant)}\\s*\\}?\\}`, "gi");
+      const square = new RegExp(`\\[\\s*${escapeRegExp(variant)}\\s*\\]`, "gi");
+      result = result.replace(curly, replacement);
+      result = result.replace(square, replacement);
+    }
+  }
+  return result;
+}
+
+function buildTokenVariants(key) {
+  const raw = String(key || "").trim();
+  if (!raw) return [""];
+  const spaced = raw.replace(/[_-]+/g, " ").trim();
+  const lower = spaced.toLowerCase();
+  const title = toTitleCase(spaced);
+  const compact = spaced.replace(/\s+/g, "");
+  const camel = toCamelCase(spaced);
+  const pascal = camel ? camel[0].toUpperCase() + camel.slice(1) : "";
+  return Array.from(
+    new Set(
+      [raw, spaced, lower, title, spaced.toUpperCase(), compact, compact.toLowerCase(), compact.toUpperCase(), camel, pascal].filter(Boolean)
+    )
+  );
+}
+
+function toTitleCase(input) {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toCamelCase(input) {
+  return String(input || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word, idx) => (idx === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join("");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function prepareTemplateVariables(seed = {}) {
+  const amountRaw = seed.amount != null ? seed.amount : seed.price;
+  const amountNumber = typeof amountRaw === "number" ? amountRaw : Number(amountRaw);
+  const amountCandidate = Number.isFinite(amountNumber) ? amountNumber : amountRaw;
+  const formattedAmount = seed.amountFormatted || seed.priceFormatted || formatPrice(amountCandidate);
+  const price = seed.price != null ? formatPrice(seed.price) : formattedAmount;
+  const speed = seed.speed != null ? formatSpeed(seed.speed) : formatSpeed(seed.planSpeed);
+  const duration = seed.duration || seed.planDuration || seed.durationText;
+
+  return {
+    name: seed.name,
+    plan: seed.plan,
+    amount: amountRaw,
+    amountFormatted: formattedAmount,
+    price,
+    speed,
+    duration,
+    expiry: seed.expiry,
+    paylink: seed.paylink,
+  };
+}
+
+function formatPrice(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    if (/[A-Za-z]/.test(value)) return value;
+    const numeric = Number(value.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(numeric)) {
+      return formatPrice(numeric);
+    }
+    return value;
+  }
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "";
+  try {
+    return new Intl.NumberFormat("en-KE", {
+      style: "currency",
+      currency: "KES",
+      maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    }).format(amount);
+  } catch {
+    const rounded = Number.isInteger(amount) ? amount : amount.toFixed(2);
+    return `KES ${rounded}`;
+  }
+}
+
+function formatSpeed(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    if (/mbps/i.test(value)) return value;
+    return `${value} Mbps`;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "";
+  return `${Number.isInteger(num) ? num : Number(num.toFixed(2))} Mbps`;
 }
 
 export default function MessagingModal({ isOpen, onClose, defaults }) {
   const seed = defaults || {};
+  const templateSeed = prepareTemplateVariables(seed);
   const [channel, setChannel] = useState("sms");
   const [recipient, setRecipient] = useState(seed.recipient || "");
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [message, setMessage] = useState(
-    replaceTokens(TEMPLATES[0].body, {
-      name: seed.name,
-      plan: seed.plan,
-      amount: seed.amount,
-      expiry: seed.expiry,
-      paylink: seed.paylink,
-    })
+    replaceTokens(TEMPLATES[0].body, templateSeed)
   );
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState("");
@@ -80,15 +206,7 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
     const tpl = TEMPLATES.find((t) => t.id === id);
     if (!tpl) return;
     setTemplateId(id);
-    setMessage(
-      replaceTokens(tpl.body, {
-        name: seed.name,
-        plan: seed.plan,
-        amount: seed.amount,
-        expiry: seed.expiry,
-        paylink: seed.paylink,
-      })
-    );
+    setMessage(replaceTokens(tpl.body, templateSeed));
   }
 
   async function handleSubmit(e) {
@@ -231,7 +349,7 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
               <div className="ps-token-wrap">
                 <div className="ps-token-title">Tokens</div>
                 <div className="ps-token-list">
-                  {["{name}", "{plan}", "{amount}", "{expiry}", "{paylink}"].map((t) => (
+                  {["{name}", "{plan}", "{price}", "{speed}", "{duration}", "{expiry}", "{paylink}", "[Plan Name]", "[Payment Link]"].map((t) => (
                     <span key={t} className="ps-token" title={`Available: ${t}`}>
                       {t}
                     </span>

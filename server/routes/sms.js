@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const SmsSettings = require('../models/SmsSettings');
 const SmsTemplate = require('../models/SmsTemplate');
-const { renderTemplate, formatDateISO } = require('../utils/template');
+const { renderTemplate, buildTemplateVariables } = require('../utils/template');
 const { sendSms } = require('../utils/sms');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
@@ -86,14 +86,13 @@ router.post('/send-test', async (req, res) => {
 
     const { url } = await createPayLink({ tenantId: req.tenantId, customerId: customer?._id, planId: plan?._id, dueAt });
 
-    const rendered = renderTemplate(body, {
-      name: customer?.name || 'Customer',
-      plan_name: plan?.name || 'Plan',
-      amount: plan?.price != null ? String(plan.price) : '',
-      expiry_date: formatDateISO(dueAt),
-      payment_link: url,
-      ...(variables || {}),
+    const baseVariables = buildTemplateVariables({
+      customer,
+      plan,
+      expiryDate: dueAt,
+      paymentLink: url,
     });
+    const rendered = renderTemplate(body, { ...baseVariables, ...(variables || {}) });
 
     const resp = await sendSms(req.tenantId, to, rendered);
     res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued' });
@@ -123,13 +122,12 @@ router.post('/send', async (req, res) => {
     const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
     const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay: {{payment_link}}';
 
-    const rendered = renderTemplate(body, {
-      name: customer.name || 'Customer',
-      plan_name: plan.name || 'Plan',
-      amount: plan.price != null ? String(plan.price) : '',
-      expiry_date: formatDateISO(linkDue),
-      payment_link: url,
-    });
+    const rendered = renderTemplate(body, buildTemplateVariables({
+      customer,
+      plan,
+      expiryDate: linkDue,
+      paymentLink: url,
+    }));
 
     const resp = await sendSms(req.tenantId, customer.phone, rendered);
     res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', to: customer.phone });

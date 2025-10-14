@@ -6,7 +6,7 @@ const SmsTemplate = require('../models/SmsTemplate');
 const SmsSettings = require('../models/SmsSettings');
 const ReminderLog = require('../models/ReminderLog');
 const { createPayLink } = require('../utils/paylink');
-const { renderTemplate, formatDateISO } = require('../utils/template');
+const { renderTemplate, buildTemplateVariables } = require('../utils/template');
 const { sendSms } = require('../utils/sms');
 const { mark } = require('../utils/heartbeats');
 
@@ -78,13 +78,13 @@ async function processTenantReminders(now) {
       else if (type === 'T-3') templateBody = await getTemplate(tenantId, 'reminder-3', templateBody);
       else if (type === 'T-0') templateBody = await getTemplate(tenantId, 'reminder-0', 'Final notice: {{plan_name}} for {{name}} expires today ({{expiry_date}}). Pay: {{payment_link}}');
 
-      const msg = renderTemplate(templateBody, {
-        name: custDoc.name || 'Customer',
-        plan_name: planDoc.name || 'Plan',
-        amount: String(planDoc.price ?? ''),
-        expiry_date: formatDateISO(expiryDate),
-        payment_link: url,
+      const variables = buildTemplateVariables({
+        customer: custDoc,
+        plan: planDoc,
+        expiryDate,
+        paymentLink: url,
       });
+      const msg = renderTemplate(templateBody, variables);
 
       try {
         const resp = await sendSms(tenantId, custDoc.phone, msg);
