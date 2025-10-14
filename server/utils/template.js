@@ -1,4 +1,9 @@
 const DEFAULT_CURRENCY = process.env.SMS_DEFAULT_CURRENCY || process.env.DEFAULT_CURRENCY || 'KES';
+const FALLBACK_PAYBILL =
+  process.env.MPESA_SHORTCODE ||
+  process.env.MPESA_TILL ||
+  process.env.PAYBILL_SHORTCODE ||
+  '';
 
 function renderTemplate(template, variables) {
   let result = String(template || '');
@@ -18,11 +23,19 @@ function renderTemplate(template, variables) {
   return result;
 }
 
-function buildTemplateVariables({ customer, plan, expiryDate, paymentLink, currency } = {}) {
+function buildTemplateVariables({
+  customer,
+  plan,
+  expiryDate,
+  paymentLink,
+  currency,
+  paybillShortcode,
+  tillNumber,
+} = {}) {
   const effectiveCurrency = currency || plan?.currency || DEFAULT_CURRENCY;
   const name = customer?.name || 'Customer';
   const phone = customer?.phone || '';
-  const account = customer?.accountNumber || customer?.account || '';
+  const account = customer?.accountNumber || customer?.account || customer?.username || '';
 
   const planName = plan?.name || plan?.planName || '';
   const priceNumber = typeof plan?.price === 'number' ? plan.price : Number(plan?.price);
@@ -38,6 +51,13 @@ function buildTemplateVariables({ customer, plan, expiryDate, paymentLink, curre
   const expiryIso = expiryDate ? formatDateISO(expiryDate) : '';
   const paymentUrl = paymentLink || '';
 
+  const resolvedPaybill =
+    typeof paybillShortcode === 'string' && paybillShortcode.trim()
+      ? paybillShortcode.trim()
+      : typeof tillNumber === 'string' && tillNumber.trim()
+      ? tillNumber.trim()
+      : FALLBACK_PAYBILL;
+
   const summaryParts = [planName, amountFormatted, speed, durationText].filter(Boolean);
   const planSummary = summaryParts.join(' • ');
 
@@ -49,6 +69,10 @@ function buildTemplateVariables({ customer, plan, expiryDate, paymentLink, curre
     customer_account: account,
     account,
     account_number: account,
+    customer_account_number: account,
+    accountNumber: account,
+    account_reference: account,
+    account_reference_number: account,
     plan: planName,
     plan_name: planName,
     planName,
@@ -74,6 +98,17 @@ function buildTemplateVariables({ customer, plan, expiryDate, paymentLink, curre
     payment_link: paymentUrl,
     paylink: paymentUrl,
     link: paymentUrl,
+    payment_url: paymentUrl,
+    paybill: resolvedPaybill,
+    paybill_number: resolvedPaybill,
+    paybill_shortcode: resolvedPaybill,
+    paybill_short_code: resolvedPaybill,
+    paybill_shortCode: resolvedPaybill,
+    mpesa_paybill: resolvedPaybill,
+    paybill_short: resolvedPaybill,
+    till_number: tillNumber || '',
+    till: tillNumber || '',
+    lipa_na_mpesa: resolvedPaybill,
   };
 }
 

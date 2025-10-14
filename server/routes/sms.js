@@ -7,6 +7,25 @@ const { sendSms } = require('../utils/sms');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const { createPayLink } = require('../utils/paylink');
+const PaymentConfig = require('../models/PaymentConfig');
+
+const FALLBACK_PAYBILL =
+  process.env.MPESA_SHORTCODE ||
+  process.env.MPESA_TILL ||
+  process.env.PAYBILL_SHORTCODE ||
+  null;
+
+async function resolveTenantPaybill(tenantId) {
+  if (!tenantId) return { paybillShortcode: FALLBACK_PAYBILL, tillNumber: null };
+  const config = await PaymentConfig.findOne({ ispId: String(tenantId), provider: 'mpesa' }).lean();
+  const payMethod = (config?.payMethod || '').toLowerCase();
+  const tillNumber = config?.buyGoodsTill || null;
+  const paybillShortcode =
+    payMethod === 'buygoods'
+      ? tillNumber || config?.paybillShortcode || FALLBACK_PAYBILL
+      : config?.paybillShortcode || tillNumber || FALLBACK_PAYBILL;
+  return { paybillShortcode: paybillShortcode || FALLBACK_PAYBILL, tillNumber };
+}
 
 // GET settings (tenant scoped)
 router.get('/settings', async (req, res) => {
@@ -77,7 +96,7 @@ router.post('/send-test', async (req, res) => {
     if (!to) return res.status(400).json({ error: 'Missing recipient phone' });
 
     const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
-    const body = overrideBody || tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay here: {{payment_link}}';
+    const body = overrideBody || tmpl?.body || 'Dear Customer your internet subscription plan [Plan Name] will expire on [Expiry Date].\\nRenew early to stay connected.\\n\\nKindly make payments through our PayBill [PayBill Shortcode] your account number [Customer\'s Account Number] or click on the payment link below: [Payment Link]';
 
     // pick a random or first customer+plan for preview; but allow override via req
     const customer = await Customer.findOne({ tenantId: req.tenantId }).lean();
@@ -86,11 +105,14 @@ router.post('/send-test', async (req, res) => {
 
     const { url } = await createPayLink({ tenantId: req.tenantId, customerId: customer?._id, planId: plan?._id, dueAt });
 
+    const { paybillShortcode, tillNumber } = await resolveTenantPaybill(req.tenantId);
     const baseVariables = buildTemplateVariables({
       customer,
       plan,
       expiryDate: dueAt,
       paymentLink: url,
+      paybillShortcode,
+      tillNumber,
     });
     const rendered = renderTemplate(body, { ...baseVariables, ...(variables || {}) });
 
@@ -120,14 +142,20 @@ router.post('/send', async (req, res) => {
     const { url } = await createPayLink({ tenantId: req.tenantId, customerId: customer._id, planId: plan._id, dueAt: linkDue });
 
     const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
-    const body = tmpl?.body || 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay: {{payment_link}}';
+    const body = tmpl?.body || 'Dear Customer your internet subscription plan [Plan Name] will expire on [Expiry Date].\\nRenew early to stay connected.\\n\\nKindly make payments through our PayBill [PayBill Shortcode] your account number [Customer\'s Account Number] or click on the payment link below: [Payment Link]';
 
-    const rendered = renderTemplate(body, buildTemplateVariables({
-      customer,
-      plan,
-      expiryDate: linkDue,
-      paymentLink: url,
-    }));
+    const { paybillShortcode, tillNumber } = await resolveTenantPaybill(req.tenantId);
+    const rendered = renderTemplate(
+      body,
+      buildTemplateVariables({
+        customer,
+        plan,
+        expiryDate: linkDue,
+        paymentLink: url,
+        paybillShortcode,
+        tillNumber,
+      })
+    );
 
     const resp = await sendSms(req.tenantId, customer.phone, rendered);
     res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', to: customer.phone });

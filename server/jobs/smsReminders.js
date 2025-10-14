@@ -9,6 +9,25 @@ const { createPayLink } = require('../utils/paylink');
 const { renderTemplate, buildTemplateVariables } = require('../utils/template');
 const { sendSms } = require('../utils/sms');
 const { mark } = require('../utils/heartbeats');
+const PaymentConfig = require('../models/PaymentConfig');
+
+const FALLBACK_PAYBILL =
+  process.env.MPESA_SHORTCODE ||
+  process.env.MPESA_TILL ||
+  process.env.PAYBILL_SHORTCODE ||
+  null;
+
+async function resolvePaybillForTenant(tenantId) {
+  if (!tenantId) return { paybillShortcode: FALLBACK_PAYBILL, tillNumber: null };
+  const config = await PaymentConfig.findOne({ ispId: String(tenantId), provider: 'mpesa' }).lean();
+  const payMethod = (config?.payMethod || '').toLowerCase();
+  const tillNumber = config?.buyGoodsTill || null;
+  const paybillShortcode =
+    payMethod === 'buygoods'
+      ? tillNumber || config?.paybillShortcode || FALLBACK_PAYBILL
+      : config?.paybillShortcode || tillNumber || FALLBACK_PAYBILL;
+  return { paybillShortcode: paybillShortcode || FALLBACK_PAYBILL, tillNumber };
+}
 
 let running = false;
 
@@ -48,6 +67,7 @@ async function processTenantReminders(now) {
     if (!settings?.enabled) continue; // SMS disabled for tenant
 
     const dueWarnHours = settings?.schedule?.dueWarnHours ?? 4;
+    const { paybillShortcode, tillNumber } = await resolvePaybillForTenant(tenantId);
 
     for (const row of items) {
       const { customer, plan, expiryDate } = row;
@@ -69,20 +89,22 @@ async function processTenantReminders(now) {
         Customer.findById(customer).lean(),
         Plan.findById(plan).lean(),
       ]);
-      if (!custDoc || !planDoc) continue;
+      if (!custDoc || !planDoc || !custDoc.phone) continue;
 
       const { url } = await createPayLink({ tenantId, customerId: customer, planId: plan, dueAt: expiryDate });
 
-      let templateBody = 'Hi {{name}}, your {{plan_name}} (KES {{amount}}) expires on {{expiry_date}}. Pay now: {{payment_link}}';
+      let templateBody = 'Dear Customer your internet subscription plan [Plan Name] will expire on [Expiry Date].\\nRenew early to stay connected.\\n\\nKindly make payments through our PayBill [PayBill Shortcode] your account number [Customer\'s Account Number] or click on the payment link below: [Payment Link]';
       if (type === 'T-5') templateBody = await getTemplate(tenantId, 'reminder-5', templateBody);
-      else if (type === 'T-3') templateBody = await getTemplate(tenantId, 'reminder-3', templateBody);
-      else if (type === 'T-0') templateBody = await getTemplate(tenantId, 'reminder-0', 'Final notice: {{plan_name}} for {{name}} expires today ({{expiry_date}}). Pay: {{payment_link}}');
+      else if (type === 'T-3') templateBody = await getTemplate(tenantId, 'reminder-3', '[Customer Name], your [Plan Name] plan ([Price], [Plan Speed]) is expiring on [Expiry Date]. PayBill [PayBill Shortcode] • Account [Customer\'s Account Number] • [Payment Link]');
+      else if (type === 'T-0') templateBody = await getTemplate(tenantId, 'reminder-0', 'Final notice: [Customer Name], your [Plan Name] plan ([Price]) expires today ([Expiry Date]). PayBill [PayBill Shortcode] • Account [Customer\'s Account Number] • [Payment Link]');
 
       const variables = buildTemplateVariables({
         customer: custDoc,
         plan: planDoc,
         expiryDate,
         paymentLink: url,
+        paybillShortcode,
+        tillNumber,
       });
       const msg = renderTemplate(templateBody, variables);
 
@@ -115,3 +137,4 @@ scheduleJob({ name: 'smsReminders', cronExpr: '0 9 * * *', task: async () => {
 console.log('SMS reminder job scheduled (09:00 Africa/Nairobi)');
 
 module.exports = {};
+
