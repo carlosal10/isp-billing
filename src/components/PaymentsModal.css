@@ -82,15 +82,17 @@
   padding:10px 16px 16px;
   overflow:auto;
   flex-grow:1;
-  display:flex; align-items:flex-start; justify-content:center;
+  display:block;
+  width:100%;
   -webkit-overflow-scrolling:touch; /* smooth scrolling on iOS */
   min-height:0; /* for flexbox */
-  height: 70vh;
+  max-height:70vh;
 }
 .data-table{
   width:100%; border-collapse:separate; border-spacing:0; background:#fff;
   border:1px solid var(--ec-line); border-radius:14px; overflow:hidden;
   box-shadow:0 10px 26px rgba(0,0,0,.06);
+  min-width:950px;
 }
 .data-table thead th{
   background:#f9fbff; color:#0b2545; font-weight:800;
@@ -382,6 +384,6 @@ button.danger:focus-visible {
 
 @media (max-width: 720px) {
   .drawer { width: 100%; }
+  .data-table { min-width: 640px; }
   .data-table td.actions { text-align: left; }
 }
-
