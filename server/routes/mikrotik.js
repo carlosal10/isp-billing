@@ -640,12 +640,13 @@ router.get("/static/active", limiter, async (req, res) => {
 router.post("/pppoe/:account/enable", limiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const name = String(req.params.account);
     // find secret id by name
-    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000 });
+    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000, serverId });
     if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "no")], { tenantId, timeoutMs: 10000 });
+    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "no")], { tenantId, timeoutMs: 10000, serverId });
     return res.json({ ok: true, message: "Enabled" });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || "Enable failed" });
@@ -655,17 +656,18 @@ router.post("/pppoe/:account/enable", limiter, async (req, res) => {
 router.post("/pppoe/:account/disable", limiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const name = String(req.params.account);
-    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000 });
+    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000, serverId });
     if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "yes")], { tenantId, timeoutMs: 10000 });
+    await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "yes")], { tenantId, timeoutMs: 10000, serverId });
     // optional disconnect active
     if (String(req.query.disconnect || "true").toLowerCase() !== "false") {
-      const act = await sendCommand("/ppp/active/print", [qs("name", name)], { tenantId, timeoutMs: 8000 });
+      const act = await sendCommand("/ppp/active/print", [qs("name", name)], { tenantId, timeoutMs: 8000, serverId });
       if (Array.isArray(act) && act[0]) {
         const aid = act[0][".id"] || act[0].id || act[0].numbers;
-        await sendCommand("/ppp/active/remove", [w(".id", aid)], { tenantId, timeoutMs: 8000 });
+        await sendCommand("/ppp/active/remove", [w(".id", aid)], { tenantId, timeoutMs: 8000, serverId });
       }
     }
     return res.json({ ok: true, message: "Disabled" });
@@ -678,21 +680,22 @@ router.post("/pppoe/:account/disable", limiter, async (req, res) => {
 router.post("/static/:account/apply-queue", limiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const name = String(req.params.account);
     const rate = String(req.body.rateLimit || "10M/2M");
     // Use simple queue with name = account
     // Create or update
-    const list = await sendCommand("/queue/simple/print", [qs("name", name)], { tenantId, timeoutMs: 8000 });
+    const list = await sendCommand("/queue/simple/print", [qs("name", name)], { tenantId, timeoutMs: 8000, serverId });
     if (Array.isArray(list) && list[0]) {
       const id = list[0][".id"] || list[0].id || list[0].numbers;
-      await sendCommand("/queue/simple/set", [w("numbers", id), w("max-limit", rate)], { tenantId, timeoutMs: 8000 });
+      await sendCommand("/queue/simple/set", [w("numbers", id), w("max-limit", rate)], { tenantId, timeoutMs: 8000, serverId });
     } else {
       const target = String(req.body.target || ""); // e.g., 192.0.2.10/32
       if (!target) return res.status(400).json({ ok: false, error: "target (ip/mask) required" });
       await sendCommand(
         "/queue/simple/add",
         [w("name", name), w("target", target), w("max-limit", rate)],
-        { tenantId, timeoutMs: 8000 }
+        { tenantId, timeoutMs: 8000, serverId }
       );
     }
     return res.json({ ok: true, message: "Queue applied" });
@@ -703,10 +706,11 @@ router.post("/static/:account/apply-queue", limiter, async (req, res) => {
 
 router.post("/static/:account/enable-queue", limiter, async (req, res) => {
   try {
-    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000 });
+    const serverId = pickServerId(req);
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+    await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
 
     // persist + sync firewall lists
     try {
@@ -730,10 +734,11 @@ router.post("/static/:account/enable-queue", limiter, async (req, res) => {
 
 router.post("/static/:account/disable-queue", limiter, async (req, res) => {
   try {
-    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000 });
+    const serverId = pickServerId(req);
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000 });
+    await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
 
     // persist + sync firewall lists
     try {

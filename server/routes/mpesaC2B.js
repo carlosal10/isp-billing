@@ -1,3 +1,4 @@
+// Mpesa C2B (Customer to Business) routes
 const express = require('express');
 const router = express.Router();
 const PaymentConfig = require('../models/PaymentConfig');
