@@ -571,17 +571,22 @@ router.get('/health/:accountNumber', async (req, res) => {
 
       const s0 = Array.isArray(secret) ? secret[0] : null;
       const a0 = Array.isArray(active) ? active[0] : null;
-      const disabledVal = (s0 && (s0.disabled ?? s0['disabled'])) ?? 'no';
-      const disabled = isYes(disabledVal);
-
-      out.disabled = disabled;
+      if (!s0) {
+        // Secret not found on router; report unknown disabled state so UI can hide enable/disable controls
+        out.disabled = null;
+        out.status = customer.status || null;
+      } else {
+        const disabledVal = s0 && (s0.disabled ?? s0['disabled']);
+        const disabled = isYes(disabledVal);
+        out.disabled = disabled;
+        out.status = disabled ? 'inactive' : 'active';
+      }
       out.online = !!a0;
       out.uptime = a0?.uptime || null;
       out.bytesIn = Number(a0?.['bytes-in'] || a0?.rx || 0) || 0;
       out.bytesOut = Number(a0?.['bytes-out'] || a0?.tx || 0) || 0;
       out.addressIp = a0?.address || a0?.['remote-address'] || null;
       out.deviceCount = out.online ? 1 : 0;
-      out.status = disabled ? 'inactive' : 'active';
       return res.json(out);
     }
 

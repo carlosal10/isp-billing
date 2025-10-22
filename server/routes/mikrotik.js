@@ -641,11 +641,29 @@ router.post("/pppoe/:account/enable", limiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const serverId = pickServerId(req);
-    const name = String(req.params.account);
-    // find secret id by name
-    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000, serverId });
-    if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
-    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    // Trim raw account and build search keys including aliases
+    const rawName = String(req.params.account || '').trim();
+    const searchKeys = new Set([rawName]);
+    try {
+      const doc = await Customer.findOne({ tenantId, $or: [{ accountNumber: rawName }, { accountAliases: rawName }] }).lean();
+      if (doc) {
+        if (doc.accountNumber) searchKeys.add(String(doc.accountNumber).trim());
+        for (const alias of Array.isArray(doc.accountAliases) ? doc.accountAliases : []) {
+          const aliasTrim = String(alias || '').trim();
+          if (aliasTrim) searchKeys.add(aliasTrim);
+        }
+      }
+    } catch (_) {}
+    let secret = null;
+    for (const key of searchKeys) {
+      const rows = await sendCommand("/ppp/secret/print", [qs("name", key)], { tenantId, timeoutMs: 10000, serverId });
+      if (Array.isArray(rows) && rows[0]) {
+        secret = rows[0];
+        break;
+      }
+    }
+    if (!secret) return res.status(404).json({ ok: false, error: "User not found" });
+    const id = secret[".id"] || secret.id || secret.numbers;
     await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "no")], { tenantId, timeoutMs: 10000, serverId });
     return res.json({ ok: true, message: "Enabled" });
   } catch (e) {
@@ -657,14 +675,35 @@ router.post("/pppoe/:account/disable", limiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const serverId = pickServerId(req);
-    const name = String(req.params.account);
-    const rows = await sendCommand("/ppp/secret/print", [qs("name", name)], { tenantId, timeoutMs: 10000, serverId });
-    if (!Array.isArray(rows) || rows.length === 0) return res.status(404).json({ ok: false, error: "User not found" });
-    const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
+    // Trim raw account and build search keys including aliases
+    const rawName = String(req.params.account || '').trim();
+    const searchKeys = new Set([rawName]);
+    try {
+      const doc = await Customer.findOne({ tenantId, $or: [{ accountNumber: rawName }, { accountAliases: rawName }] }).lean();
+      if (doc) {
+        if (doc.accountNumber) searchKeys.add(String(doc.accountNumber).trim());
+        for (const alias of Array.isArray(doc.accountAliases) ? doc.accountAliases : []) {
+          const aliasTrim = String(alias || '').trim();
+          if (aliasTrim) searchKeys.add(aliasTrim);
+        }
+      }
+    } catch (_) {}
+    let secret = null;
+    let secretName = rawName;
+    for (const key of searchKeys) {
+      const rows = await sendCommand("/ppp/secret/print", [qs("name", key)], { tenantId, timeoutMs: 10000, serverId });
+      if (Array.isArray(rows) && rows[0]) {
+        secret = rows[0];
+        secretName = key;
+        break;
+      }
+    }
+    if (!secret) return res.status(404).json({ ok: false, error: "User not found" });
+    const id = secret[".id"] || secret.id || secret.numbers;
     await sendCommand("/ppp/secret/set", [w("numbers", id), w("disabled", "yes")], { tenantId, timeoutMs: 10000, serverId });
     // optional disconnect active
     if (String(req.query.disconnect || "true").toLowerCase() !== "false") {
-      const act = await sendCommand("/ppp/active/print", [qs("name", name)], { tenantId, timeoutMs: 8000, serverId });
+      const act = await sendCommand("/ppp/active/print", [qs("name", secretName)], { tenantId, timeoutMs: 8000, serverId });
       if (Array.isArray(act) && act[0]) {
         const aid = act[0][".id"] || act[0].id || act[0].numbers;
         await sendCommand("/ppp/active/remove", [w(".id", aid)], { tenantId, timeoutMs: 8000, serverId });
