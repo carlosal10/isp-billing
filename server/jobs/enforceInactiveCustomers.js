@@ -10,26 +10,55 @@ const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const { disableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
 
 async function enforcePppoe(tenantId, customer) {
-  const name = String(customer.accountNumber || '').trim();
-  if (!name) return;
+  /**
+   * Disable a PPPoE secret and kick active session for the given customer.
+   * To improve robustness, build a set of candidate names from the customer's
+   * account number and any aliases. Iterate through these candidates until a
+   * matching secret is found. This mirrors logic used in manual routes and
+   * prevents failures when the secret is stored under an alias or trimmed
+   * variant of the account.
+   */
   const timeoutMs = 10000;
+  const candidates = new Set();
+  // Primary account number
+  if (customer && customer.accountNumber) {
+    const primary = String(customer.accountNumber).trim();
+    if (primary) candidates.add(primary);
+  }
+  // Include aliases if present
+  if (customer && Array.isArray(customer.accountAliases)) {
+    for (const alias of customer.accountAliases) {
+      if (!alias) continue;
+      const cleaned = String(alias).trim();
+      if (cleaned) candidates.add(cleaned);
+    }
+  }
+  if (candidates.size === 0) return;
   try {
-    // Disable PPP secret
-    const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
-    if (Array.isArray(secrets) && secrets[0]) {
-      const id = secrets[0]['.id'] || secrets[0].numbers;
-      if (id) {
-        await sendCommand('/ppp/secret/set', [`=numbers=${id}`, `=disabled=yes`], { tenantId, timeoutMs }).catch(() => {});
+    let found = false;
+    for (const name of candidates) {
+      // Disable PPP secret for this candidate
+      const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
+      if (Array.isArray(secrets) && secrets[0]) {
+        const id = secrets[0]['.id'] || secrets[0].numbers;
+        if (id) {
+          await sendCommand('/ppp/secret/set', [`=numbers=${id}`, `=disabled=yes`], { tenantId, timeoutMs }).catch(() => {});
+        }
+        // Kick active session if present
+        const act = await sendCommand('/ppp/active/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
+        if (Array.isArray(act) && act[0]) {
+          const aid = act[0]['.id'] || act[0].numbers;
+          if (aid) await sendCommand('/ppp/active/remove', [`=.id=${aid}`], { tenantId, timeoutMs }).catch(() => {});
+        }
+        found = true;
+        break;
       }
     }
-    // Kick active session
-    const act = await sendCommand('/ppp/active/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
-    if (Array.isArray(act) && act[0]) {
-      const aid = act[0]['.id'] || act[0].numbers;
-      if (aid) await sendCommand('/ppp/active/remove', [`=.id=${aid}`], { tenantId, timeoutMs }).catch(() => {});
+    if (!found) {
+      console.warn('[enforce] PPPoE enforce: no secret found', { tenantId, account: Array.from(candidates).join(',') });
     }
   } catch (e) {
-    console.warn('[enforce] PPPoE enforce failed', { tenantId, account: name, err: e?.message || e });
+    console.warn('[enforce] PPPoE enforce failed', { tenantId, account: Array.from(candidates).join(','), err: e?.message || e });
   }
 }
 
@@ -51,14 +80,15 @@ async function runOnce() {
     const now = new Date();
     let tenantStatic = 0;
     let tenantPppoe = 0;
-    const newlyExpired = await Customer.find({
-      tenantId,
-      expiryDate: { $lt: now },
-      status: { $nin: ['inactive', 'expired'] },
-    })
-      .select('tenantId accountNumber connectionType staticConfig')
-      .lean()
-      .catch(() => []);
+        const newlyExpired = await Customer.find({
+          tenantId,
+          expiryDate: { $lt: now },
+          status: { $nin: ['inactive', 'expired'] },
+        })
+          // select accountAliases so enforcePppoe can consider aliases
+          .select('tenantId accountNumber accountAliases connectionType staticConfig')
+          .lean()
+          .catch(() => []);
 
     for (const c of newlyExpired) {
       await Customer.updateOne(
@@ -67,10 +97,11 @@ async function runOnce() {
       ).catch(() => {});
     }
 
-    let list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
-      .select('tenantId accountNumber connectionType staticConfig')
-      .lean()
-      .catch(() => []);
+        let list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
+          // select accountAliases so enforcePppoe can consider aliases
+          .select('tenantId accountNumber accountAliases connectionType staticConfig')
+          .lean()
+          .catch(() => []);
 
     if (Array.isArray(newlyExpired) && newlyExpired.length) {
       const seen = new Set(list.map((c) => String(c._id)));

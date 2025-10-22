@@ -100,23 +100,22 @@ router.post('/validation', async (req, res) => {
       return res.json({ ResultCode: 1, ResultDesc: 'Missing account reference' });
     }
     const accountRef = String(BillRefNumber).trim();
-    let customer = null;
-    if (config.ispId) {
-      customer = await Customer.findOne({
-        tenantId: config.ispId,
-        accountNumber: accountRef,
-      }).lean();
-    }
-    if (!customer) {
-      customer = await Customer.findOne({ accountNumber: accountRef }).lean();
-    }
-    if (!customer) {
-      console.warn('[mpesa:c2b:validation] rejected - account not found', {
-        ...context,
-        tenantId: config.ispId ? String(config.ispId) : null,
-      });
-      return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
-    }
+        let customer = null;
+        // Build query to search account number and aliases
+        const q = { $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] };
+        if (config.ispId) q.tenantId = config.ispId;
+        customer = await Customer.findOne(q).lean();
+        // If not found under tenant, try cross-tenant search
+        if (!customer) {
+          customer = await Customer.findOne({ $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] }).lean();
+        }
+        if (!customer) {
+          console.warn('[mpesa:c2b:validation] rejected - account not found', {
+            ...context,
+            tenantId: config.ispId ? String(config.ispId) : null,
+          });
+          return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
+        }
     if (customer?.tenantId) context.tenantId = customer.tenantId.toString();
     console.log('[mpesa:c2b:validation] accepted', {
       ...context,

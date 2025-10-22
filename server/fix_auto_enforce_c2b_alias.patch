@@ -1,0 +1,166 @@
+*** Begin Patch
+*** Update File: server/jobs/enforceInactiveCustomers.js
+@@
+-async function enforcePppoe(tenantId, customer) {
+-  const name = String(customer.accountNumber || '').trim();
+-  if (!name) return;
+-  const timeoutMs = 10000;
+-  try {
+-    // Disable PPP secret
+-    const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
+-    if (Array.isArray(secrets) && secrets[0]) {
+-      const id = secrets[0]['.id'] || secrets[0].numbers;
+-      if (id) {
+-        await sendCommand('/ppp/secret/set', [`=numbers=${id}`, `=disabled=yes`], { tenantId, timeoutMs }).catch(() => {});
+-      }
+-    }
+-    // Kick active session
+-    const act = await sendCommand('/ppp/active/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
+-    if (Array.isArray(act) && act[0]) {
+-      const aid = act[0]['.id'] || act[0].numbers;
+-      if (aid) await sendCommand('/ppp/active/remove', [`=.id=${aid}`], { tenantId, timeoutMs }).catch(() => {});
+-    }
+-  } catch (e) {
+-    console.warn('[enforce] PPPoE enforce failed', { tenantId, account: name, err: e?.message || e });
+-  }
+-}
++async function enforcePppoe(tenantId, customer) {
++  /**
++   * Disable a PPPoE secret and kick active session for the given customer.
++   * To improve robustness, build a set of candidate names from the customer's
++   * account number and any aliases. Iterate through these candidates until a
++   * matching secret is found. This mirrors logic used in manual routes and
++   * prevents failures when the secret is stored under an alias or trimmed
++   * variant of the account.
++   */
++  const timeoutMs = 10000;
++  const candidates = new Set();
++  // Primary account number
++  if (customer && customer.accountNumber) {
++    const primary = String(customer.accountNumber).trim();
++    if (primary) candidates.add(primary);
++  }
++  // Include aliases if present
++  if (customer && Array.isArray(customer.accountAliases)) {
++    for (const alias of customer.accountAliases) {
++      if (!alias) continue;
++      const cleaned = String(alias).trim();
++      if (cleaned) candidates.add(cleaned);
++    }
++  }
++  if (candidates.size === 0) return;
++  try {
++    let found = false;
++    for (const name of candidates) {
++      // Disable PPP secret for this candidate
++      const secrets = await sendCommand('/ppp/secret/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
++      if (Array.isArray(secrets) && secrets[0]) {
++        const id = secrets[0]['.id'] || secrets[0].numbers;
++        if (id) {
++          await sendCommand('/ppp/secret/set', [`=numbers=${id}`, `=disabled=yes`], { tenantId, timeoutMs }).catch(() => {});
++        }
++        // Kick active session if present
++        const act = await sendCommand('/ppp/active/print', [`?name=${name}`], { tenantId, timeoutMs }).catch(() => []);
++        if (Array.isArray(act) && act[0]) {
++          const aid = act[0]['.id'] || act[0].numbers;
++          if (aid) await sendCommand('/ppp/active/remove', [`=.id=${aid}`], { tenantId, timeoutMs }).catch(() => {});
++        }
++        found = true;
++        break;
++      }
++    }
++    if (!found) {
++      console.warn('[enforce] PPPoE enforce: no secret found', { tenantId, account: Array.from(candidates).join(',') });
++    }
++  } catch (e) {
++    console.warn('[enforce] PPPoE enforce failed', { tenantId, account: Array.from(candidates).join(','), err: e?.message || e });
++  }
++}
+@@ async function runOnce() {
+-        const newlyExpired = await Customer.find({
+-          tenantId,
+-          expiryDate: { $lt: now },
+-          status: { $nin: ['inactive', 'expired'] },
+-        })
+-          .select('tenantId accountNumber connectionType staticConfig')
+-          .lean()
+-          .catch(() => []);
++        const newlyExpired = await Customer.find({
++          tenantId,
++          expiryDate: { $lt: now },
++          status: { $nin: ['inactive', 'expired'] },
++        })
++          // select accountAliases so enforcePppoe can consider aliases
++          .select('tenantId accountNumber accountAliases connectionType staticConfig')
++          .lean()
++          .catch(() => []);
+@@ async function runOnce() {
+-        let list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
+-          .select('tenantId accountNumber connectionType staticConfig')
+-          .lean()
+-          .catch(() => []);
++        let list = await Customer.find({ tenantId, status: { $in: ['inactive', 'expired'] } })
++          // select accountAliases so enforcePppoe can consider aliases
++          .select('tenantId accountNumber accountAliases connectionType staticConfig')
++          .lean()
++          .catch(() => []);
+*** End Patch
+*** Update File: server/routes/mpesaC2B.js
+@@ router.post('/validation', async (req, res) => {
+-        let customer = null;
+-        if (config.ispId) {
+-          customer = await Customer.findOne({
+-            tenantId: config.ispId,
+-            accountNumber: accountRef,
+-          }).lean();
+-        }
+-        if (!customer) {
+-          customer = await Customer.findOne({ accountNumber: accountRef }).lean();
+-        }
++        let customer = null;
++        // Build query to search account number and aliases
++        const q = { $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] };
++        if (config.ispId) q.tenantId = config.ispId;
++        customer = await Customer.findOne(q).lean();
++        // If not found under tenant, try cross-tenant search
++        if (!customer) {
++          customer = await Customer.findOne({ $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] }).lean();
++        }
+@@ router.post('/validation', async (req, res) => {
+-        if (!customer) {
+-          console.warn('[mpesa:c2b:validation] rejected - account not found', {
+-            ...context,
+-            tenantId: config.ispId ? String(config.ispId) : null,
+-          });
+-          return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
+-        }
++        if (!customer) {
++          console.warn('[mpesa:c2b:validation] rejected - account not found', {
++            ...context,
++            tenantId: config.ispId ? String(config.ispId) : null,
++          });
++          return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
++        }
+*** End Patch
+*** Update File: server/routes/mpesaC2B.js
+@@ router.post('/confirmation', async (req, res) => {
+-        let customer = null;
+-        if (config.ispId) {
+-          customer = await Customer.findOne({
+-            tenantId: config.ispId,
+-            accountNumber: accountRef,
+-          });
+-        }
+-        if (!customer) {
+-          customer = await Customer.findOne({ accountNumber: accountRef });
+-        }
++        let customer = null;
++        // Build query to search account number and aliases
++        const q2 = { $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] };
++        if (config.ispId) q2.tenantId = config.ispId;
++        customer = await Customer.findOne(q2);
++        // If not found under tenant, try cross-tenant search
++        if (!customer) {
++          customer = await Customer.findOne({ $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] });
++        }
+*** End Patch
