@@ -41,4 +41,14 @@ function deriveAccountCode(source) {
   return tokens.join('').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MAX_PREFIX_LEN + MAX_SUFFIX_LEN) || 'CUST';
 }
 
-module.exports = { deriveAccountCode };
+// Derive a full account code from address using full address tokens (for tenants with no prefix)
+// This function concatenates all alphanumeric tokens from the source string in uppercase, preserving their full contents.
+// No abbreviation is used here, so that account numbers reflect the full address name segments.
+function deriveFullAddressCode(source) {
+  const tokens = tokenize(source);
+  if (!tokens.length) return 'CUST';
+  // Join tokens and remove non-alphanumeric characters. Upper-case for consistency.
+  return tokens.join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+module.exports = { deriveAccountCode, deriveFullAddressCode };

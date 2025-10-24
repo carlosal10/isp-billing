@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const Customer = require('../models/customers');
 const Tenant = require('../models/Tenant');
 const Plan = require('../models/plan');
-const { deriveAccountCode } = require('../utils/accountNumber');
+const { deriveAccountCode, deriveFullAddressCode } = require('../utils/accountNumber');
 
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const {
@@ -181,9 +181,12 @@ router.post('/', async (req, res) => {
     let accountNumber = '';
     try {
       const tenant = await Tenant.findById(req.tenantId).lean();
-      const prefix = (tenant?.accountPrefix || '').trim();
-      const baseCode = deriveAccountCode(address || name || phone || 'CUST');
-      let candidate = (prefix ? prefix : '') + baseCode;
+  const prefix = (tenant?.accountPrefix || '').trim();
+  const baseSource = address || name || phone || 'CUST';
+  // If a prefix is configured, use the existing abbreviation logic (deriveAccountCode).
+  // Otherwise, derive the code from the full address tokens to reflect the full address name segments.
+  const baseCode = prefix ? deriveAccountCode(baseSource) : deriveFullAddressCode(baseSource);
+  let candidate = (prefix ? prefix : '') + baseCode;
       // ensure uniqueness per-tenant by suffixing if needed
       let attempt = 0;
       while (attempt < 5) {

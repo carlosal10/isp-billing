@@ -1,0 +1,42 @@
+*** Begin Patch
+*** Update File: server/utils/accountNumber.js
+@@
+-module.exports = { deriveAccountCode };
++// Derive a full account code from address using full address tokens (for tenants with no prefix)
++// This function concatenates all alphanumeric tokens from the source string in uppercase, preserving their full contents.
++// No abbreviation is used here, so that account numbers reflect the full address name segments.
++function deriveFullAddressCode(source) {
++  const tokens = tokenize(source);
++  if (!tokens.length) return 'CUST';
++  // Join tokens and remove non-alphanumeric characters. Upper-case for consistency.
++  return tokens.join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
++}
++
++module.exports = { deriveAccountCode, deriveFullAddressCode };
+*** End Patch
+*** Update File: server/routes/Customer.js
+@@
+-const { deriveAccountCode } = require('../utils/accountNumber');
++const { deriveAccountCode, deriveFullAddressCode } = require('../utils/accountNumber');
+@@ router.post('/', async (req, res) => {
+-      const prefix = (tenant?.accountPrefix || '').trim();
+-      const baseCode = deriveAccountCode(address || name || phone || 'CUST');
+-      let candidate = (prefix ? prefix : '') + baseCode;
++      const prefix = (tenant?.accountPrefix || '').trim();
++      const baseSource = address || name || phone || 'CUST';
++      // If a prefix is configured, use the existing abbreviation logic (deriveAccountCode).
++      // Otherwise, derive the code from the full address tokens to reflect the full address name segments.
++      const baseCode = prefix ? deriveAccountCode(baseSource) : deriveFullAddressCode(baseSource);
++      let candidate = (prefix ? prefix : '') + baseCode;
+*** End Patch
+*** Update File: scripts/bulk-renumber-account-numbers.js
+@@
+-const { deriveAccountCode } = require(path.resolve(__dirname, '../server/utils/accountNumber'));
++const { deriveAccountCode, deriveFullAddressCode } = require(path.resolve(__dirname, '../server/utils/accountNumber'));
+@@ function generateAccountNumber({ customer, prefix, used }) {
+-  const baseSource = customer.address || customer.name || customer.phone || customer._id;
+-  const baseCode = deriveAccountCode(baseSource);
++  const baseSource = customer.address || customer.name || customer.phone || customer._id;
++  // Use full address tokens when no prefix is configured; otherwise use abbreviation logic.
++  const baseCode = prefix ? deriveAccountCode(baseSource) : deriveFullAddressCode(baseSource);
+*** End Patch

@@ -7,7 +7,7 @@ const path = require('path');
 
 const Customer = require(path.resolve(__dirname, '../server/models/customers'));
 const Tenant = require(path.resolve(__dirname, '../server/models/Tenant'));
-const { deriveAccountCode } = require(path.resolve(__dirname, '../server/utils/accountNumber'));
+const { deriveAccountCode, deriveFullAddressCode } = require(path.resolve(__dirname, '../server/utils/accountNumber'));
 
 const MAX_LEN = 16;
 const MAX_ATTEMPTS = 5;
@@ -69,7 +69,8 @@ function buildCandidate(prefix, base, attempt) {
 
 function generateAccountNumber({ customer, prefix, used }) {
   const baseSource = customer.address || customer.name || customer.phone || customer._id;
-  const baseCode = deriveAccountCode(baseSource);
+  // Use full address tokens when no prefix is configured; otherwise use abbreviation logic.
+  const baseCode = prefix ? deriveAccountCode(baseSource) : deriveFullAddressCode(baseSource);
 
   let candidate = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {

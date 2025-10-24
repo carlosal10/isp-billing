@@ -1,0 +1,26 @@
+*** Begin Patch
+*** Update File: client/src/utils/api.js
+@@
+-const readEnvBase = () => {
+-  if (typeof window !== 'undefined' && window.__API_BASE__) return window.__API_BASE__;
+-  const base = typeof process !== 'undefined' ? process.env.REACT_APP_API_BASE_URL : '';
+-  return base || '';
+-};
++// Read the API base URL from environment variables or a runtime injected global.
++// If no environment or runtime override is provided, default to the deployed API server.
++const readEnvBase = () => {
++  // Prefer a global override defined on the window object. This can be injected in public/index.html.
++  if (typeof window !== 'undefined' && window.__API_BASE__) {
++    return window.__API_BASE__;
++  }
++  // Use the environment variable (only variables prefixed with REACT_APP_ are exposed in React builds).
++  const base = typeof process !== 'undefined' ? process.env.REACT_APP_API_BASE_URL : '';
++  // If neither is set, fall back to the deployed API origin. This ensures production builds send requests to
++  // the correct API even when no base URL was defined at build time.
++  return base || 'https://electromart-server-4b6n.onrender.com';
++};
+*** End Patch
+*** Begin Patch
+*** Add File: .env
++REACT_APP_API_BASE_URL=https://electromart-server-4b6n.onrender.com
+*** End Patch
