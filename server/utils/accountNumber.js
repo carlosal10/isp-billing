@@ -47,8 +47,9 @@ function deriveAccountCode(source) {
 function deriveFullAddressCode(source) {
   const tokens = tokenize(source);
   if (!tokens.length) return 'CUST';
-  // Join tokens and remove non-alphanumeric characters. Upper-case for consistency.
-  return tokens.join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Join tokens with a hyphen (e.g. "SOMAN-A01") and allow hyphens in the final code.
+  // Upper-case for consistency.
+  return tokens.join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '');
 }
 
 module.exports = { deriveAccountCode, deriveFullAddressCode };
