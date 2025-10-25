@@ -24,6 +24,11 @@ export default function AccountSettings() {
   const [prefix, setPrefix] = useState("");
   const [prefixMsg, setPrefixMsg] = useState("");
 
+  // Tenant static IP pool
+  const [poolText, setPoolText] = useState("");
+  const [poolMsg, setPoolMsg] = useState("");
+  const [savingPool, setSavingPool] = useState(false);
+
   async function saveProfile(e) {
     e.preventDefault();
     setMsgEmail("");
@@ -65,6 +70,8 @@ export default function AccountSettings() {
         const { data } = await api.get("/tenant/me");
         setSubdomain(data?.subdomain || "");
         setPrefix(data?.accountPrefix || "");
+        const list = Array.isArray(data?.staticIpPool) ? data.staticIpPool : [];
+        setPoolText(list.join("\n"));
         setSubMsg("");
       } catch (e) {
         setSubMsg(e?.message || "Failed to load tenant");
@@ -104,6 +111,40 @@ export default function AccountSettings() {
         <button type="submit" disabled={savingSub}>{savingSub ? 'Saving…' : 'Save subdomain'}</button>
         {subMsg && (
           <div className="helper-text" style={{ color: subMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{subMsg}</div>
+        )}
+      </form>
+
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        setPoolMsg("");
+        setSavingPool(true);
+        try {
+          const payload = { pool: poolText };
+          const { data } = await api.put('/tenant/static/ip-pool', payload);
+          const saved = Array.isArray(data?.staticIpPool) ? data.staticIpPool : [];
+          setPoolText(saved.join('\n'));
+          setPoolMsg(`Saved ${saved.length} IPv4 addresses`);
+        } catch (e) {
+          setPoolMsg(e?.message || 'Failed to save static IP pool');
+        } finally {
+          setSavingPool(false);
+        }
+      }} className="space-y-3" aria-label="Static IP Pool">
+        <h3 style={{ margin: 0 }}>Static IP Pool</h3>
+        <p className="helper-text">
+          Provide a list of IPv4 addresses (one per line). When creating a static customer and leaving the IP empty,
+          the system auto-assigns the first unused IP from this pool.
+        </p>
+        <textarea
+          value={poolText}
+          onChange={(e) => setPoolText(e.target.value)}
+          placeholder={"e.g.\n192.168.10.10\n192.168.10.11\n192.168.10.12"}
+          rows={8}
+          style={{ width: '100%', fontFamily: 'monospace' }}
+        />
+        <button type="submit" disabled={savingPool}>{savingPool ? 'Saving…' : 'Save pool'}</button>
+        {poolMsg && (
+          <div className="helper-text" style={{ color: poolMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{poolMsg}</div>
         )}
       </form>
 

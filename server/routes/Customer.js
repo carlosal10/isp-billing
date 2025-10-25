@@ -7,6 +7,9 @@ const Customer = require('../models/customers');
 const Tenant = require('../models/Tenant');
 const Plan = require('../models/plan');
 const { deriveAccountCode, deriveFullAddressCode } = require('../utils/accountNumber');
+const { allocateIp, releaseIp, isValidIPv4, allocateFromPool, isIpInPool } = require('../utils/staticIpPool');
+const { applyStaticFirewall } = require('../utils/staticSecurity');
+const AuditLog = require('../models/AuditLog');
 
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const {
@@ -167,12 +170,30 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ message: 'PPPoE profile is required for PPPoE connections' });
       }
     } else if (connectionType === 'static') {
-      if (!staticConfig?.ip) {
-        return res.status(400).json({ message: 'Static IP is required for static connections' });
+      // Derive/allocate static IP
+      let ipVal = req.body.staticConfig?.ip ? String(req.body.staticConfig.ip).trim() : '';
+      if (!ipVal) {
+        ipVal = await allocateFromPool(req.tenantId);
+        if (!ipVal) {
+          return res.status(400).json({ message: 'No available static IP in tenant pool' });
+        }
+        req.body.staticConfig = req.body.staticConfig || {};
+        req.body.staticConfig.ip = ipVal;
       }
-      // Enforce unique static IP per tenant
-      const ipExists = await Customer.findOne({ tenantId: req.tenantId, 'staticConfig.ip': staticConfig.ip }).lean();
-      if (ipExists) return res.status(400).json({ message: 'Static IP already assigned to another customer' });
+      // Validate IPv4 only
+      if (!isValidIPv4(ipVal)) {
+        return res.status(400).json({ message: 'Invalid static IP address' });
+      }
+      // Enforce membership within pool if pool is configured
+      const inPool = await isIpInPool(req.tenantId, ipVal);
+      if (!inPool) {
+        return res.status(400).json({ message: 'static ip not within tenant pool' });
+      }
+      // Enforce global uniqueness across all tenants
+      const existingCustomerWithStaticIp = await Customer.findOne({ 'staticConfig.ip': ipVal });
+      if (existingCustomerWithStaticIp) {
+        return res.status(400).json({ message: 'Static IP already used by another customer' });
+      }
     } else {
       return res.status(400).json({ message: 'Invalid connection type' });
     }
@@ -260,6 +281,33 @@ router.post('/', async (req, res) => {
     } catch (e) {
       console.warn('Queue apply failed:', e?.message || e);
     }
+    // If a static IP was assigned, record it in the audit log and apply firewall rules
+    if (connectionType === 'static' && saved.staticConfig?.ip) {
+      try {
+        await AuditLog.create({
+          userId: req.auth?.id || null,
+          role: req.auth?.role || null,
+          method: 'ASSIGN_STATIC_IP',
+          path: req.originalUrl,
+          statusCode: 201,
+          ip: saved.staticConfig.ip,
+          userAgent: req.headers['user-agent'],
+          payload: {
+            action: 'assign',
+            staticIp: saved.staticConfig.ip,
+            customerId: saved._id.toString()
+          }
+        });
+      } catch (err) {
+        // auditing failures should not block customer creation
+      }
+      try {
+        // Apply a firewall rule for the static customer. A serverId is optional.
+        await applyStaticFirewall(req.tenantId, null, saved.staticConfig.ip);
+      } catch (err) {
+        // firewall application errors are logged but do not block creation
+      }
+    }
 
     // Optional: send paylink SMS on creation (best-effort)
     try {
@@ -298,7 +346,25 @@ router.put('/:id', async (req, res) => {
     const customer = await Customer.findOne({ _id: req.params.id, tenantId: req.tenantId });
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
+    // Before applying updates, release a static IP if the customer is moving away from a static connection or changing their static IP.
+    if (customer && customer.connectionType === 'static') {
+      const newConnectionType = req.body.connectionType || customer.connectionType;
+      const newIpRaw = req.body.staticConfig?.ip;
+      const newIpTrimmed = newIpRaw ? String(newIpRaw).trim() : null;
+      const changingToNonStatic = newConnectionType !== 'static';
+      const changingIp = newIpTrimmed && newIpTrimmed !== customer.staticConfig?.ip;
+      if (changingToNonStatic || changingIp) {
+        const tenantDoc = await Tenant.findById(customer.tenantId).lean();
+        if (tenantDoc) {
+          await releaseIp(tenantDoc, customer.staticConfig.ip);
+        }
+      }
+    }
+
     const originalPlanId = customer.plan ? String(customer.plan) : '';
+    // Track prior state for comparisons
+    const prevConnType = customer.connectionType;
+    const prevStaticIp = customer?.staticConfig?.ip ? String(customer.staticConfig.ip).trim() : null;
 
     // Allowlist fields
     const allowed = (({
@@ -424,19 +490,30 @@ router.put('/:id', async (req, res) => {
         return res.status(500).json({ message: 'Failed to update PPPoE secret: ' + (e?.message || e) });
       }
     } else if (allowed.connectionType === 'static') {
-      // switch to Static
-      if (!allowed.staticConfig?.ip) {
-        return res.status(400).json({ message: 'Static IP is required for static connections' });
+      // Switch to or update Static configuration with auto-allocation and validations
+      let newIp = allowed.staticConfig?.ip ? String(allowed.staticConfig.ip).trim() : '';
+      if (!newIp) {
+        newIp = await allocateFromPool(req.tenantId);
+        if (!newIp) {
+          return res.status(400).json({ message: 'No available static IP in tenant pool' });
+        }
+        if (!allowed.staticConfig) allowed.staticConfig = {};
+        allowed.staticConfig.ip = newIp;
       }
-      // prevent duplicate IP (if changed)
-      if (allowed.staticConfig.ip !== customer?.staticConfig?.ip) {
-        const exists = await Customer.findOne({
-          tenantId: req.tenantId,
-          'staticConfig.ip': allowed.staticConfig.ip,
-          _id: { $ne: customer._id },
-        }).lean();
+      if (!isValidIPv4(newIp)) {
+        return res.status(400).json({ message: 'Invalid static IP address' });
+      }
+      // Global uniqueness check if IP changes
+      if (!prevStaticIp || newIp !== prevStaticIp) {
+        const exists = await Customer.findOne({ 'staticConfig.ip': newIp, _id: { $ne: customer._id } }).lean();
         if (exists) return res.status(400).json({ message: 'Static IP already assigned to another customer' });
       }
+      // Enforce pool membership when pool configured
+      const inPool = await isIpInPool(req.tenantId, newIp);
+      if (!inPool) {
+        return res.status(400).json({ message: "Static IP is not within the tenant's pool" });
+      }
+      // Clear PPPoE config when switching to static
       customer.pppoeConfig = undefined;
       customer.staticConfig = { ...allowed.staticConfig };
     }
@@ -497,6 +574,13 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/customers/:id
 router.delete('/:id', async (req, res) => {
   try {
+    const customerToDelete = await Customer.findById(req.params.id);
+    if (customerToDelete && customerToDelete.connectionType === 'static') {
+      const tenantDoc = await Tenant.findById(customerToDelete.tenantId).lean();
+      if (tenantDoc) {
+        await releaseIp(tenantDoc, customerToDelete.staticConfig.ip);
+      }
+    }
     const customer = await Customer.findOneAndDelete({ _id: req.params.id, tenantId: req.tenantId });
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
 

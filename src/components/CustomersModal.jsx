@@ -373,20 +373,17 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               <input
                 value={staticConfig.ip}
                 onChange={(e) => setStaticConfig({ ...staticConfig, ip: e.target.value })}
-                placeholder="IP Address (or pick from list)"
-                required
+                placeholder="IP Address (leave blank to auto-assign)"
               />
               <input
                 value={staticConfig.gateway}
                 onChange={(e) => setStaticConfig({ ...staticConfig, gateway: e.target.value })}
-                placeholder="Gateway"
-                required
+                placeholder="Gateway (optional)"
               />
               <input
                 value={staticConfig.dns}
                 onChange={(e) => setStaticConfig({ ...staticConfig, dns: e.target.value })}
-                placeholder="DNS"
-                required
+                placeholder="DNS (optional)"
               />
             </div>
           )}

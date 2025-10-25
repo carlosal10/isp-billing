@@ -2,6 +2,7 @@
 const express = require('express');
 const Tenant = require('../models/Tenant');
 const { requireAuth, requireTenant } = require("../security/auth");
+const { isValidIPv4 } = require('../utils/staticIpPool');
 const router = express.Router();
 
 // GET /api/tenant/me - current tenant info from req.tenantId
@@ -14,7 +15,8 @@ router.get("/me", async (req, res) => {
       id: String(req.tenantId),
       name: t?.name || "",
       subdomain: t?.subdomain ?? null,
-      accountPrefix: t?.accountPrefix || ""
+      accountPrefix: t?.accountPrefix || "",
+      staticIpPool: Array.isArray(t?.staticIpPool) ? t.staticIpPool : []
     });
   } catch {
     return res.status(500).json({ ok:false, error:"Failed to load tenant" });
@@ -58,6 +60,51 @@ router.put('/account/prefix', async (req, res) => {
     return res.json({ ok: true, accountPrefix: t?.accountPrefix || '' });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'Failed to set account prefix' });
+  }
+});
+
+// ---- Static IP pool management ----
+// PUT /api/tenant/static/ip-pool { pool }
+// Accepts an array of IPv4 strings or a single string with IPs separated by commas/newlines/spaces.
+router.put('/static/ip-pool', async (req, res) => {
+  try {
+    let pool = req.body?.pool;
+    // Support alternate key 'text'
+    if ((pool == null || pool === '') && typeof req.body?.text === 'string') pool = req.body.text;
+
+    let items = [];
+    if (Array.isArray(pool)) {
+      items = pool;
+    } else if (typeof pool === 'string') {
+      items = pool
+        .split(/[\n,\s]+/g)
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+    } else {
+      items = [];
+    }
+
+    const out = [];
+    const seen = new Set();
+    for (const v of items) {
+      const ip = String(v || '').trim();
+      if (!ip) continue;
+      if (!isValidIPv4(ip)) continue; // only allow IPv4 in pool
+      const key = ip;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(ip);
+      if (out.length >= 2048) break; // sanity limit
+    }
+
+    const t = await Tenant.findByIdAndUpdate(
+      req.tenantId,
+      { $set: { staticIpPool: out } },
+      { new: true }
+    ).lean();
+    return res.json({ ok: true, staticIpPool: Array.isArray(t?.staticIpPool) ? t.staticIpPool : [] });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'Failed to save static IP pool' });
   }
 });
 

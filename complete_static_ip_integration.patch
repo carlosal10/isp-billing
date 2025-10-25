@@ -1,0 +1,211 @@
+*** Begin Patch
+*** Update File: server/models/Tenant.js
+@@
+         accountPrefix: { type: String, trim: true },
++
++        // Optional pool of allowable static IP addresses for this tenant. When a new
++        // static customer is created without explicitly specifying an IP,
++        // addresses will be allocated from this pool.  The system will pick
++        // the first unused entry in the list.  Each value should be a
++        // string representation of a valid IPv4 address.  If no pool is
++        // configured, manual static IPs can still be provided when
++        // creating a customer.  This field is intentionally left as an
++        // array of strings rather than a complex subdocument to keep
++        // migrations simple.
++        staticIpPool: {
++          type: [String],
++          default: [],
++          validate: {
++            validator: function (arr) {
++              return Array.isArray(arr) && arr.every((item) => typeof item === 'string');
++            },
++            message: 'staticIpPool must be an array of strings',
++          },
++        },
+*** End Patch
+
+*** Begin Patch
+*** Add File: server/utils/staticIpPool.js
++const net = require('net');
++const Tenant = require('../models/Tenant');
++const Customer = require('../models/customers');
++
++/**
++ * Check if the input is a valid IPv4 address using Node's net module.
++ * Returns true only for IPv4 addresses, not IPv6.
++ * @param {string} ip
++ */
++function isValidIPv4(ip) {
++  try {
++    return net.isIP(String(ip)) === 4;
++  } catch {
++    return false;
++  }
++}
++
++/**
++ * Allocate the next available IP from a tenant's static IP pool.
++ * This scans the pool in order and returns the first IP that is not
++ * assigned to any customer (across all tenants).  If no IP is available
++ * or the tenant has no pool configured, null is returned.
++ * @param {string|ObjectId} tenantId
++ */
++async function allocateFromPool(tenantId) {
++  const tenant = await Tenant.findById(tenantId).lean();
++  if (!tenant || !Array.isArray(tenant.staticIpPool) || tenant.staticIpPool.length === 0) {
++    return null;
++  }
++  // Gather all globally used static IPs
++  const usedIps = await Customer.distinct('staticConfig.ip', { 'staticConfig.ip': { $ne: null } });
++  const usedSet = new Set((usedIps || []).map((i) => String(i || '').trim()));
++  for (const candidate of tenant.staticIpPool) {
++    if (!candidate) continue;
++    const ip = String(candidate).trim();
++    if (!ip) continue;
++    if (!isValidIPv4(ip)) continue;
++    if (!usedSet.has(ip)) {
++      return ip;
++    }
++  }
++  return null;
++}
++
++/**
++ * Determine whether the provided IP exists in the tenant's configured pool.
++ * If no pool is defined, this will return true (meaning all IPs are allowed).
++ * @param {string|ObjectId} tenantId
++ * @param {string} ip
++ */
++async function isIpInPool(tenantId, ip) {
++  const tenant = await Tenant.findById(tenantId).lean();
++  if (!tenant || !Array.isArray(tenant.staticIpPool) || tenant.staticIpPool.length === 0) {
++    return true;
++  }
++  const norm = String(ip || '').trim();
++  return tenant.staticIpPool.some((entry) => String(entry || '').trim() === norm);
++}
++
++module.exports = {
++  isValidIPv4,
++  allocateFromPool,
++  isIpInPool,
++};
+*** End Patch
+
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@
+-const { deriveAccountCode, deriveFullAddressCode } = require('../utils/accountNumber');
+-const AuditLog = require('../models/AuditLog');
++const { deriveAccountCode, deriveFullAddressCode } = require('../utils/accountNumber');
++const AuditLog = require('../models/AuditLog');
++const { isValidIPv4, allocateFromPool, isIpInPool } = require('../utils/staticIpPool');
+@@ router.post('/', async (req, res) => {
+-        if (connectionType === 'pppoe') {
++        if (connectionType === 'pppoe') {
+@@ router.post('/', async (req, res) => {
+-        } else if (connectionType === 'static') {
+-           if (!staticConfig?.ip) {
+-             return res.status(400).json({ message: 'Static IP is required for static connections' });
+-           }
+-           // Enforce unique static IP per tenant
+-           const ipExists = await Customer.findOne({ tenantId: req.tenantId, 'staticConfig.ip': staticConfig.ip }).lean();
+-           if (ipExists) return res.status(400).json({ message: 'Static IP already assigned to another customer' });
+-         } else {
+-           return res.status(400).json({ message: 'Invalid connection type' });
+-         }
++        } else if (connectionType === 'static') {
++          // Copy to avoid mutating req.body
++          let ipVal = staticConfig?.ip ? String(staticConfig.ip).trim() : '';
++          // Allocate an IP from the pool if none was provided
++          if (!ipVal) {
++            ipVal = await allocateFromPool(req.tenantId);
++            if (!ipVal) {
++              return res.status(400).json({ message: 'No available static IP in tenant pool' });
++            }
++            staticConfig = { ...(staticConfig || {}), ip: ipVal };
++          }
++          // Validate IP format
++          if (!isValidIPv4(ipVal)) {
++            return res.status(400).json({ message: 'Invalid static IP address' });
++          }
++          // Enforce global uniqueness (across all tenants)
++          const ipExists = await Customer.findOne({ 'staticConfig.ip': ipVal }).lean();
++          if (ipExists) {
++            return res.status(400).json({ message: 'Static IP already assigned to another customer' });
++          }
++          // Require IP to be in pool if the tenant has configured one
++          const inPool = await isIpInPool(req.tenantId, ipVal);
++          if (!inPool) {
++            return res.status(400).json({ message: 'Static IP is not within the tenant\'s pool' });
++          }
++        } else {
++          return res.status(400).json({ message: 'Invalid connection type' });
++        }
+*** End Patch
+
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@ router.put('/:id', async (req, res) => {
+         const originalPlanId = customer.plan ? String(customer.plan) : '';
++
++        // Keep track of prior connection type and static IP before any modifications.
++        const prevConnType = customer.connectionType;
++        const prevStaticIp = customer?.staticConfig?.ip ? String(customer.staticConfig.ip).trim() : null;
+@@ router.put('/:id', async (req, res) => {
+-        } else if (allowed.connectionType === 'static') {
+-           // switch to Static
+-           if (!allowed.staticConfig?.ip) {
+-             return res.status(400).json({ message: 'Static IP is required for static connections' });
+-           }
+-           // prevent duplicate IP (if changed)
+-           if (allowed.staticConfig.ip !== customer?.staticConfig?.ip) {
+-             const exists = await Customer.findOne({
+-               tenantId: req.tenantId,
+-               'staticConfig.ip': allowed.staticConfig.ip,
+-               _id: { $ne: customer._id },
+-             }).lean();
+-             if (exists) return res.status(400).json({ message: 'Static IP already assigned to another customer' });
+-           }
+-           customer.pppoeConfig = undefined;
+-           customer.staticConfig = { ...allowed.staticConfig };
+-         }
++        } else if (allowed.connectionType === 'static') {
++          // Switch to or update static configuration. Auto-assign an IP if none is provided,
++          // validate format, enforce global uniqueness, and restrict to the tenant's pool.
++          let newIp = allowed.staticConfig?.ip ? String(allowed.staticConfig.ip).trim() : '';
++          if (!newIp) {
++            // Allocate from the tenant's pool
++            newIp = await allocateFromPool(req.tenantId);
++            if (!newIp) {
++              return res.status(400).json({ message: 'No available static IP in tenant pool' });
++            }
++            // Ensure allowed.staticConfig exists
++            if (!allowed.staticConfig) allowed.staticConfig = {};
++            allowed.staticConfig.ip = newIp;
++          }
++          if (!isValidIPv4(newIp)) {
++            return res.status(400).json({ message: 'Invalid static IP address' });
++          }
++          // Check against any other customers, regardless of tenant
++          if (newIp !== prevStaticIp) {
++            const exists = await Customer.findOne({
++              'staticConfig.ip': newIp,
++              _id: { $ne: customer._id },
++            }).lean();
++            if (exists) {
++              return res.status(400).json({ message: 'Static IP already assigned to another customer' });
++            }
++          }
++          // Enforce membership in the tenant's pool if defined
++          const inPool = await isIpInPool(req.tenantId, newIp);
++          if (!inPool) {
++            return res.status(400).json({ message: 'Static IP is not within the tenant\'s pool' });
++          }
++          // Remove any PPPoE configuration when switching to static
++          customer.pppoeConfig = undefined;
++          // Apply the static configuration
++          customer.staticConfig = { ...allowed.staticConfig };
++        }
+*** End Patch
+*** End Patch

@@ -8,6 +8,8 @@ const cron = require('node-cron');
 const Customer = require('../models/customers');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const { disableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
+const { releaseIp } = require('../utils/staticIpPool');
+const Tenant = require('../models/Tenant');
 
 async function enforcePppoe(tenantId, customer) {
   /**
@@ -121,6 +123,15 @@ async function runOnce() {
         totalPppoe += 1;
       } else if (c.connectionType === 'static') {
         await enforceStatic(tenantId, c);
+        // Release the static IP back to the tenant pool
+        try {
+          const tenantDoc = await Tenant.findById(c.tenantId).lean();
+          if (tenantDoc) {
+            await releaseIp(tenantDoc, c.staticConfig?.ip);
+          }
+        } catch (err) {
+          // ignore errors during IP release
+        }
         tenantStatic += 1;
         totalStatic += 1;
       }

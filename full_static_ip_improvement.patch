@@ -1,0 +1,257 @@
+*** Begin Patch
+*** Update File: server/models/Tenant.js
+@@
+   accountPrefix: { type: String },
++  // Optional pool of static IP addresses that can be automatically assigned to
++  // customers with static connections.  Each tenant can define a list of
++  // available IP addresses here.  When creating a new static customer without
++  // specifying an IP, the system will allocate the next free IP from this
++  // pool.  IP addresses should be strings (e.g. "192.168.10.10").
++  staticIpPool: { type: [String], default: [] },
+*** End Patch
+*** Begin Patch
+*** Add File: server/utils/staticIpPool.js
++import Tenant from '../models/Tenant.js';
++import Customer from '../models/Customer.js';
++import net from 'node:net';
++
++/**
++ * Allocate the next available static IP address for a tenant.
++ * The tenant document should define a `staticIpPool` array containing IP
++ * addresses that can be assigned.  This helper iterates over the pool and
++ * returns the first IP that is not currently assigned to any customer.  If
++ * the pool is exhausted, an error will be thrown.
++ *
++ * @param {Object} tenant - Tenant document
++ * @returns {Promise<string>} - An available IP address
++ */
++export async function allocateIp(tenant) {
++  if (!tenant || !Array.isArray(tenant.staticIpPool) || tenant.staticIpPool.length === 0) {
++    throw new Error('staticIpPool not configured for this tenant');
++    }
++  for (const ipAddr of tenant.staticIpPool) {
++    const trimmed = String(ipAddr).trim();
++    if (!trimmed) continue;
++    // validate pool entry
++    if (!net.isIP(trimmed)) {
++      continue;
++    }
++    // Check if any customer in any tenant currently uses this IP
++    const used = await Customer.findOne({ 'staticConfig.ip': trimmed });
++    if (!used) {
++      return trimmed;
++    }
++  }
++  throw new Error('No available static IP address in pool');
++}
++
++/**
++ * Release a static IP back into the tenant's pool.
++ * This helper does not remove the IP from the pool array – it simply
++ * acts as a placeholder for any additional actions needed when freeing
++ * addresses.  If future functionality is needed (e.g. marking IPs as
++ * available in an external system), implement it here.
++ *
++ * @param {Object} tenant - Tenant document
++ * @param {string} ipAddr - The IP address to release
++ */
++export async function releaseIp(_tenant, _ipAddr) {
++  // Currently a no-op.  The uniqueness of static IPs is enforced on
++  // allocation; once a customer is removed or updated, the IP simply
++  // becomes available again for reallocation.  If you integrate with an
++  // external IP management system, add calls here.
++  return;
++}
+*** End Patch
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@
+-import { deriveAccountCode } from '../utils/accountNumber.js';
++import { deriveAccountCode } from '../utils/accountNumber.js';
++import { allocateIp, releaseIp } from '../utils/staticIpPool.js';
++import { applyStaticFirewall } from '../utils/staticSecurity.js';
++import Tenant from '../models/Tenant.js';
++import AuditLog from '../models/AuditLog.js';
+@@
+ router.post('/create', async (req, res) => {
+@@
+   if (connectionType === 'static') {
+-    const rawIp = req.body.staticConfig?.ip;
+-    // Ensure an IP address was provided and trim whitespace
+-    const staticIp = String(rawIp || '').trim();
+-    if (!staticIp) {
+-      return res.status(400).json({ ok: false, error: 'static ip required' });
+-    }
+-    // Validate the format of the IP address (IPv4/IPv6)
+-    if (!net.isIP(staticIp)) {
+-      return res.status(400).json({ ok: false, error: 'invalid static ip address' });
+-    }
+-    // Check if the static IP has already been assigned across all tenants
+-    const existingCustomerWithStaticIp = await Customer.findOne({ 'staticConfig.ip': staticIp });
+-    if (existingCustomerWithStaticIp) {
+-      return res.status(400).json({ ok: false, error: `static ip already used by another customer` });
+-    }
++    let rawIp = req.body.staticConfig?.ip;
++    // Trim whitespace if provided
++    let staticIp = rawIp ? String(rawIp).trim() : '';
++    // If no IP provided, attempt to allocate one from the tenant's pool
++    if (!staticIp) {
++      const tenantDoc = await Tenant.findById(tenantId).lean();
++      if (!tenantDoc) {
++        return res.status(400).json({ ok: false, error: 'unable to locate tenant for static IP allocation' });
++      }
++      try {
++        staticIp = await allocateIp(tenantDoc);
++      } catch (err) {
++        return res.status(400).json({ ok: false, error: err.message });
++      }
++      // Set the allocated IP back on the request object
++      req.body.staticConfig = req.body.staticConfig || {};
++      req.body.staticConfig.ip = staticIp;
++    }
++    // Validate the format of the IP address (IPv4/IPv6)
++    if (!net.isIP(staticIp)) {
++      return res.status(400).json({ ok: false, error: 'invalid static ip address' });
++    }
++    // Ensure the provided IP is part of the tenant's pool if the pool exists
++    const tenantDocCheck = await Tenant.findById(tenantId).lean();
++    if (tenantDocCheck && Array.isArray(tenantDocCheck.staticIpPool) && tenantDocCheck.staticIpPool.length > 0 && !tenantDocCheck.staticIpPool.includes(staticIp)) {
++      return res.status(400).json({ ok: false, error: 'static ip not within tenant pool' });
++    }
++    // Check if the static IP has already been assigned across all tenants
++    const existingCustomerWithStaticIp = await Customer.findOne({ 'staticConfig.ip': staticIp });
++    if (existingCustomerWithStaticIp) {
++      return res.status(400).json({ ok: false, error: `static ip already used by another customer` });
++    }
+*** End Patch
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@ router.post('/create', async (req, res) => {
+-    await applyCustomerQueue(tenantId, newCustomer);
++    await applyCustomerQueue(tenantId, newCustomer);
++    // If a static IP was assigned, record it in the audit log and apply firewall rules
++    if (connectionType === 'static' && newCustomer.staticConfig?.ip) {
++      try {
++        await AuditLog.create({
++          userId: req.auth?.id || null,
++          role: req.auth?.role || null,
++          method: 'ASSIGN_STATIC_IP',
++          path: req.originalUrl,
++          statusCode: 201,
++          ip: newCustomer.staticConfig.ip,
++          userAgent: req.headers['user-agent'],
++          payload: {
++            action: 'assign',
++            staticIp: newCustomer.staticConfig.ip,
++            customerId: newCustomer._id.toString()
++          }
++        });
++      } catch (err) {
++        // auditing failures should not block customer creation
++      }
++      try {
++        // Apply a firewall rule for the static customer.  A serverId is optional;
++        // if your environment supports multiple routers, supply the appropriate
++        // server identifier in place of null.
++        await applyStaticFirewall(tenantId, null, newCustomer.staticConfig.ip);
++      } catch (err) {
++        // firewall application errors are logged but do not block creation
++      }
++    }
+*** End Patch
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@ router.put('/:id', async (req, res) => {
+-  // existing update logic may be here
++  // Before applying updates, release a static IP if the customer is moving away from a static connection or changing their static IP.
++  const existingCustomer = await Customer.findById(req.params.id);
++  if (existingCustomer && existingCustomer.connectionType === 'static') {
++    const newConnectionType = req.body.connectionType || existingCustomer.connectionType;
++    const newIpRaw = req.body.staticConfig?.ip;
++    const newIpTrimmed = newIpRaw ? String(newIpRaw).trim() : null;
++    const changingToNonStatic = newConnectionType !== 'static';
++    const changingIp = newIpTrimmed && newIpTrimmed !== existingCustomer.staticConfig.ip;
++    if (changingToNonStatic || changingIp) {
++      const tenantDoc = await Tenant.findById(existingCustomer.tenantId).lean();
++      if (tenantDoc) {
++        await releaseIp(tenantDoc, existingCustomer.staticConfig.ip);
++      }
++    }
++  }
+*** End Patch
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@ router.delete('/:id', async (req, res) => {
+-  // existing deletion logic
++  const customerToDelete = await Customer.findById(req.params.id);
++  if (customerToDelete && customerToDelete.connectionType === 'static') {
++    const tenantDoc = await Tenant.findById(customerToDelete.tenantId).lean();
++    if (tenantDoc) {
++      await releaseIp(tenantDoc, customerToDelete.staticConfig.ip);
++    }
++  }
+*** End Patch
+*** Begin Patch
+*** Update File: server/jobs/enforceInactiveCustomers.js
+@@
+-import { enforcePppoe, enforceStatic } from '../utils/mikrotikBandwidthManager.js';
++import { enforcePppoe, enforceStatic } from '../utils/mikrotikBandwidthManager.js';
++import { releaseIp } from '../utils/staticIpPool.js';
++import Tenant from '../models/Tenant.js';
+@@ async function enforceInactiveCustomers() {
+     for (const customer of expiredCustomers) {
+@@
+       if (customer.connectionType === 'pppoe') {
+         await enforcePppoe(customer);
+       } else if (customer.connectionType === 'static') {
+-        await enforceStatic(customer);
++        await enforceStatic(customer);
++        // Release the static IP back to the tenant pool
++        try {
++          const tenantDoc = await Tenant.findById(customer.tenantId).lean();
++          if (tenantDoc) {
++            await releaseIp(tenantDoc, customer.staticConfig.ip);
++          }
++        } catch (err) {
++          // ignore errors during IP release
++        }
+       }
+     }
+*** End Patch
+*** Begin Patch
+*** Add File: server/utils/staticSecurity.js
++import { sendCommand } from './mikrotikBandwidthManager.js';
++import { logger } from './logger.js';
++
++/**
++ * Apply a simple firewall rule for a static customer.  The rule will be
++ * inserted into the MikroTik firewall filter table to explicitly allow
++ * traffic sourced from the assigned IP.  If a server identifier is not
++ * provided, this function will still attempt to push the rule; adjust
++ * according to your router configuration.  Errors are logged but not
++ * propagated.
++ *
++ * @param {string} tenantId
++ * @param {string|null} serverId
++ * @param {string} ip
++ */
++export async function applyStaticFirewall(tenantId, serverId, ip) {
++  if (!ip) return;
++  try {
++    await sendCommand('/ip/firewall/filter/add', [
++      '=chain=forward',
++      `=src-address=${ip}`,
++      '=action=accept',
++      '=comment=Static customer'
++    ], { tenantId, serverId, timeoutMs: 10000 });
++  } catch (err) {
++    logger.error({ err, tenantId, ip }, 'Failed to apply firewall rule for static IP');
++  }
++}
+*** End Patch
+*** Begin Patch
+*** Update File: server/routes/Customer.js
+@@
+ import { deriveAccountCode } from '../utils/accountNumber.js';
++import net from 'node:net';
+*** End Patch
