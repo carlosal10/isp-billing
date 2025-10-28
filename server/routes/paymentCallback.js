@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const Payment = require('../models/Payment');
-const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
+const { applyCustomerQueue, enableCustomerQueue, enablePppoeSecret } = require('../utils/mikrotikBandwidthManager');
 
 function parseDurationToDays(v) {
   if (v == null) return NaN;
@@ -175,6 +175,17 @@ async function handleStkCallback(req, res) {
                 account: customerDoc.accountNumber || null,
                 connectionType: customerDoc.connectionType || 'unknown',
                 action: 'enable-static',
+              });
+            } else if (customerDoc.connectionType === 'pppoe') {
+              try {
+                await enablePppoeSecret(customerDoc).catch(() => {});
+              } catch (err) {}
+              await applyCustomerQueue(customerDoc, planDoc);
+              console.log('[payment-callback] pppoe reconnected + queue applied', {
+                ...paymentContext,
+                account: customerDoc.accountNumber || null,
+                connectionType: customerDoc.connectionType || 'unknown',
+                action: 'reconnect-pppoe',
               });
             } else {
               await applyCustomerQueue(customerDoc, planDoc);

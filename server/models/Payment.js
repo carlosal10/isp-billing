@@ -115,6 +115,102 @@ PaymentSchema.pre('validate', function normalizeFields() {
   if (typeof this.amount === 'number' && this.amount < 0) this.amount = 0;
 });
 
+// ---------- Reconnection hook (trigger on successful payments) ----------
+// Capture previous status before save so post-save can detect transitions.
+PaymentSchema.pre('save', async function capturePrevStatus(next) {
+  try {
+    if (!this.isNew) {
+      const prev = await mongoose.model('Payment').findById(this._id).select('status').lean();
+      this._prevStatus = prev ? prev.status : null;
+    } else {
+      this._prevStatus = null;
+    }
+  } catch (err) {
+    this._prevStatus = null;
+  }
+  return next();
+});
+
+PaymentSchema.post('save', async function postSaveTrigger(doc) {
+  try {
+    const prev = this._prevStatus || null;
+    const nowStatus = doc.status || null;
+    if (String(nowStatus) !== 'Success') return;
+    if (prev === 'Success') return; // already handled
+
+    // Perform reconnection actions: set customer active and re-enable router objects
+    const Customer = mongoose.model('Customer');
+    const Plan = mongoose.model('Plan');
+    const { enableCustomerQueue, applyCustomerQueue, enablePppoeSecret } = require('../utils/mikrotikBandwidthManager');
+    const AuditLog = (() => { try { return mongoose.model('AuditLog'); } catch(e) { return null; } })();
+
+    const customer = await Customer.findById(doc.customer);
+    if (!customer) return;
+
+    // Refresh expiry if payment carries an expiryDate
+    let updated = false;
+    if (doc.expiryDate) {
+      const current = customer.expiryDate ? new Date(customer.expiryDate) : null;
+      const incoming = new Date(doc.expiryDate);
+      if (!current || incoming > current) {
+        customer.expiryDate = incoming;
+        updated = true;
+      }
+    }
+    // Set status active
+    if (customer.status !== 'active') {
+      customer.status = 'active';
+      updated = true;
+    }
+    if (updated) {
+      await customer.save().catch(() => {});
+    }
+
+    // Fetch plan for rate limits etc
+    const plan = await Plan.findById(customer.plan).lean().catch(() => null);
+
+    // Re-enable by connection type
+    if (customer.connectionType === 'static') {
+      // enable queue and address-list changes
+      try {
+        await enableCustomerQueue(customer, plan);
+      } catch (err) {
+        console.error('Failed to enable customer queue after payment:', err);
+      }
+    } else if (customer.connectionType === 'pppoe') {
+      try {
+        // enable PPPoE secret first, then reapply queue
+        await enablePppoeSecret(customer).catch(() => {});
+        await applyCustomerQueue(customer, plan).catch(() => {});
+      } catch (err) {
+        console.error('Failed to reconnect PPPoE customer after payment:', err);
+      }
+    } else {
+      // fallback: reapply queue where applicable
+      try { await applyCustomerQueue(customer, plan).catch(() => {}); } catch (_) {}
+    }
+
+    // Audit log (best-effort)
+    if (AuditLog) {
+      try {
+        await AuditLog.create({
+          userId: null,
+          role: 'system',
+          method: 'AUTO_RECONNECT',
+          path: 'payment:postSave',
+          statusCode: 200,
+          ip: null,
+          userAgent: 'system',
+          payload: { paymentId: doc._id?.toString?.(), customerId: customer._id?.toString?.(), action: 'reconnect' }
+        });
+      } catch (_) {}
+    }
+  } catch (err) {
+    // Do not throw — this is best-effort
+    console.error('Payment post-save reconnection hook failed:', err?.message || err);
+  }
+});
+
 // ---------- Instance helpers ----------
 PaymentSchema.methods.softDelete = async function softDelete({ by, reason } = {}) {
   if (this.isDeleted) return this;

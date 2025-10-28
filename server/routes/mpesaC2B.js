@@ -6,7 +6,7 @@ const MpesaSettings = require('../models/MpesaSettings');
 const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
-const { applyCustomerQueue, enableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
+const { applyCustomerQueue, enableCustomerQueue, enablePppoeSecret } = require('../utils/mikrotikBandwidthManager');
 
 function parseDurationToDays(v) {
   if (v == null) return NaN;
@@ -280,6 +280,16 @@ router.post('/confirmation', async (req, res) => {
         console.log('[mpesa:c2b] queue re-enabled', {
           ...reconnectCtx,
           action: 'enable-static',
+        });
+      } else if (customer.connectionType === 'pppoe') {
+        // Ensure PPP secret is enabled so the user can reconnect immediately
+        try {
+          await enablePppoeSecret(customer).catch(() => {});
+        } catch (err) {}
+        await applyCustomerQueue(customer, plan);
+        console.log('[mpesa:c2b] pppoe reconnected + queue reapplied', {
+          ...reconnectCtx,
+          action: 'reconnect-pppoe',
         });
       } else {
         await applyCustomerQueue(customer, plan);
