@@ -8,7 +8,7 @@ export const API_BASE =
   process.env.REACT_APP_API_URL ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5000/api"
-    : "https://isp-billing-uq58.onrender.com/api");
+    : "https://isp-billing-server.onrender.com/api");
 
 // Enable cookie-based auth transport so the server can fall back to cookies
 // if Authorization header is briefly missing.

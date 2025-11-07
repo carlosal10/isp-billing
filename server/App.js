@@ -26,7 +26,7 @@ const { Server } = require("socket.io");
 const server = http.createServer(app);
 
 // ---- CORS origins (prod + local dev) ----
-const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://isp-billing-1-rsla.onrender.com";
+const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://isp-billing-1crk.onrender.com";
 const ALLOWED_ORIGINS = [
   CLIENT_ORIGIN,
   "http://localhost:3000",
