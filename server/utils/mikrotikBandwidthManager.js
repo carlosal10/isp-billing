@@ -7,6 +7,8 @@ const w = (k, v) => '=' + k + '=' + v;
 const DEFAULT_TIMEOUT = 8000;
 const STATIC_ALLOW = 'STATIC_ALLOW';
 const STATIC_BLOCK = 'STATIC_BLOCK';
+const RETRY_COUNT = 3;
+const RETRY_DELAY_MS = 350;
 
 const isYes = (v) => {
   const s = String(v == null ? '' : v).trim().toLowerCase();
@@ -56,33 +58,70 @@ async function ensureList(tenantId, list) {
   ).catch(() => {});
 }
 
+async function _sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+// Ensure an address entry exists in `list`. This is idempotent and will retry
+// on transient failures. If the address exists in the opposing list it will be
+// removed to keep STATIC_ALLOW/STATIC_BLOCK mutually exclusive.
 async function ensureAddressListEntry(tenantId, list, ip, comment) {
   const addr = safeIp(ip);
   if (!addr) return;
   await ensureList(tenantId, list);
-  const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
-  const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
-  if (!row) {
-    const words = [w('list', list), w('address', addr)];
-    if (comment) words.push(w('comment', comment));
-    await sendCommand('/ip/firewall/address-list/add', words, { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
-  } else if (comment && row.comment !== comment) {
-    const id = row['.id'] || row.id || row.numbers;
-    if (id) {
-      await sendCommand('/ip/firewall/address-list/set', [w('numbers', id), w('comment', comment)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+  for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
+    try {
+      const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+      if (!row) {
+        const words = [w('list', list), w('address', addr)];
+        if (comment) words.push(w('comment', comment));
+        await sendCommand('/ip/firewall/address-list/add', words, { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => { throw new Error('add-failed'); });
+      } else if (comment && row.comment !== comment) {
+        const id = row['.id'] || row.id || row.numbers;
+        if (id) {
+          await sendCommand('/ip/firewall/address-list/set', [w('numbers', id), w('comment', comment)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => { throw new Error('set-failed'); });
+        }
+      }
+
+      // Ensure the address is not present in the opposite list
+      const other = list === STATIC_ALLOW ? STATIC_BLOCK : STATIC_ALLOW;
+      await removeAddressListEntry(tenantId, other, addr).catch(() => {});
+
+      // verify presence
+      const verify = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+      if (Array.isArray(verify) && verify.length > 0) return;
+      // otherwise fallthrough to retry
+    } catch (err) {
+      // swallow and retry below
     }
+    if (attempt < RETRY_COUNT) await _sleep(RETRY_DELAY_MS);
   }
 }
 
+// Remove any address list entries for `ip` in `list`. Retries to be robust
+// against transient router failures and confirms removal.
 async function removeAddressListEntry(tenantId, list, ip) {
   const addr = safeIp(ip);
   if (!addr) return;
-  const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const id = row['.id'] || row.id || row.numbers;
-    if (id) {
-      await sendCommand('/ip/firewall/address-list/remove', [w('numbers', id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
+  for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
+    try {
+      const rows = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+      const items = Array.isArray(rows) ? rows : [];
+      for (const row of items) {
+        const id = row['.id'] || row.id || row.numbers;
+        if (id) {
+          await sendCommand('/ip/firewall/address-list/remove', [w('numbers', id)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => { throw new Error('remove-failed'); });
+        }
+      }
+
+      // verify none remain
+      const verify = await sendCommand('/ip/firewall/address-list/print', [qs('list', list), qs('address', addr)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
+      if (!Array.isArray(verify) || verify.length === 0) return;
+    } catch (err) {
+      // ignore and retry
     }
+    if (attempt < RETRY_COUNT) await _sleep(RETRY_DELAY_MS);
   }
 }
 

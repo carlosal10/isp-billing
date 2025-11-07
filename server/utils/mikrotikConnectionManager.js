@@ -132,6 +132,38 @@ async function ensureConnected(entry) {
 
     await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
     entry.client = client;
+    // Attach defensive event handlers to catch library-level errors and
+    // ensure the pool entry reflects a disconnected state so subsequent
+    // calls will attempt reconnect.
+    try {
+      if (typeof client.on === 'function') {
+        const onError = (err) => {
+          try {
+            entry.lastErr = err;
+            entry.connected = false;
+            entry.fails += 1;
+            entry.backoff = Math.min(entry.backoff * 2 || BASE_BACKOFF_MS, MAX_BACKOFF_MS);
+            // Attempt to close the client gracefully
+            if (typeof client.close === 'function') client.close().catch(() => {});
+            console.warn(`MikroTik client error for ${entry.cfg.host}: ${String(err?.message || err)}`);
+          } catch (e) {}
+        };
+        const onClose = () => {
+          try {
+            entry.connected = false;
+            entry.client = null;
+            entry.lastErr = new Error('client-closed');
+            console.warn(`MikroTik client closed for ${entry.cfg.host}`);
+          } catch (e) {}
+        };
+        client.__mbm_on_error = onError;
+        client.__mbm_on_close = onClose;
+        client.on('error', onError);
+        client.on('close', onClose);
+      }
+    } catch (e) {
+      // ignore attach failures
+    }
     entry.connected = true;
     entry.fails = 0;
     entry.backoff = BASE_BACKOFF_MS;
@@ -300,6 +332,12 @@ async function shutdown() {
   for (const entry of pool.values()) {
     if (entry.client) {
       try {
+        try {
+          if (typeof entry.client.removeListener === 'function') {
+            if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
+            if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
+          }
+        } catch (e) {}
         closers.push(entry.client.close().catch(() => {}));
       } catch {}
     }
@@ -311,6 +349,96 @@ async function shutdown() {
 
 process.on("SIGINT", () => shutdown().finally(() => process.exit(0)));
 process.on("SIGTERM", () => shutdown().finally(() => process.exit(0)));
+
+// Global safety handlers: capture uncaught exceptions and unhandled rejections
+// coming from the underlying routeros-client library (e.g., RosException
+// UNKNOWNREPLY). We try to recover by closing affected clients and marking
+// entries disconnected. If the application experiences a flood of such
+// exceptions we exit to allow the platform (Render/Kubernetes) to restart
+// the instance.
+const recentExceptions = [];
+const EXCEPTION_WINDOW_MS = 60_000; // 1 minute
+const EXCEPTION_THRESHOLD = 20; // after this many events in the window we exit
+
+function recordAndMaybeEscalate(err) {
+  try {
+    recentExceptions.push(Date.now());
+    // drop old
+    const cutoff = Date.now() - EXCEPTION_WINDOW_MS;
+    while (recentExceptions.length && recentExceptions[0] < cutoff) recentExceptions.shift();
+    if (recentExceptions.length > EXCEPTION_THRESHOLD) {
+      console.error('Too many uncaught exceptions; escalating to process exit');
+      // try best-effort shutdown then exit
+      shutdown()
+        .catch(() => {})
+        .finally(() => process.exit(1));
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  try {
+    const msg = String(err && (err.message || err) || '');
+    console.error('[uncaughtException] ', msg);
+    // If this looks like a router RosException, attempt to recover the pool
+    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY') || (err && err.errno === 'UNKNOWNREPLY')) {
+      // Mark all pool entries disconnected and attempt to close clients
+      for (const entry of pool.values()) {
+        try {
+          entry.connected = false;
+          entry.lastErr = err;
+          if (entry.client && typeof entry.client.close === 'function') {
+            try {
+              if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
+              if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
+            } catch (e) {}
+            entry.client.close().catch(() => {});
+          }
+          entry.client = null;
+        } catch (e) {}
+      }
+      // audit and continue
+      Promise.resolve(auditLog({ kind: 'uncaught', error: String(msg), at: new Date().toISOString() })).catch(() => {});
+      recordAndMaybeEscalate(err);
+      return; // swallow and continue
+    }
+  } catch (e) {
+    // fallthrough to escalate below
+  }
+  // For other errors, escalate (let the platform restart) after logging
+  console.error('[uncaughtException] escalating', err);
+  recordAndMaybeEscalate(err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  try {
+    const msg = String(reason && (reason.message || reason) || '');
+    console.error('[unhandledRejection] ', msg);
+    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY')) {
+      // same recovery path as above
+      for (const entry of pool.values()) {
+        try {
+          entry.connected = false;
+          entry.lastErr = reason;
+          if (entry.client && typeof entry.client.close === 'function') {
+            try {
+              if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
+              if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
+            } catch (e) {}
+            entry.client.close().catch(() => {});
+          }
+          entry.client = null;
+        } catch (e) {}
+      }
+      Promise.resolve(auditLog({ kind: 'unhandledRejection', error: String(msg), at: new Date().toISOString() })).catch(() => {});
+      recordAndMaybeEscalate(reason);
+      return;
+    }
+  } catch (e) {}
+  recordAndMaybeEscalate(reason);
+});
 
 module.exports = {
   // main API
