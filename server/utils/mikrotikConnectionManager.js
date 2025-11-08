@@ -13,6 +13,8 @@ const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
 const CIRCUIT_OPEN_MS = 20_000; // after repeated failures, pause connects briefly
 const MAX_CONSECUTIVE_FAILS = 3;
+const SEND_RETRY_COUNT = 3;
+const SEND_RETRY_DELAY_MS = 500;
 
 // redact these keys in logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
@@ -229,50 +231,85 @@ async function sendCommand(path, words = [], options = {}) {
   let errorMsg = null;
   let result = null;
 
-  try {
-    const client = await ensureConnected(entry);
-    const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
+  // helper to detect auth errors from router
+  const isAuthError = (msg) => {
+    if (!msg) return false;
+    const s = String(msg).toLowerCase();
+    return s.includes('username or password') || s.includes('invalid user') || s.includes('authentication failed') || s.includes('login failure');
+  };
 
-    // routeros-client: client.write(command, paramsArray)
-    result = await withTimeout(client.write(cmd, args), timeoutMs, "Command timeout");
-    ok = true;
-    entry.lastOkAt = Date.now();
-    entry.fails = 0;
-    entry.backoff = BASE_BACKOFF_MS;
+  for (let attempt = 1; attempt <= SEND_RETRY_COUNT; attempt++) {
+    try {
+      const client = await ensureConnected(entry);
+      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
 
-    return normalizeResult(result);
-  } catch (err) {
-    ok = false;
-    errorMsg = err?.message || String(err);
-    entry.lastErr = err;
-    entry.connected = false; // ensure next call reconnects
-    entry.fails += 1;
-    entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-    throw new Error(errorMsg);
-  } finally {
-    const ms = Date.now() - startedAt;
-    // Structured audit (non-blocking)
-    Promise.resolve(
-      auditLog({
-        kind: "mikrotik.exec",
-        tenantId,
-        host: entry.cfg.host,
-        port: entry.cfg.port,
-        ok,
-        ms,
-        command: cmd,
-        wordsCount: args.length,
-        error: errorMsg ? String(errorMsg) : undefined,
-        at: new Date().toISOString(),
-      })
-    ).catch(() => {});
+      // routeros-client: client.write(command, paramsArray)
+      result = await withTimeout(client.write(cmd, args), timeoutMs, "Command timeout");
+      ok = true;
+      entry.lastOkAt = Date.now();
+      entry.fails = 0;
+      entry.backoff = BASE_BACKOFF_MS;
 
-    // Console log (redacted)
-    const logLine = ok
-      ? `🛰️ MT ok ${entry.cfg.host} ${cmd} (${ms}ms)`
-      : `❌ MT err ${entry.cfg.host} ${redact(cmd)} (${ms}ms): ${errorMsg}`;
-    console.log(logLine);
+      // Structured audit (non-blocking)
+      Promise.resolve(
+        auditLog({
+          kind: "mikrotik.exec",
+          tenantId,
+          host: entry.cfg.host,
+          port: entry.cfg.port,
+          ok: true,
+          ms: Date.now() - startedAt,
+          command: cmd,
+          wordsCount: args.length,
+          at: new Date().toISOString(),
+        })
+      ).catch(() => {});
+
+      console.log(`🛰️ MT ok ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms)`);
+      return normalizeResult(result);
+    } catch (err) {
+      errorMsg = err?.message || String(err);
+      // If auth error, mark entry failed and do not retry
+      if (isAuthError(errorMsg)) {
+        entry.lastErr = err;
+        entry.connected = false;
+        entry.fails += 1;
+        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+        // open circuit longer for auth errors
+        entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS * 6;
+        console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms): ${errorMsg}`);
+        // audit
+        Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(errorMsg), at: new Date().toISOString() })).catch(() => {});
+        throw new Error(errorMsg);
+      }
+
+      // For transient errors (timeouts, unknown replies), attempt to reset client and retry
+      try {
+        entry.lastErr = err;
+        entry.connected = false;
+        if (entry.client && typeof entry.client.close === 'function') {
+          try { entry.client.close().catch(() => {}); } catch (e) {}
+        }
+        entry.client = null;
+        entry.fails += 1;
+        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+      } catch (e) {}
+
+      const ms = Date.now() - startedAt;
+      console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${ms}ms): ${errorMsg}`);
+      // audit
+      Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(errorMsg), at: new Date().toISOString() })).catch(() => {});
+
+      if (attempt < SEND_RETRY_COUNT) {
+        await delay(SEND_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+      // exhausted retries
+      throw new Error(errorMsg);
+    }
   }
+  // should not reach here
+  throw new Error(errorMsg || 'sendCommand failed');
 }
 
 // --------- Health watchdog (per pooled client) ---------
