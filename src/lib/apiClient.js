@@ -76,7 +76,10 @@ const getIspId = () => getActiveSession()?.ispId ?? null;
  *  ================================ */
 export const api = axios.create({
   baseURL: API_BASE,
-  timeout: 20000,
+  // Increase default timeout to accommodate slow router-backed endpoints
+  // (some MikroTik calls can take >20s under load). Individual requests
+  // may still override this via config.timeout.
+  timeout: 60000,
   withCredentials: USE_COOKIES, // only true if using cookies
   headers: {
     "X-Requested-With": "XMLHttpRequest",
