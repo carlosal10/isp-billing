@@ -29,6 +29,46 @@ const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
  */
 const pool = new Map();
 
+// --- per-entry FIFO queues (serialize requests per router) ---
+const queues = new Map();
+function enqueue(entry, fn) {
+  const key = entry.key;
+  if (!queues.has(key)) queues.set(key, Promise.resolve());
+  const prev = queues.get(key);
+  const next = prev
+    .catch(() => {}) // swallow previous failure to keep queue moving
+    .then(() => fn());
+  queues.set(key, next);
+  return next;
+}
+
+// --- RAW SOCKET CAPTURE (for debugging UNKNOWNREPLY / !empty) ---
+function entryKeyFromEntry(entry) {
+  return `${entry?.cfg?.host || 'unknown'}:${entry?.cfg?.port || 8728}`;
+}
+function attachRawCapture(client, entry, timeoutMs = 3000) {
+  try {
+    const sock = client && (client._socket || client.socket || client.sock);
+    if (!sock || typeof sock.on !== 'function') return () => {};
+    const key = entryKeyFromEntry(entry);
+    const onData = (chunk) => {
+      try {
+        const hex = chunk && Buffer.isBuffer(chunk) ? chunk.toString('hex') : String(chunk).slice(0, 200);
+        const ascii = chunk && Buffer.isBuffer(chunk) ? chunk.toString('utf8').replace(/[^\x20-\x7E]+/g, '.') : '';
+        console.warn(`[raw-socket ${key}] hex(${hex.length}): ${hex.slice(0, 800)} ascii-preview: ${ascii.slice(0,200)}`);
+      } catch (e) {}
+    };
+    sock.on('data', onData);
+    const off = () => {
+      try { sock.removeListener('data', onData); } catch (e) {}
+    };
+    setTimeout(off, timeoutMs).unref();
+    return off;
+  } catch (e) {
+    return () => {};
+  }
+}
+
 // Hook functions you can wire from the app:
 let loadTenantRouterConfig = async (_tenantId, _selector) => {
   throw new Error("loadTenantRouterConfig not set");
@@ -133,7 +173,9 @@ async function ensureConnected(entry) {
     });
 
     await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
-    entry.client = client;
+  entry.client = client;
+  // attach a short-lived raw capture to help debug parser failures like UNKNOWNREPLY / !empty
+  try { entry.__rawOff?.(); entry.__rawOff = attachRawCapture(client, entry, 2500); } catch (e) {}
     // Attach defensive event handlers to catch library-level errors and
     // ensure the pool entry reflects a disconnected state so subsequent
     // calls will attempt reconnect.
@@ -186,6 +228,8 @@ async function ensureConnected(entry) {
     }
     throw new Error(`MikroTikConnectionError: ${err.message}`);
   } finally {
+    // ensure we clear the raw capture if connect failed
+    try { if (!entry.connected) { entry.__rawOff?.(); entry.__rawOff = null; } } catch (e) {}
     entry.connecting = false;
   }
 }
@@ -243,8 +287,9 @@ async function sendCommand(path, words = [], options = {}) {
       const client = await ensureConnected(entry);
       const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
 
-      // routeros-client: client.write(command, paramsArray)
-      result = await withTimeout(client.write(cmd, args), timeoutMs, "Command timeout");
+  // routeros-client: client.write(command, paramsArray)
+  // Use per-entry enqueue to serialize per-host requests (reduce parser pressure)
+  result = await withTimeout(enqueue(entry, () => client.write(cmd, args)), timeoutMs, "Command timeout");
       ok = true;
       entry.lastOkAt = Date.now();
       entry.fails = 0;
@@ -283,28 +328,36 @@ async function sendCommand(path, words = [], options = {}) {
         throw new Error(errorMsg);
       }
 
-      // For transient errors (timeouts, unknown replies), attempt to reset client and retry
-      try {
-        entry.lastErr = err;
-        entry.connected = false;
-        if (entry.client && typeof entry.client.close === 'function') {
-          try { entry.client.close().catch(() => {}); } catch (e) {}
-        }
+      // classify transient errors (parser/socket/timeout)
+      const transient = /UNKNOWNREPLY|UNKNOWN REPLY|!empty|Command timeout|ECONNRESET|EPIPE|ETIMEDOUT|socket hang up/i.test(errorMsg);
+
+      if (transient) {
+        try { if (entry.client) attachRawCapture(entry.client, entry, 3000); } catch (e) {}
+        try { entry.connected = false; if (entry.client && typeof entry.client.close === 'function') entry.client.close().catch(()=>{}); } catch(e){}
         entry.client = null;
+        entry.lastErr = err;
         entry.fails += 1;
         entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-      } catch (e) {}
+        console.error(`❌ MT transient ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms): ${errorMsg} — will retry`);
+        Promise.resolve(auditLog({ kind:'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok:false, error:String(errorMsg), transient:true, at:new Date().toISOString() })).catch(()=>{});
+        if (attempt < SEND_RETRY_COUNT) {
+          await delay(SEND_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+        if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
+        throw new Error(errorMsg);
+      }
 
+      // fallback: non-transient and non-auth => treat as failure as before
+      try { entry.lastErr = err; entry.connected = false; if (entry.client && typeof entry.client.close === 'function') entry.client.close().catch(() => {}); } catch(e){}
+      entry.client = null;
+      entry.fails += 1;
+      entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
       const ms = Date.now() - startedAt;
       console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${ms}ms): ${errorMsg}`);
-      // audit
       Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(errorMsg), at: new Date().toISOString() })).catch(() => {});
-
-      if (attempt < SEND_RETRY_COUNT) {
-        await delay(SEND_RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      // exhausted retries
+      if (attempt < SEND_RETRY_COUNT) { await delay(SEND_RETRY_DELAY_MS * attempt); continue; }
+      if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
       throw new Error(errorMsg);
     }
   }
