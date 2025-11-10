@@ -541,3 +541,41 @@ module.exports = {
   setConfigLoader,      // (tenantId) => { host,user,password,port?,tls?,timeout? }
   setAuditLogger,       // (entry) => Promise<void>
 };
+
+// --------- Admin helpers ---------
+// Reset/clear a pool entry so the manager will attempt a fresh connect next time.
+function resetPoolEntry(tenantId, host, port) {
+  try {
+    const key = k(tenantId, host, port || 8728);
+    const entry = pool.get(key);
+    if (!entry) return false;
+    // clear queued operations
+    try { queues.delete(entry.key); } catch (e) {}
+    // close raw capture
+    try { entry.__rawOff?.(); entry.__rawOff = null; } catch (e) {}
+    // remove listeners and close client
+    try {
+      if (entry.client) {
+        if (typeof entry.client.removeListener === 'function') {
+          if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
+          if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
+        }
+        if (typeof entry.client.close === 'function') entry.client.close().catch(() => {});
+      }
+    } catch (e) {}
+
+    entry.client = null;
+    entry.connected = false;
+    entry.connecting = false;
+    entry.lastErr = null;
+    entry.fails = 0;
+    entry.backoff = BASE_BACKOFF_MS;
+    entry.circuitUntil = 0;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Export admin helper
+module.exports.resetPoolEntry = resetPoolEntry;
