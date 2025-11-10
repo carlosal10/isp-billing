@@ -6,15 +6,16 @@ const { RouterOSAPI } = require("routeros-client");
 const crypto = require("node:crypto");
 
 // --------- Configurable knobs ---------
-const DEFAULT_TIMEOUT_MS = 12_000;
-const CONNECT_TIMEOUT_MS = 15_000;
-const HEALTH_INTERVAL_MS = 30_000;
-const MAX_BACKOFF_MS = 60_000;
+// conservative defaults while investigating timeouts/UNKNOWNREPLY
+const DEFAULT_TIMEOUT_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 30_000;
+const HEALTH_INTERVAL_MS = 60_000;
+const MAX_BACKOFF_MS = 120_000;
 const BASE_BACKOFF_MS = 2_000;
-const CIRCUIT_OPEN_MS = 20_000; // after repeated failures, pause connects briefly
-const MAX_CONSECUTIVE_FAILS = 3;
-const SEND_RETRY_COUNT = 3;
-const SEND_RETRY_DELAY_MS = 500;
+const CIRCUIT_OPEN_MS = 120_000; // longer pause to avoid thrashing
+const MAX_CONSECUTIVE_FAILS = 6;
+const SEND_RETRY_COUNT = 5;
+const SEND_RETRY_DELAY_MS = 750;
 
 // redact these keys in logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
@@ -172,10 +173,10 @@ async function ensureConnected(entry) {
       tls: entry.cfg.tls,
     });
 
-    await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
+  await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
   entry.client = client;
   // attach a short-lived raw capture to help debug parser failures like UNKNOWNREPLY / !empty
-  try { entry.__rawOff?.(); entry.__rawOff = attachRawCapture(client, entry, 2500); } catch (e) {}
+  try { entry.__rawOff?.(); if (process.env.MBM_RAW_CAPTURE === '1') entry.__rawOff = attachRawCapture(client, entry, 2500); } catch (e) {}
     // Attach defensive event handlers to catch library-level errors and
     // ensure the pool entry reflects a disconnected state so subsequent
     // calls will attempt reconnect.

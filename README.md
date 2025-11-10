@@ -68,3 +68,19 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+## Debugging MikroTik connection issues
+
+The server includes a debug helper that can capture a short raw socket dump from the underlying RouterOS TCP stream to help diagnose parser errors such as `UNKNOWNREPLY` or unexpected `!empty` responses.
+
+To enable the short-lived raw capture, set the environment variable `MBM_RAW_CAPTURE=1` before starting the server. Example (PowerShell):
+
+```powershell
+$env:MBM_RAW_CAPTURE = '1'
+npm start
+```
+
+Notes:
+- The capture is intentionally short-lived (a few seconds) and prints a hex preview and ASCII snippet to the server logs.
+- Only enable in staging or with controlled traffic — it will produce noisy logs and is intended for debugging only.
+- To disable, unset `MBM_RAW_CAPTURE` or set it to any value other than `1`.
