@@ -87,8 +87,38 @@ async function getHotspotActive(tenantId) {
  */
 async function getPPPoEActive(tenantId) {
   if (!tenantId) throw new Error("getPPPoEActive: missing tenantId");
-  const rows = await sendCommand("/ppp/active/print", [], { tenantId, timeoutMs: 10000 });
-  return { ok: true, users: Array.isArray(rows) ? rows : [], count: Array.isArray(rows) ? rows.length : 0 };
+  // Chunked fetch to avoid large single queries that may timeout.
+  const opts = { tenantId, timeoutMs: 10000 };
+  const bundleSize = 10;
+  const delayMs = 200;
+  const all = [];
+  let offset = 0;
+  const maxPages = 200; // safety guard
+  for (let page = 0; page < maxPages; page++) {
+    try {
+      const args = [`=limit=${bundleSize}`, `=offset=${offset}`];
+      const res = await sendCommand("/ppp/active/print", args, opts).catch((e) => { throw e; });
+      if (!Array.isArray(res) || res.length === 0) {
+        // no more rows
+        break;
+      }
+      all.push(...res);
+      if (res.length < bundleSize) break; // last page
+      offset += bundleSize;
+      // small pause to avoid hammering router
+      if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+    } catch (err) {
+      const msg = String(err && (err.message || err) || '');
+      // treat !empty or similar parser/no-data responses as end-of-data
+      if (/!empty|UNKNOWNREPLY|!done/i.test(msg)) {
+        break;
+      }
+      // For other transient errors, log and break to avoid long loops
+      console.warn('getPPPoEActive chunk error:', msg);
+      break;
+    }
+  }
+  return { ok: true, users: all, count: all.length };
 }
 
 /**
