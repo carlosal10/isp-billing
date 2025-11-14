@@ -1,3 +1,17 @@
+// routes/mikrotikAdmin.js
+// Admin/manage routes for MikroTik (whitelists, enforcement, bootstrap, static helpers)
+// Fixes: pass serverId through helper functions (avoid using `req` inside helpers),
+// ensure helper functions accept serverId where they call sendCommand.
+
+const express = require("express");
+const rateLimit = require("express-rate-limit");
+const { z } = require("zod");
+const { sendCommand } = require("../utils/mikrotikConnectionManager");
+const Membership = require("../models/Membership");
+
+const router = express.Router();
+
+// ----- small helper (copied from your other file) -----
 function pickServerId(req) {
   return (
     req.headers['x-isp-server'] ||
@@ -7,14 +21,6 @@ function pickServerId(req) {
     null
   );
 }
-// routes/mikrotikAdmin.js
-const express = require("express");
-const rateLimit = require("express-rate-limit");
-const { z } = require("zod");
-const { sendCommand } = require("../utils/mikrotikConnectionManager");
-const Membership = require("../models/Membership");
-
-const router = express.Router();
 
 // ----- Config -----
 const ADDRESS_LIST = "mgmt-allow";
@@ -25,7 +31,6 @@ const STRICT_LIST = "ALLOWED-WAN";
 // ----- RBAC (FIXED precedence) -----
 async function guardRole(req, res, next) {
   try {
-    // Prefer tenant membership role when available
     const userId = req.user?.sub;
     const tenantId = req.tenantId;
     let role = req.user?.role ?? (req.user?.isAdmin ? "admin" : null);
@@ -81,66 +86,67 @@ const qs = (k, v) => `?${k}=${v}`;
 const w = (k, v) => `=${k}=${v}`;
 const pickId = (row) => row?.[".id"] ?? row?.id ?? row?.numbers ?? null;
 
-async function findAddressListEntry(tenantId, cidr, timeoutMs) {
+async function findAddressListEntry(tenantId, cidr, timeoutMs, serverId = null) {
   const out = await sendCommand(
     "/ip/firewall/address-list/print",
     [qs("list", ADDRESS_LIST), qs("address", cidr)],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return Array.isArray(out) && out.length ? out[0] : null;
 }
 
-async function ensureAddressList(tenantId, cidr, comment, timeoutMs) {
-  const exists = await findAddressListEntry(tenantId, cidr, timeoutMs);
+// accept serverId param instead of referencing req inside helper
+async function ensureAddressList(tenantId, cidr, comment, timeoutMs, serverId = null) {
+  const exists = await findAddressListEntry(tenantId, cidr, timeoutMs, serverId);
   if (exists) return pickId(exists);
 
   const words = [w("list", ADDRESS_LIST), w("address", cidr)];
   if (comment) words.push(w("comment", comment));
-  const res = await sendCommand("/ip/firewall/address-list/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
+  const res = await sendCommand("/ip/firewall/address-list/add", words, { tenantId, timeoutMs, serverId });
   return (Array.isArray(res) && res[0] && pickId(res[0])) || true;
 }
 
-async function removeAddressList(tenantId, cidr, timeoutMs) {
-  const row = await findAddressListEntry(tenantId, cidr, timeoutMs);
+async function removeAddressList(tenantId, cidr, timeoutMs, serverId = null) {
+  const row = await findAddressListEntry(tenantId, cidr, timeoutMs, serverId);
   if (!row) return false;
   const id = pickId(row);
-  await sendCommand("/ip/firewall/address-list/remove", [w("numbers", id)], { tenantId, timeoutMs });
+  await sendCommand("/ip/firewall/address-list/remove", [w("numbers", id)], { tenantId, timeoutMs, serverId });
   return true;
 }
 
-async function findWanDropId(tenantId, timeoutMs) {
+async function findWanDropId(tenantId, timeoutMs, serverId = null) {
   let out = await sendCommand(
     "/ip/firewall/filter/print",
     [qs("chain", "input"), qs("comment", "wan-drop")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   if (!Array.isArray(out) || out.length === 0) {
     out = await sendCommand(
       "/ip/firewall/filter/print",
       [qs("chain", "input"), qs("action", "drop"), qs("in-interface-list", "WAN")],
-      { tenantId, timeoutMs }
+      { tenantId, timeoutMs, serverId }
     );
   }
   return Array.isArray(out) && out[0] ? pickId(out[0]) : null;
 }
 
-async function ensureStateRule(tenantId, timeoutMs) {
+async function ensureStateRule(tenantId, timeoutMs, serverId = null) {
   const out = await sendCommand(
     "/ip/firewall/filter/print",
     [qs("chain", "input"), qs("connection-state", "established,related"), qs("action", "accept")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   if (Array.isArray(out) && out.length) return pickId(out[0]);
   const add = await sendCommand(
     "/ip/firewall/filter/add",
     [w("chain", "input"), w("connection-state", "established,related"), w("action", "accept"), w("comment", "state-allow")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function listInputRules(tenantId, timeoutMs) {
-  const out = await sendCommand("/ip/firewall/filter/print", [qs("chain", "input")], { tenantId, timeoutMs });
+async function listInputRules(tenantId, timeoutMs, serverId = null) {
+  const out = await sendCommand("/ip/firewall/filter/print", [qs("chain", "input")], { tenantId, timeoutMs, serverId });
   return Array.isArray(out) ? out : [];
 }
 
@@ -153,13 +159,13 @@ function mgmtRuleMatches(row, portsCsv) {
   );
 }
 
-async function ensureMgmtAllowRule(tenantId, ports, timeoutMs) {
+async function ensureMgmtAllowRule(tenantId, ports, timeoutMs, serverId = null) {
   const portsCsv = ports.join(",");
-  const rules = await listInputRules(tenantId, timeoutMs);
+  const rules = await listInputRules(tenantId, timeoutMs, serverId);
   const existing = rules.find((r) => mgmtRuleMatches(r, portsCsv));
   if (existing) return pickId(existing);
 
-  const placeBefore = await findWanDropId(tenantId, timeoutMs);
+  const placeBefore = await findWanDropId(tenantId, timeoutMs, serverId);
 
   const words = [
     w("chain", "input"),
@@ -171,19 +177,19 @@ async function ensureMgmtAllowRule(tenantId, ports, timeoutMs) {
   ];
   if (placeBefore) words.push(w("place-before", placeBefore));
 
-  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
+  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId });
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function findMgmtAllowRules(tenantId, timeoutMs) {
-  const rules = await listInputRules(tenantId, timeoutMs);
+async function findMgmtAllowRules(tenantId, timeoutMs, serverId = null) {
+  const rules = await listInputRules(tenantId, timeoutMs, serverId);
   return rules.filter(
     (r) => r?.action === "accept" && r?.["src-address-list"] === ADDRESS_LIST && r?.protocol === "tcp"
   );
 }
 
-async function ensureServiceAllowsIp(tenantId, serviceName, cidr, timeoutMs) {
-  const rows = await sendCommand("/ip/service/print", [qs("name", serviceName)], { tenantId, timeoutMs });
+async function ensureServiceAllowsIp(tenantId, serviceName, cidr, timeoutMs, serverId = null) {
+  const rows = await sendCommand("/ip/service/print", [qs("name", serviceName)], { tenantId, timeoutMs, serverId });
   if (!Array.isArray(rows) || rows.length === 0) return;
   const row = rows[0];
   const id = pickId(row);
@@ -191,7 +197,7 @@ async function ensureServiceAllowsIp(tenantId, serviceName, cidr, timeoutMs) {
   const parts = current ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
   if (parts.includes(cidr)) return id;
   const next = parts.length ? `${current},${cidr}` : cidr;
-  await sendCommand("/ip/service/set", [w("numbers", id), w("address", next)], { tenantId, timeoutMs });
+  await sendCommand("/ip/service/set", [w("numbers", id), w("address", next)], { tenantId, timeoutMs, serverId });
   return id;
 }
 
@@ -226,18 +232,19 @@ router.post("/whitelist", limiter, guardRole, async (req, res) => {
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
     const { ip, services, comment, ports, timeoutMs = 12000 } = parsed.data;
+    const serverId = pickServerId(req);
 
     const { cidr, family } = normalizeCidr(ip);
 
-    const addrId = await ensureAddressList(tenantId, cidr, comment ?? "home", timeoutMs);
-    const stateId = await ensureStateRule(tenantId, timeoutMs);
+    const addrId = await ensureAddressList(tenantId, cidr, comment ?? "home", timeoutMs, serverId);
+    const stateId = await ensureStateRule(tenantId, timeoutMs, serverId);
 
     const chosenPorts = mapServicesToPorts(services, ports);
-    const ruleId = await ensureMgmtAllowRule(tenantId, chosenPorts, timeoutMs);
+    const ruleId = await ensureMgmtAllowRule(tenantId, chosenPorts, timeoutMs, serverId);
 
     const touchedServices = [];
     for (const s of services || []) {
-      const sid = await ensureServiceAllowsIp(tenantId, s, cidr, timeoutMs).catch(() => null);
+      const sid = await ensureServiceAllowsIp(tenantId, s, cidr, timeoutMs, serverId).catch(() => null);
       if (sid) touchedServices.push({ service: s, id: sid });
     }
 
@@ -267,8 +274,9 @@ router.delete("/whitelist", limiter, guardRole, async (req, res) => {
     const parsed = DeleteBody.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
+    const serverId = pickServerId(req);
     const { cidr } = normalizeCidr(parsed.data.ip);
-    const removed = await removeAddressList(tenantId, cidr, parsed.data.timeoutMs || 12000);
+    const removed = await removeAddressList(tenantId, cidr, parsed.data.timeoutMs || 12000, serverId);
 
     return res.json({ ok: true, removed, ip: cidr });
   } catch (e) {
@@ -285,14 +293,15 @@ router.get("/status", limiter, guardRole, async (req, res) => {
     if (!tenantId) return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
 
     const timeoutMs = 8000;
-    const rules = await findMgmtAllowRules(tenantId, timeoutMs);
+    const serverId = pickServerId(req);
+    const rules = await findMgmtAllowRules(tenantId, timeoutMs, serverId);
     const ports = rules.map((r) => String(r?.["dst-port"] || "")).filter(Boolean);
 
     // address-list entries (limit to mgmt-allow)
     const entries = await sendCommand(
       "/ip/firewall/address-list/print",
       [qs("list", ADDRESS_LIST)],
-      { tenantId, timeoutMs }
+      { tenantId, timeoutMs, serverId }
     );
 
     return res.json({
@@ -311,71 +320,73 @@ router.get("/status", limiter, guardRole, async (req, res) => {
 
 module.exports = router;
 
-// ===== Strict Internet Enforcement =====
-// Only allow forwarding to out-interface-list in ALLOWED-WAN
-// - Creates/ensures interface list and members
-// - Adds/ensures masquerade NAT for ALLOWED-WAN
-// - Adds/ensures drop rule for out-interface-list=!ALLOWED-WAN (forward chain)
-// - Optionally disables DHCP client on specified interfaces
+/*
+  ===== Additional enforcement, bootstrap and static helpers follow =====
+  The functions below also accept serverId where they invoke sendCommand to
+  avoid referencing `req` from helper scope. When you call these helpers from
+  routes, pass `pickServerId(req)` as the last argument.
+*/
 
-async function ensureInterfaceList(tenantId, name, timeoutMs) {
-  const out = await sendCommand("/interface/list/print", [qs("name", name)], { tenantId, timeoutMs });
+// ===== Strict Internet Enforcement =====
+
+async function ensureInterfaceList(tenantId, name, timeoutMs, serverId = null) {
+  const out = await sendCommand("/interface/list/print", [qs("name", name)], { tenantId, timeoutMs, serverId });
   if (Array.isArray(out) && out[0]) return pickId(out[0]);
-  const add = await sendCommand("/interface/list/add", [w("name", name)], { tenantId, timeoutMs });
+  const add = await sendCommand("/interface/list/add", [w("name", name)], { tenantId, timeoutMs, serverId });
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function ensureListMember(tenantId, listName, iface, timeoutMs) {
+async function ensureListMember(tenantId, listName, iface, timeoutMs, serverId = null) {
   const rows = await sendCommand(
     "/interface/list/member/print",
     [qs("list", listName), qs("interface", iface)],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
   const add = await sendCommand(
     "/interface/list/member/add",
     [w("list", listName), w("interface", iface)],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function ensureMasqForList(tenantId, listName, timeoutMs) {
+async function ensureMasqForList(tenantId, listName, timeoutMs, serverId = null) {
   const rows = await sendCommand(
     "/ip/firewall/nat/print",
     [qs("chain", "srcnat"), qs("action", "masquerade"), qs("comment", "isp-billing-nat")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
   const add = await sendCommand(
     "/ip/firewall/nat/add",
     [w("chain", "srcnat"), w("action", "masquerade"), w("out-interface-list", listName), w("comment", "isp-billing-nat")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function ensureStrictDropRule(tenantId, listName, timeoutMs) {
+async function ensureStrictDropRule(tenantId, listName, timeoutMs, serverId = null) {
   const rows = await sendCommand(
     "/ip/firewall/filter/print",
     [qs("chain", "forward"), qs("out-interface-list", `!${listName}`), qs("comment", "isp-billing-strict")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   if (Array.isArray(rows) && rows[0]) return pickId(rows[0]);
   const add = await sendCommand(
     "/ip/firewall/filter/add",
     [w("chain", "forward"), w("out-interface-list", `!${listName}`), w("action", "drop"), w("comment", "isp-billing-strict")],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function disableDhcpClients(tenantId, interfaces, timeoutMs) {
+async function disableDhcpClients(tenantId, interfaces, timeoutMs, serverId = null) {
   for (const iface of interfaces || []) {
-    const rows = await sendCommand("/ip/dhcp-client/print", [qs("interface", iface)], { tenantId, timeoutMs });
+    const rows = await sendCommand("/ip/dhcp-client/print", [qs("interface", iface)], { tenantId, timeoutMs, serverId });
     if (Array.isArray(rows) && rows[0]) {
       const id = pickId(rows[0]);
-      await sendCommand("/ip/dhcp-client/disable", [w("numbers", id)], { tenantId, timeoutMs });
+      await sendCommand("/ip/dhcp-client/disable", [w("numbers", id)], { tenantId, timeoutMs, serverId });
     }
   }
 }
@@ -385,15 +396,16 @@ router.post("/enforce/strict-internet", limiter, guardRole, async (req, res) => 
     const tenantId = req.tenantId;
     const { allowInterfaces = [], disableDhcpOn = [] } = req.body || {};
     const timeoutMs = 12000;
+    const serverId = pickServerId(req);
     if (!Array.isArray(allowInterfaces) || allowInterfaces.length === 0) {
       return res.status(400).json({ ok: false, error: "allowInterfaces required" });
     }
 
-    await ensureInterfaceList(tenantId, STRICT_LIST, timeoutMs);
-    for (const iface of allowInterfaces) await ensureListMember(tenantId, STRICT_LIST, String(iface), timeoutMs);
-    await ensureMasqForList(tenantId, STRICT_LIST, timeoutMs);
-    await ensureStrictDropRule(tenantId, STRICT_LIST, timeoutMs);
-    await disableDhcpClients(tenantId, disableDhcpOn, timeoutMs);
+    await ensureInterfaceList(tenantId, STRICT_LIST, timeoutMs, serverId);
+    for (const iface of allowInterfaces) await ensureListMember(tenantId, STRICT_LIST, String(iface), timeoutMs, serverId);
+    await ensureMasqForList(tenantId, STRICT_LIST, timeoutMs, serverId);
+    await ensureStrictDropRule(tenantId, STRICT_LIST, timeoutMs, serverId);
+    await disableDhcpClients(tenantId, disableDhcpOn, timeoutMs, serverId);
 
     return res.json({ ok: true, list: STRICT_LIST, allowInterfaces, dhcpDisabledOn: disableDhcpOn });
   } catch (e) {
@@ -407,15 +419,16 @@ router.delete("/enforce/strict-internet", limiter, guardRole, async (req, res) =
   try {
     const tenantId = req.tenantId;
     const timeoutMs = 12000;
+    const serverId = pickServerId(req);
     // Remove drop rule
     const rows = await sendCommand(
       "/ip/firewall/filter/print",
       [qs("chain", "forward"), qs("out-interface-list", `!${STRICT_LIST}`), qs("comment", "isp-billing-strict")],
-      { tenantId, timeoutMs }
+      { tenantId, timeoutMs, serverId }
     );
     if (Array.isArray(rows) && rows[0]) {
       const id = pickId(rows[0]);
-      await sendCommand("/ip/firewall/filter/remove", [w("numbers", id)], { tenantId, timeoutMs });
+      await sendCommand("/ip/firewall/filter/remove", [w("numbers", id)], { tenantId, timeoutMs, serverId });
     }
     return res.json({ ok: true, removed: true });
   } catch (e) {
@@ -426,42 +439,39 @@ router.delete("/enforce/strict-internet", limiter, guardRole, async (req, res) =
 });
 
 // ===== Static-IP + PPPoE Bootstrap =====
-// Creates STATIC_ALLOW/STATIC_BLOCK lists, forward rules, and disables DHCP on the bridge
-// Idempotent: finds existing objects by comment and only adds missing pieces.
-
 const STATIC_ALLOW = "STATIC_ALLOW";
 const STATIC_BLOCK = "STATIC_BLOCK";
 
-async function ensureAddressListByName(tenantId, name, comment, timeoutMs) {
-  const rows = await sendCommand("/ip/firewall/address-list/print", [qs("list", name)], { tenantId, timeoutMs });
+async function ensureAddressListByName(tenantId, name, comment, timeoutMs, serverId = null) {
+  const rows = await sendCommand("/ip/firewall/address-list/print", [qs("list", name)], { tenantId, timeoutMs, serverId });
   if (Array.isArray(rows) && rows.length) return pickId(rows[0]);
   const add = await sendCommand(
     "/ip/firewall/address-list/add",
     [w("list", name), w("comment", comment || name)],
-    { tenantId, timeoutMs }
+    { tenantId, timeoutMs, serverId }
   );
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function findFilterIdByComment(tenantId, comment, timeoutMs) {
-  const rows = await sendCommand("/ip/firewall/filter/print", [qs("comment", comment)], { tenantId, timeoutMs });
+async function findFilterIdByComment(tenantId, comment, timeoutMs, serverId = null) {
+  const rows = await sendCommand("/ip/firewall/filter/print", [qs("comment", comment)], { tenantId, timeoutMs, serverId });
   return Array.isArray(rows) && rows[0] ? pickId(rows[0]) : null;
 }
 
-async function ensureFilterRule(tenantId, { chain, action, comment, matches = [] }, timeoutMs) {
-  const id = await findFilterIdByComment(tenantId, comment, timeoutMs);
+async function ensureFilterRule(tenantId, { chain, action, comment, matches = [] }, timeoutMs, serverId = null) {
+  const id = await findFilterIdByComment(tenantId, comment, timeoutMs, serverId);
   if (id) return id;
   const words = [w("chain", chain), w("action", action), w("comment", comment), ...matches];
-  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId: pickServerId(req) });
+  const add = await sendCommand("/ip/firewall/filter/add", words, { tenantId, timeoutMs, serverId });
   return (Array.isArray(add) && add[0] && pickId(add[0])) || true;
 }
 
-async function moveRule(tenantId, numbers, destination, timeoutMs) {
-  // destination can be index (0-based) or an id like *A
+async function moveRule(tenantId, numbers, destination, timeoutMs, serverId = null) {
   try {
     await sendCommand("/ip/firewall/filter/move", [w("numbers", numbers), w("destination", destination)], {
       tenantId,
       timeoutMs,
+      serverId,
     });
     return true;
   } catch {
@@ -473,12 +483,13 @@ router.post("/bootstrap/static-ip", limiter, guardRole, async (req, res) => {
   const tenantId = req.tenantId;
   const bridge = String(req.body?.bridge || "bridge1");
   const timeoutMs = 12000;
+  const serverId = pickServerId(req);
   try {
     const summary = { createdLists: [], ensuredRules: [], moved: [], dhcpDisabledOn: [] };
 
     // Lists
-    await ensureAddressListByName(tenantId, STATIC_ALLOW, "Billing: allowed static clients", timeoutMs);
-    await ensureAddressListByName(tenantId, STATIC_BLOCK, "Billing: blocked static clients", timeoutMs);
+    await ensureAddressListByName(tenantId, STATIC_ALLOW, "Billing: allowed static clients", timeoutMs, serverId);
+    await ensureAddressListByName(tenantId, STATIC_BLOCK, "Billing: blocked static clients", timeoutMs, serverId);
     summary.createdLists = [STATIC_ALLOW, STATIC_BLOCK];
 
     // Rules (comments are used as stable identifiers)
@@ -490,48 +501,52 @@ router.post("/bootstrap/static-ip", limiter, guardRole, async (req, res) => {
     const estId = await ensureFilterRule(
       tenantId,
       { chain: "forward", action: "accept", comment: EST, matches: [w("connection-state", "established,related")] },
-      timeoutMs
+      timeoutMs,
+      serverId
     );
     const allowId = await ensureFilterRule(
       tenantId,
       { chain: "forward", action: "accept", comment: ALLOW_STATIC, matches: [w("src-address-list", STATIC_ALLOW)] },
-      timeoutMs
+      timeoutMs,
+      serverId
     );
     const blockId = await ensureFilterRule(
       tenantId,
       { chain: "forward", action: "drop", comment: BLOCK_STATIC, matches: [w("src-address-list", STATIC_BLOCK)] },
-      timeoutMs
+      timeoutMs,
+      serverId
     );
     const dropUnknownId = await ensureFilterRule(
       tenantId,
       { chain: "forward", action: "drop", comment: DROP_UNKNOWN, matches: [w("in-interface", bridge)] },
-      timeoutMs
+      timeoutMs,
+      serverId
     );
     summary.ensuredRules = [String(estId), String(allowId), String(blockId), String(dropUnknownId)];
 
     // Order: EST -> Allow -> Block -> DropUnknown
-    await moveRule(tenantId, estId, 0, timeoutMs);
-    const estAgain = await findFilterIdByComment(tenantId, EST, timeoutMs);
-    const allowAgain = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs);
-    const blockAgain = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs);
-    const dropAgain = await findFilterIdByComment(tenantId, DROP_UNKNOWN, timeoutMs);
-    // Move allow after EST
-    if (estAgain && allowAgain) await moveRule(tenantId, allowAgain, estAgain, timeoutMs);
-    const allowPos = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs);
-    if (allowPos && blockAgain) await moveRule(tenantId, blockAgain, allowPos, timeoutMs);
-    const blockPos = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs);
-    if (blockPos && dropAgain) await moveRule(tenantId, dropAgain, blockPos, timeoutMs);
+    await moveRule(tenantId, estId, 0, timeoutMs, serverId);
+    const estAgain = await findFilterIdByComment(tenantId, EST, timeoutMs, serverId);
+    const allowAgain = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs, serverId);
+    const blockAgain = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs, serverId);
+    const dropAgain = await findFilterIdByComment(tenantId, DROP_UNKNOWN, timeoutMs, serverId);
+    if (estAgain && allowAgain) await moveRule(tenantId, allowAgain, estAgain, timeoutMs, serverId);
+    const allowPos = await findFilterIdByComment(tenantId, ALLOW_STATIC, timeoutMs, serverId);
+    if (allowPos && blockAgain) await moveRule(tenantId, blockAgain, allowPos, timeoutMs, serverId);
+    const blockPos = await findFilterIdByComment(tenantId, BLOCK_STATIC, timeoutMs, serverId);
+    if (blockPos && dropAgain) await moveRule(tenantId, dropAgain, blockPos, timeoutMs, serverId);
 
     // Disable DHCP servers bound to this bridge
     const dhcp = await sendCommand("/ip/dhcp-server/print", [qs("disabled", "no"), qs("interface", bridge)], {
       tenantId,
       timeoutMs,
+      serverId,
     });
     if (Array.isArray(dhcp)) {
       for (const row of dhcp) {
         const id = pickId(row);
         if (!id) continue;
-        await sendCommand("/ip/dhcp-server/disable", [w("numbers", id)], { tenantId, timeoutMs });
+        await sendCommand("/ip/dhcp-server/disable", [w("numbers", id)], { tenantId, timeoutMs, serverId });
         summary.dhcpDisabledOn.push({ id, name: row.name, interface: row.interface });
       }
     }
@@ -548,12 +563,13 @@ router.post("/bootstrap/static-ip", limiter, guardRole, async (req, res) => {
 router.post("/static/allow", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     const add = await sendCommand(
       "/ip/firewall/address-list/add",
       [w("list", STATIC_ALLOW), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
-      { tenantId, timeoutMs: 8000 }
+      { tenantId, timeoutMs: 8000, serverId }
     );
     return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
   } catch (e) {
@@ -566,12 +582,13 @@ router.post("/static/allow", limiter, guardRole, async (req, res) => {
 router.post("/static/block", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     const add = await sendCommand(
       "/ip/firewall/address-list/add",
       [w("list", STATIC_BLOCK), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
-      { tenantId, timeoutMs: 8000 }
+      { tenantId, timeoutMs: 8000, serverId }
     );
     return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
   } catch (e) {
@@ -584,25 +601,26 @@ router.post("/static/block", limiter, guardRole, async (req, res) => {
 router.post("/static/renew", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const serverId = pickServerId(req);
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     // remove from block
     const blocked = await sendCommand(
       "/ip/firewall/address-list/print",
       [qs("list", STATIC_BLOCK), qs("address", String(address))],
-      { tenantId, timeoutMs: 8000 }
+      { tenantId, timeoutMs: 8000, serverId }
     );
     if (Array.isArray(blocked)) {
       for (const r of blocked) {
         const id = pickId(r);
-        if (id) await sendCommand("/ip/firewall/address-list/remove", [w("numbers", id)], { tenantId, timeoutMs: 8000 });
+        if (id) await sendCommand("/ip/firewall/address-list/remove", [w("numbers", id)], { tenantId, timeoutMs: 8000, serverId });
       }
     }
     // add back to allow
     const add = await sendCommand(
       "/ip/firewall/address-list/add",
       [w("list", STATIC_ALLOW), w("address", String(address)), comment ? w("comment", String(comment)) : null].filter(Boolean),
-      { tenantId, timeoutMs: 8000 }
+      { tenantId, timeoutMs: 8000, serverId }
     );
     return res.json({ ok: true, id: pickId(Array.isArray(add) ? add[0] : {}) });
   } catch (e) {
@@ -611,4 +629,3 @@ router.post("/static/renew", limiter, guardRole, async (req, res) => {
     return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
   }
 });
-

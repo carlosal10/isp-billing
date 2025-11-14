@@ -1,53 +1,40 @@
 // utils/mikrotikConnectionManager.js
-// Multi-tenant, pooled MikroTik connection manager
+// Multi-tenant, pooled MikroTik connection manager (improved)
 // Requires: npm i routeros-client
 
 const { RouterOSAPI } = require("routeros-client");
+const dns = require("dns").promises;
 const crypto = require("node:crypto");
 
-// --------- Configurable knobs ---------
+// --------- Configurable knobs (tweak to taste) ---------
 const DEFAULT_TIMEOUT_MS = 12_000;
 const CONNECT_TIMEOUT_MS = 15_000;
 const HEALTH_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
-const CIRCUIT_OPEN_MS = 20_000; // after repeated failures, pause connects briefly
+const CIRCUIT_OPEN_MS = 20_000;
 const MAX_CONSECUTIVE_FAILS = 3;
 const SEND_RETRY_COUNT = 3;
 const SEND_RETRY_DELAY_MS = 500;
+// per-entry command spacing to avoid bursts (ms)
+const PER_COMMAND_GAP_MS = 150;
 
-// redact these keys in logs
+// redact keys for logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
 
-// --------- Internal state ---------
-/**
- * pool key = `${tenantId}:${host}:${port}`
- * client entry = {
- *   key, tenantId, cfg, client, connected, connecting, lastErr,
- *   fails, backoff, circuitUntil, lastOkAt
- * }
- */
+// --------- Internal state & hooks ---------
 const pool = new Map();
 
-// Hook functions you can wire from the app:
 let loadTenantRouterConfig = async (_tenantId, _selector) => {
   throw new Error("loadTenantRouterConfig not set");
 };
 let auditLog = async (_entry) => {}; // no-op by default
 
-// --------- Public API to set hooks ---------
-function setConfigLoader(fn) {
-  loadTenantRouterConfig = fn;
-}
-function setAuditLogger(fn) {
-  auditLog = fn || (() => {});
-}
+function setConfigLoader(fn) { loadTenantRouterConfig = fn; }
+function setAuditLogger(fn) { auditLog = fn || (() => {}); }
 
 // --------- Helpers ---------
-function k(tenantId, host, port) {
-  return `${tenantId}:${host}:${port || 8728}`;
-}
-
+function k(tenantId, host, port) { return `${tenantId}:${host}:${port || 8728}`; }
 function redact(str) {
   let s = String(str ?? "");
   for (const k of SECRET_KEYS) {
@@ -57,24 +44,39 @@ function redact(str) {
   }
   return s;
 }
-
-function delay(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
+function delay(ms){ return new Promise(r=>setTimeout(r, ms)); }
 function withTimeout(promise, ms, msg = "Timeout") {
   let to;
-  const t = new Promise((_, rej) => (to = setTimeout(() => rej(new Error(msg)), ms)));
-  return Promise.race([promise.finally(() => clearTimeout(to)), t]);
+  const t = new Promise((_, rej) => (to = setTimeout(()=> rej(new Error(msg)), ms)));
+  return Promise.race([promise.finally(()=> clearTimeout(to)), t]);
 }
 
-// Normalize RouterOS response into a predictable shape
-function normalizeResult(res) {
-  // routeros-client returns array of rows for print, and objects for !done etc.
+// Normalize RouterOS result (placeholder)
+function normalizeResult(res){
+  // keep as-is, but guard for weird string responses
   return res;
 }
 
-// --------- Core: get or create pooled client ---------
+// --------- DNS cache per-entry ---------
+async function resolveHostIfNeeded(entry) {
+  // if host is an IP, return it
+  const host = entry.cfg.host;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return host;
+  const now = Date.now();
+  if (entry._dns && entry._dns.ip && entry._dns.expiresAt > now) return entry._dns.ip;
+  try {
+    const r = await dns.lookup(host);
+    const ttl = entry._dns?.ttlMs || 60_000;
+    entry._dns = { ip: r.address, expiresAt: now + ttl, ttlMs: ttl };
+    return r.address;
+  } catch (err) {
+    // don't block: return original host as fallback
+    console.warn(`DNS lookup failed for ${host}: ${err.message}`);
+    return host;
+  }
+}
+
+// --------- Pool entry creation & per-entry queue ---------
 async function getClientEntry(tenantId, selector) {
   const cfg = await loadTenantRouterConfig(tenantId, selector);
   if (!cfg) throw new Error("Router config not found for tenant");
@@ -100,12 +102,19 @@ async function getClientEntry(tenantId, selector) {
       backoff: BASE_BACKOFF_MS,
       circuitUntil: 0,
       lastOkAt: 0,
+      // queue + control
+      cmdQueue: [],
+      queueRunning: false,
+      // dns cache container
+      _dns: null,
+      // schedules map for poll jobs
+      schedules: new Map(),
     });
   }
   return pool.get(key);
 }
 
-// --------- Connect with backoff/circuit breaker ---------
+// --------- Connect with backoff/circuit breaker (uses resolved IP) ---------
 async function ensureConnected(entry) {
   const now = Date.now();
   if (entry.connected && entry.client) return entry.client;
@@ -115,16 +124,17 @@ async function ensureConnected(entry) {
   }
 
   if (entry.connecting) {
-    // Wait until current attempt finishes
     await waitForConnect(entry);
     if (entry.connected && entry.client) return entry.client;
-    // fallthrough to retry
   }
 
   entry.connecting = true;
   try {
+    // resolve host first (cache-friendly)
+    const resolvedHost = await resolveHostIfNeeded(entry);
+
     const client = new RouterOSAPI({
-      host: entry.cfg.host,
+      host: resolvedHost,
       user: entry.cfg.user,
       password: entry.cfg.password,
       port: entry.cfg.port,
@@ -134,9 +144,8 @@ async function ensureConnected(entry) {
 
     await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
     entry.client = client;
-    // Attach defensive event handlers to catch library-level errors and
-    // ensure the pool entry reflects a disconnected state so subsequent
-    // calls will attempt reconnect.
+
+    // attach listeners carefully (avoid duplicate handlers)
     try {
       if (typeof client.on === 'function') {
         const onError = (err) => {
@@ -144,10 +153,9 @@ async function ensureConnected(entry) {
             entry.lastErr = err;
             entry.connected = false;
             entry.fails += 1;
-            entry.backoff = Math.min(entry.backoff * 2 || BASE_BACKOFF_MS, MAX_BACKOFF_MS);
-            // Attempt to close the client gracefully
-            if (typeof client.close === 'function') client.close().catch(() => {});
-            console.warn(`MikroTik client error for ${entry.cfg.host}: ${String(err?.message || err)}`);
+            entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
+            try { client.close().catch(()=>{}); } catch(e){}
+            console.warn(`MikroTik client error ${entry.cfg.host}: ${String(err?.message || err)}`);
           } catch (e) {}
         };
         const onClose = () => {
@@ -158,19 +166,22 @@ async function ensureConnected(entry) {
             console.warn(`MikroTik client closed for ${entry.cfg.host}`);
           } catch (e) {}
         };
+        // remove previous if present
+        if (client.__mbm_on_error) try { client.removeListener('error', client.__mbm_on_error); } catch(e){}
+        if (client.__mbm_on_close) try { client.removeListener('close', client.__mbm_on_close); } catch(e){}
         client.__mbm_on_error = onError;
         client.__mbm_on_close = onClose;
         client.on('error', onError);
         client.on('close', onClose);
       }
-    } catch (e) {
-      // ignore attach failures
-    }
+    } catch (e) { /* ignore */ }
+
     entry.connected = true;
     entry.fails = 0;
     entry.backoff = BASE_BACKOFF_MS;
     entry.lastErr = null;
-    // small ping
+
+    // small health write to confirm API healthy
     await withTimeout(client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health check timeout");
     entry.lastOkAt = Date.now();
 
@@ -180,7 +191,7 @@ async function ensureConnected(entry) {
     entry.client = null;
     entry.lastErr = err;
     entry.fails += 1;
-    entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+    entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
     if (entry.fails >= MAX_CONSECUTIVE_FAILS) {
       entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
     }
@@ -191,21 +202,122 @@ async function ensureConnected(entry) {
 }
 
 function waitForConnect(entry) {
-  // Polling wait: simple and dependency-free
   return new Promise((resolve) => {
     const t0 = Date.now();
     const tick = () => {
       if (!entry.connecting) return resolve();
-      if (Date.now() - t0 > CONNECT_TIMEOUT_MS + 1000) return resolve(); // give up waiting
+      if (Date.now() - t0 > CONNECT_TIMEOUT_MS + 1000) return resolve();
       setTimeout(tick, 50);
     };
     tick();
   });
 }
 
-// --------- Public: sendCommand(path, words, {tenantId, timeoutMs}) ---------
+// --------- Per-entry command queue processor (serialize + spacing) ---------
+async function _processEntryQueue(entry) {
+  if (entry.queueRunning) return;
+  entry.queueRunning = true;
+  while (entry.cmdQueue.length > 0) {
+    const item = entry.cmdQueue.shift();
+    const { cmd, args, options, resolve, reject } = item;
+    try {
+      // apply backoff if needed
+      if (!entry.connected && entry.fails > 0) await delay(entry.backoff);
+      const res = await _sendDirect(entry, cmd, args, options);
+      resolve(res);
+    } catch (err) {
+      reject(err);
+    }
+    // small gap to avoid bursts
+    await delay(PER_COMMAND_GAP_MS);
+  }
+  entry.queueRunning = false;
+}
+
+// Internal direct send with retries + malformed reply handling
+async function _sendDirect(entry, cmd, args = [], options = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= SEND_RETRY_COUNT; attempt++) {
+    try {
+      const client = await ensureConnected(entry);
+      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
+      const startedAt = Date.now();
+
+      // routeros-client: client.write(cmd, args)
+      const result = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");
+
+      // guard against weird string replies that some UNKNOWNREPLY implementations expose
+      // e.g. library may surface "!empty" or other stray tokens — treat as transient
+      const rawStr = typeof result === 'string' ? result : (result && result.toString ? result.toString() : "");
+      if (rawStr.includes('!empty') || /UNKNOWNREPLY|RosException/i.test(rawStr)) {
+        throw new Error('malformed_reply: ' + rawStr.slice(0, 200));
+      }
+
+      // success bookkeeping
+      entry.lastOkAt = Date.now();
+      entry.fails = 0;
+      entry.backoff = BASE_BACKOFF_MS;
+
+      // audit (non-blocking)
+      Promise.resolve(auditLog({
+        kind: "mikrotik.exec",
+        tenantId: entry.tenantId,
+        host: entry.cfg.host,
+        port: entry.cfg.port,
+        ok: true,
+        ms: Date.now() - startedAt,
+        command: String(cmd),
+        wordsCount: Array.isArray(args) ? args.length : 0,
+        at: new Date().toISOString()
+      })).catch(()=>{});
+
+      console.log(`🛰️ MT ok ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms)`);
+      return normalizeResult(result);
+    } catch (err) {
+      lastErr = err;
+      const errorMsg = String(err?.message || err);
+      // auth errors -> stop and open big circuit
+      if (/username|password|authentication|login failure|invalid user/i.test(errorMsg)) {
+        entry.lastErr = err;
+        entry.connected = false;
+        entry.fails += 1;
+        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+        entry.circuitUntil = Date.now() + (CIRCUIT_OPEN_MS * 6);
+        console.error(`❌ MT auth err ${entry.cfg.host} ${cmd}: ${errorMsg}`);
+        await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId: entry.tenantId, host: entry.cfg.host, command: cmd, ok: false, error: errorMsg, at: new Date().toISOString() })).catch(()=>{});
+        throw err;
+      }
+
+      // transients: attempt to reset client and retry
+      try {
+        entry.lastErr = err;
+        entry.connected = false;
+        if (entry.client && typeof entry.client.close === 'function') {
+          try { entry.client.close().catch(()=>{}); } catch(e){}
+        }
+        entry.client = null;
+        entry.fails += 1;
+        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+      } catch (e) {}
+
+      const ms = errorMsg.includes('Timeout') ? 'timeout' : 'err';
+      console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${ms}): ${errorMsg}`);
+      await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId: entry.tenantId, host: entry.cfg.host, command: cmd, ok: false, error: errorMsg, at: new Date().toISOString() })).catch(()=>{});
+
+      if (attempt < SEND_RETRY_COUNT) {
+        await delay(SEND_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+      // out of retries
+      throw err;
+    }
+  }
+  throw lastErr || new Error('send failed');
+}
+
+// --------- Public: sendCommand (queues per-entry) ---------
 async function sendCommand(path, words = [], options = {}) {
-  const tenantId = options.tenantId || options.ispId; // support either naming
+  const tenantId = options.tenantId || options.ispId;
   if (!tenantId) throw new Error("Missing tenantId for RouterOS command");
 
   const selector = {
@@ -217,133 +329,85 @@ async function sendCommand(path, words = [], options = {}) {
 
   const entry = await getClientEntry(tenantId, selector);
 
-  // Exponential backoff window if previously failing
-  if (!entry.connected && entry.fails > 0) {
-    await delay(entry.backoff);
-  }
-
-  const cmdId = crypto.randomUUID();
+  // command normalized
   const cmd = String(path || "").trim();
   const args = Array.isArray(words) ? words : [];
 
-  const startedAt = Date.now();
-  let ok = false;
-  let errorMsg = null;
-  let result = null;
+  // if circuit is open, fail fast
+  if (entry.circuitUntil > Date.now()) {
+    const e = new Error(`Circuit open until ${new Date(entry.circuitUntil).toISOString()}`);
+    await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(e.message), at: new Date().toISOString() })).catch(()=>{});
+    throw e;
+  }
 
-  // helper to detect auth errors from router
-  const isAuthError = (msg) => {
-    if (!msg) return false;
-    const s = String(msg).toLowerCase();
-    return s.includes('username or password') || s.includes('invalid user') || s.includes('authentication failed') || s.includes('login failure');
-  };
+  // enqueue and return a promise that resolves when processed
+  return new Promise((resolve, reject) => {
+    entry.cmdQueue.push({ cmd, args, options, resolve, reject });
+    // kick processor
+    _processEntryQueue(entry).catch(err => {
+      // global fallback logging
+      console.error('Queue processor error', err);
+    });
+  });
+}
 
-  for (let attempt = 1; attempt <= SEND_RETRY_COUNT; attempt++) {
+// --------- Health tick (per pooled client) ---------
+async function healthTick() {
+  const now = Date.now();
+  await Promise.all(Array.from(pool.values()).map(async (entry) => {
+    if (entry.circuitUntil > now) return;
     try {
-      const client = await ensureConnected(entry);
-      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
-
-      // routeros-client: client.write(command, paramsArray)
-      result = await withTimeout(client.write(cmd, args), timeoutMs, "Command timeout");
-      ok = true;
+      if (!entry.connected || !entry.client) return;
+      const ms0 = Date.now();
+      await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
       entry.lastOkAt = Date.now();
       entry.fails = 0;
       entry.backoff = BASE_BACKOFF_MS;
-
-      // Structured audit (non-blocking)
-      Promise.resolve(
-        auditLog({
-          kind: "mikrotik.exec",
-          tenantId,
-          host: entry.cfg.host,
-          port: entry.cfg.port,
-          ok: true,
-          ms: Date.now() - startedAt,
-          command: cmd,
-          wordsCount: args.length,
-          at: new Date().toISOString(),
-        })
-      ).catch(() => {});
-
-      console.log(`🛰️ MT ok ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms)`);
-      return normalizeResult(result);
+      const dur = Date.now() - ms0;
+      if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
     } catch (err) {
-      errorMsg = err?.message || String(err);
-      // If auth error, mark entry failed and do not retry
-      if (isAuthError(errorMsg)) {
-        entry.lastErr = err;
-        entry.connected = false;
-        entry.fails += 1;
-        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-        // open circuit longer for auth errors
-        entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS * 6;
-        console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms): ${errorMsg}`);
-        // audit
-        Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(errorMsg), at: new Date().toISOString() })).catch(() => {});
-        throw new Error(errorMsg);
-      }
-
-      // For transient errors (timeouts, unknown replies), attempt to reset client and retry
-      try {
-        entry.lastErr = err;
-        entry.connected = false;
-        if (entry.client && typeof entry.client.close === 'function') {
-          try { entry.client.close().catch(() => {}); } catch (e) {}
-        }
-        entry.client = null;
-        entry.fails += 1;
-        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-      } catch (e) {}
-
-      const ms = Date.now() - startedAt;
-      console.error(`❌ MT err ${entry.cfg.host} ${cmd} (${ms}ms): ${errorMsg}`);
-      // audit
-      Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(errorMsg), at: new Date().toISOString() })).catch(() => {});
-
-      if (attempt < SEND_RETRY_COUNT) {
-        await delay(SEND_RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      // exhausted retries
-      throw new Error(errorMsg);
+      entry.connected = false;
+      entry.lastErr = err;
+      entry.fails += 1;
+      entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+      if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
+      console.warn(`⚠️ MT lost ${entry.cfg.host}: ${String(err?.message || err)}`);
     }
-  }
-  // should not reach here
-  throw new Error(errorMsg || 'sendCommand failed');
-}
-
-// --------- Health watchdog (per pooled client) ---------
-async function healthTick() {
-  const now = Date.now();
-  await Promise.all(
-    Array.from(pool.values()).map(async (entry) => {
-      // Skip if circuit is open; skip if no client yet
-      if (entry.circuitUntil > now) return;
-
-      try {
-        if (!entry.connected) return; // will reconnect on demand
-        const ms0 = Date.now();
-        const res = await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
-        entry.lastOkAt = Date.now();
-        entry.fails = 0;
-        entry.backoff = BASE_BACKOFF_MS;
-        // brief noisy print only if gets slow
-        const dur = Date.now() - ms0;
-        if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
-      } catch (err) {
-        entry.connected = false;
-        entry.lastErr = err;
-        entry.fails += 1;
-        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-        if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
-        console.warn(`⚠️ MT lost ${entry.cfg.host}: ${err.message}`);
-      }
-    })
-  );
+  }));
 }
 setInterval(healthTick, HEALTH_INTERVAL_MS).unref();
 
-// --------- Public: status snapshot for dashboards ---------
+// --------- Schedules (safe periodic polls) ---------
+function schedulePoll(tenantId, selector, name, path, words = [], intervalMs = 5000, staggerMs = 0) {
+  // creates/starts a schedule job on the entry
+  return (async () => {
+    const entry = await getClientEntry(tenantId, selector);
+    if (entry.schedules.has(name)) throw new Error(`Schedule ${name} exists`);
+    let stopped = false;
+    const run = async () => {
+      if (stopped) return;
+      try {
+        await sendCommand(path, words, { tenantId, ...selector });
+      } catch (err) {
+        // swallow; audits already recorded in sendCommand
+      } finally {
+        if (!stopped) entry.schedules.set(name, setTimeout(run, intervalMs));
+      }
+    };
+    const handle = setTimeout(run, staggerMs);
+    entry.schedules.set(name, handle);
+    return {
+      stop: () => {
+        stopped = true;
+        const h = entry.schedules.get(name);
+        if (h) clearTimeout(h);
+        entry.schedules.delete(name);
+      }
+    };
+  })();
+}
+
+// --------- Status snapshot for dashboards ---------
 function getStatus() {
   const arr = [];
   for (const entry of pool.values()) {
@@ -358,6 +422,8 @@ function getStatus() {
       backoff: entry.backoff,
       circuitUntil: entry.circuitUntil,
       lastErr: entry.lastErr ? String(entry.lastErr.message || entry.lastErr) : null,
+      queueLength: entry.cmdQueue.length,
+      schedules: Array.from(entry.schedules.keys()),
     });
   }
   return arr;
@@ -378,50 +444,38 @@ async function shutdown() {
         closers.push(entry.client.close().catch(() => {}));
       } catch {}
     }
+    // clear schedules
+    for (const h of entry.schedules.values()) try { clearTimeout(h); } catch(e){}
     entry.connected = false;
     entry.client = null;
   }
   await Promise.allSettled(closers);
 }
 
-process.on("SIGINT", () => shutdown().finally(() => process.exit(0)));
-process.on("SIGTERM", () => shutdown().finally(() => process.exit(0)));
+process.on("SIGINT", () => shutdown().finally(()=> process.exit(0)));
+process.on("SIGTERM", () => shutdown().finally(()=> process.exit(0)));
 
-// Global safety handlers: capture uncaught exceptions and unhandled rejections
-// coming from the underlying routeros-client library (e.g., RosException
-// UNKNOWNREPLY). We try to recover by closing affected clients and marking
-// entries disconnected. If the application experiences a flood of such
-// exceptions we exit to allow the platform (Render/Kubernetes) to restart
-// the instance.
+// Global safety handlers (same approach as before)
 const recentExceptions = [];
-const EXCEPTION_WINDOW_MS = 60_000; // 1 minute
-const EXCEPTION_THRESHOLD = 20; // after this many events in the window we exit
-
+const EXCEPTION_WINDOW_MS = 60_000;
+const EXCEPTION_THRESHOLD = 20;
 function recordAndMaybeEscalate(err) {
   try {
     recentExceptions.push(Date.now());
-    // drop old
     const cutoff = Date.now() - EXCEPTION_WINDOW_MS;
     while (recentExceptions.length && recentExceptions[0] < cutoff) recentExceptions.shift();
     if (recentExceptions.length > EXCEPTION_THRESHOLD) {
       console.error('Too many uncaught exceptions; escalating to process exit');
-      // try best-effort shutdown then exit
-      shutdown()
-        .catch(() => {})
-        .finally(() => process.exit(1));
+      shutdown().catch(()=>{}).finally(()=> process.exit(1));
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 process.on('uncaughtException', (err) => {
   try {
     const msg = String(err && (err.message || err) || '');
     console.error('[uncaughtException] ', msg);
-    // If this looks like a router RosException, attempt to recover the pool
-    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY') || (err && err.errno === 'UNKNOWNREPLY')) {
-      // Mark all pool entries disconnected and attempt to close clients
+    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY') || msg.includes('malformed_reply') || msg.includes('!empty')) {
       for (const entry of pool.values()) {
         try {
           entry.connected = false;
@@ -430,22 +484,17 @@ process.on('uncaughtException', (err) => {
             try {
               if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
               if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
-            } catch (e) {}
-            entry.client.close().catch(() => {});
+            } catch (e){}
+            entry.client.close().catch(()=>{});
           }
           entry.client = null;
-        } catch (e) {}
+        } catch (e){}
       }
-      // audit and continue
-      Promise.resolve(auditLog({ kind: 'uncaught', error: String(msg), at: new Date().toISOString() })).catch(() => {});
+      Promise.resolve(auditLog({ kind: 'uncaught', error: String(msg), at: new Date().toISOString() })).catch(()=>{});
       recordAndMaybeEscalate(err);
-      return; // swallow and continue
+      return;
     }
-  } catch (e) {
-    // fallthrough to escalate below
-  }
-  // For other errors, escalate (let the platform restart) after logging
-  console.error('[uncaughtException] escalating', err);
+  } catch (e) {}
   recordAndMaybeEscalate(err);
 });
 
@@ -453,8 +502,7 @@ process.on('unhandledRejection', (reason) => {
   try {
     const msg = String(reason && (reason.message || reason) || '');
     console.error('[unhandledRejection] ', msg);
-    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY')) {
-      // same recovery path as above
+    if (msg.includes('RosException') || msg.includes('UNKNOWNREPLY') || msg.includes('malformed_reply') || msg.includes('!empty')) {
       for (const entry of pool.values()) {
         try {
           entry.connected = false;
@@ -463,27 +511,25 @@ process.on('unhandledRejection', (reason) => {
             try {
               if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
               if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
-            } catch (e) {}
-            entry.client.close().catch(() => {});
+            } catch (e){}
+            entry.client.close().catch(()=>{});
           }
           entry.client = null;
-        } catch (e) {}
+        } catch (e){}
       }
-      Promise.resolve(auditLog({ kind: 'unhandledRejection', error: String(msg), at: new Date().toISOString() })).catch(() => {});
+      Promise.resolve(auditLog({ kind: 'unhandledRejection', error: String(msg), at: new Date().toISOString() })).catch(()=>{});
       recordAndMaybeEscalate(reason);
       return;
     }
-  } catch (e) {}
+  } catch (e){}
   recordAndMaybeEscalate(reason);
 });
 
 module.exports = {
-  // main API
-  sendCommand,          // (path, words[], { tenantId, timeoutMs })
+  sendCommand,
   getStatus,
   shutdown,
-
-  // hooks you must set from your app
-  setConfigLoader,      // (tenantId) => { host,user,password,port?,tls?,timeout? }
-  setAuditLogger,       // (entry) => Promise<void>
+  setConfigLoader,
+  setAuditLogger,
+  schedulePoll,
 };

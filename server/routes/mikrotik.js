@@ -63,6 +63,9 @@ function mapHotspotActiveRow(r = {}) {
   };
 }
 
+// small delay helper used to space sequential calls
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // Tenant-scoped print; never throws to the client
 function pickServerId(req) {
   return (
@@ -101,11 +104,12 @@ const limiter = rateLimit({ windowMs: 5000, max: 20, standardHeaders: true });
 router.get("/mikrotik/status", limiter, async (req, res) => {
   const tenantId = req.tenantId;
   try {
-    const [idArr, resArr, ipArr] = await Promise.all([
-      rosPrint(tenantId, "/system/identity/print", [], 10000, req),
-      rosPrint(tenantId, "/system/resource/print", [], 10000, req),
-      rosPrint(tenantId, "/ip/address/print", [], 10000, req),
-    ]);
+    // sequential: identity (fast) -> resource (moderate) -> address (heavier)
+    const idArr = await rosPrint(tenantId, "/system/identity/print", [], 10000, req);
+    await delay(50);
+    const resArr = await rosPrint(tenantId, "/system/resource/print", [], 10000, req);
+    await delay(100);
+    const ipArr = await rosPrint(tenantId, "/ip/address/print", [], 15000, req);
 
     const identity = idArr[0]?.name || "";
     const uptime = resArr[0]?.uptime || "";
@@ -119,8 +123,6 @@ router.get("/mikrotik/status", limiter, async (req, res) => {
       identity,
       routerIp,
       uptime,
-      // cpuLoad: resArr[0]?.["cpu-load"] ?? null,
-      // freeMem: resArr[0]?.["free-memory"] ?? null,
     });
   } catch (_e) {
     return res.json({ ok: true, connected: false, identity: "", routerIp: "", uptime: "" });
@@ -193,13 +195,12 @@ router.get("/mikrotik/queues/simple", limiter, async (req, res) => {
 
 // Alias (directly call handler logic by duplicating call)
 router.get("/queues/simple", limiter, async (req, res) => {
-  // Just proxy by invoking the same logic as above via rosPrint
   const tenantId = req.tenantId;
   const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
   try {
     const rows = await rosPrint(tenantId, "/queue/simple/print", [], 10000, req);
     const mapped = (Array.isArray(rows) ? rows : []).map((q) => {
-      const target = s(q?.target || q?.["target"] || "");
+      const target = s(q?.target || q?.['target'] || "");
       const ip = firstIpFromTarget(target);
       return {
         name: s(q?.name),
@@ -223,11 +224,17 @@ router.get("/mikrotik/arp", limiter, async (req, res) => {
   const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
   const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
   try {
-    const [arps, bridges, vlans] = await Promise.all([
-      rosPrint(tenantId, "/ip/arp/print", [], 10000, req),
-      lanOnly ? rosPrint(tenantId, "/interface/bridge/print", [], 10000, req) : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/vlan/print", [], 10000, req) : Promise.resolve([]),
-    ]);
+    // arp first (we need ARP data), then optional lan lists
+    const arps = await rosPrint(tenantId, "/ip/arp/print", [], 12000, req);
+    await delay(80);
+    let bridges = [];
+    let vlans = [];
+    if (lanOnly) {
+      bridges = await rosPrint(tenantId, "/interface/bridge/print", [], 8000, req);
+      await delay(40);
+      vlans = await rosPrint(tenantId, "/interface/vlan/print", [], 8000, req);
+    }
+
     const lanIf = new Set([
       ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
       ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
@@ -263,11 +270,16 @@ router.get("/arp", limiter, async (req, res) => {
   const privateOnly = String(req.query?.privateOnly || 'true').toLowerCase() !== 'false';
   const permanentOnly = String(req.query?.permanentOnly || 'true').toLowerCase() !== 'false';
   try {
-    const [arps, bridges, vlans] = await Promise.all([
-      rosPrint(tenantId, "/ip/arp/print", [], 10000, req),
-      lanOnly ? rosPrint(tenantId, "/interface/bridge/print", [], 10000, req) : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/vlan/print", [], 10000, req) : Promise.resolve([]),
-    ]);
+    const arps = await rosPrint(tenantId, "/ip/arp/print", [], 12000, req);
+    await delay(80);
+    let bridges = [];
+    let vlans = [];
+    if (lanOnly) {
+      bridges = await rosPrint(tenantId, "/interface/bridge/print", [], 8000, req);
+      await delay(40);
+      vlans = await rosPrint(tenantId, "/interface/vlan/print", [], 8000, req);
+    }
+
     const lanIf = new Set([
       ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
       ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
@@ -312,14 +324,22 @@ router.get("/mikrotik/static/candidates", limiter, async (req, res) => {
     const wantSecrets = include.includes('secrets');
     const wantArp = include.includes('arp');
 
-    const [queues, lists, secrets, arps, bridges, vlans] = await Promise.all([
-      wantQueues ? rosPrint(tenantId, "/queue/simple/print") : Promise.resolve([]),
-      wantLists ? rosPrint(tenantId, "/ip/firewall/address-list/print") : Promise.resolve([]),
-      wantSecrets ? rosPrint(tenantId, "/ppp/secret/print") : Promise.resolve([]),
-      wantArp ? rosPrint(tenantId, "/ip/arp/print") : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/bridge/print") : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/vlan/print") : Promise.resolve([]),
-    ]);
+    // Ordered/sequential calls to avoid bursts
+    const lists = wantLists ? await rosPrint(tenantId, "/ip/firewall/address-list/print", [], 15000, req) : [];
+    await delay(60);
+    const queues = wantQueues ? await rosPrint(tenantId, "/queue/simple/print", [], 15000, req) : [];
+    await delay(120);
+    const secrets = wantSecrets ? await rosPrint(tenantId, "/ppp/secret/print", [], 12000, req) : [];
+    await delay(60);
+    const arps = wantArp ? await rosPrint(tenantId, "/ip/arp/print", [], 15000, req) : [];
+    await delay(40);
+    let bridges = [], vlans = [];
+    if (lanOnly) {
+      bridges = await rosPrint(tenantId, "/interface/bridge/print", [], 8000, req);
+      await delay(20);
+      vlans = await rosPrint(tenantId, "/interface/vlan/print", [], 8000, req);
+    }
+
     const lanIf = new Set([
       ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
       ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
@@ -387,14 +407,22 @@ router.get("/static/candidates", limiter, async (req, res) => {
     const wantSecrets = include.includes('secrets');
     const wantArp = include.includes('arp');
 
-    const [queues, lists, secrets, arps, bridges, vlans] = await Promise.all([
-      wantQueues ? rosPrint(tenantId, "/queue/simple/print") : Promise.resolve([]),
-      wantLists ? rosPrint(tenantId, "/ip/firewall/address-list/print") : Promise.resolve([]),
-      wantSecrets ? rosPrint(tenantId, "/ppp/secret/print") : Promise.resolve([]),
-      wantArp ? rosPrint(tenantId, "/ip/arp/print") : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/bridge/print") : Promise.resolve([]),
-      lanOnly ? rosPrint(tenantId, "/interface/vlan/print") : Promise.resolve([]),
-    ]);
+    // Ordered/sequential calls to avoid bursts
+    const lists = wantLists ? await rosPrint(tenantId, "/ip/firewall/address-list/print", [], 15000, req) : [];
+    await delay(60);
+    const queues = wantQueues ? await rosPrint(tenantId, "/queue/simple/print", [], 15000, req) : [];
+    await delay(120);
+    const secrets = wantSecrets ? await rosPrint(tenantId, "/ppp/secret/print", [], 12000, req) : [];
+    await delay(60);
+    const arps = wantArp ? await rosPrint(tenantId, "/ip/arp/print", [], 15000, req) : [];
+    await delay(40);
+    let bridges = [], vlans = [];
+    if (lanOnly) {
+      bridges = await rosPrint(tenantId, "/interface/bridge/print", [], 8000, req);
+      await delay(20);
+      vlans = await rosPrint(tenantId, "/interface/vlan/print", [], 8000, req);
+    }
+
     const lanIf = new Set([
       ...((Array.isArray(bridges) ? bridges : []).map((b) => s(b?.name)).filter(Boolean)),
       ...((Array.isArray(vlans) ? vlans : []).map((v) => s(v?.name || v?.interface)).filter(Boolean)),
@@ -452,11 +480,12 @@ router.get("/static/candidates", limiter, async (req, res) => {
 router.get("/mikrotik/static/active", limiter, async (req, res) => {
   const tenantId = req.tenantId;
   try {
-    const [queues, lists, arps] = await Promise.all([
-      rosPrint(tenantId, "/queue/simple/print"),
-      rosPrint(tenantId, "/ip/firewall/address-list/print"),
-      rosPrint(tenantId, "/ip/arp/print"),
-    ]);
+    // lists first (light), then queues, then arp
+    const lists = await rosPrint(tenantId, "/ip/firewall/address-list/print", [], 12000, req);
+    await delay(60);
+    const queues = await rosPrint(tenantId, "/queue/simple/print", [], 15000, req);
+    await delay(120);
+    const arps = await rosPrint(tenantId, "/ip/arp/print", [], 15000, req);
 
     // Build candidates from queues (prefer /32 targets)
     const ips = new Map(); // ip -> accountName (queue name) | null
@@ -510,11 +539,12 @@ router.get("/mikrotik/static/active", limiter, async (req, res) => {
 router.get("/static/active", limiter, async (req, res) => {
   const tenantId = req.tenantId;
   try {
-    const [queues, lists, arps] = await Promise.all([
-      rosPrint(tenantId, "/queue/simple/print"),
-      rosPrint(tenantId, "/ip/firewall/address-list/print"),
-      rosPrint(tenantId, "/ip/arp/print"),
-    ]);
+    // sequential: queues -> lists -> arp (but keep reasonable spacing)
+    const queues = await rosPrint(tenantId, "/queue/simple/print", [], 15000, req);
+    await delay(60);
+    const lists = await rosPrint(tenantId, "/ip/firewall/address-list/print", [], 12000, req);
+    await delay(120);
+    const arps = await rosPrint(tenantId, "/ip/arp/print", [], 15000, req);
 
     const queueByIp = new Map();
     for (const q of Array.isArray(queues) ? queues : []) {
@@ -762,7 +792,7 @@ router.post("/static/:account/enable-queue", limiter, async (req, res) => {
           .catch(() => {});
       }
     } catch (postErr) {
-      console.warn('[MikroTik] enable queue post-processing failed:', postErr?.message || postErr);
+      console.warn('[Mikrotik] enable queue post-processing failed:', postErr?.message || postErr);
     }
 
     res.json({ ok: true, message: "Queue enabled" });
@@ -789,7 +819,7 @@ router.post("/static/:account/disable-queue", limiter, async (req, res) => {
         await disableCustomerQueue(payload).catch(() => {});
       }
     } catch (postErr) {
-      console.warn('[MikroTik] disable queue post-processing failed:', postErr?.message || postErr);
+      console.warn('[Mikrotik] disable queue post-processing failed:', postErr?.message || postErr);
     }
 
     res.json({ ok: true, message: "Queue disabled" });
@@ -801,10 +831,10 @@ router.post("/static/:account/disable-queue", limiter, async (req, res) => {
 // GET /api/mikrotik/online  (combined counts)
 router.get("/mikrotik/online", limiter, async (req, res) => {
   const tenantId = req.tenantId;
-  const [pppoe, hotspot] = await Promise.all([
-    rosPrint(tenantId, "/ppp/active/print"),
-    rosPrint(tenantId, "/ip/hotspot/active/print"),
-  ]);
+  // PPPoE (likely heavier) first, then hotspot, small pause between
+  const pppoe = await rosPrint(tenantId, "/ppp/active/print", [], 12000, req);
+  await delay(100);
+  const hotspot = await rosPrint(tenantId, "/ip/hotspot/active/print", [], 12000, req);
   res.json({
     ok: true,
     pppoe: { count: pppoe.length },
