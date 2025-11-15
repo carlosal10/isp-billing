@@ -376,6 +376,28 @@ app.use((err, req, res, next) => {
   console.error("🔥 Error:", err);
   res.status(500).json({ ok: false, error: "Internal server error" });
 });
+// -----------------------------
+// Delay scheduler import to avoid circular deps
+// -----------------------------
+function startJobs() {
+  const { scheduleJob } = require('./utils/scheduler'); // lazy require
+  const JobRun = require('./models/JobRun'); // also safe to require here if needed
+
+  scheduleJob({
+    name: 'heartbeat',
+    cronExpr: '* * * * *',
+    task: async () => {
+      // example task
+      const run = await JobRun.create({ name: 'heartbeat', startedAt: new Date(), ok: true });
+      return { created: run._id };
+    },
+  });
+
+  console.log('[scheduler] heartbeat job scheduled');
+}
+
+// start scheduler after server is ready
+startJobs();
 
 // ----------------- Start -----------------
 const PORT = process.env.PORT || 5000;
