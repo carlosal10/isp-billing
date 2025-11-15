@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "react-chartjs-2";
 import "chart.js/auto";
 import "./Dashboard.css";
@@ -16,28 +16,33 @@ import { api } from "../lib/apiClient";
    Constants
 ----------------------------------- */
 const DUE_WINDOW_DAYS = 3;
-const REFRESH_FAST_MS = 20000;
-const REFRESH_SLOW_MS = 60000;
+const REFRESH_FAST_MS = 20_000;
+const REFRESH_SLOW_MS = 60_000;
+const PAGE_SIZE = 10;
 
 /* -----------------------------------
    Small utilities
 ----------------------------------- */
-function formatDate(d) {
-  if (!d) return "-";
+const safeDate = (d) => {
+  if (!d) return null;
   const t = new Date(d);
-  return Number.isFinite(t.getTime()) ? t.toLocaleString() : "-";
+  return Number.isFinite(t.getTime()) ? t : null;
+};
+function formatDate(d) {
+  const t = safeDate(d);
+  return t ? t.toLocaleString() : "-";
 }
 function daysUntil(date) {
-  if (!date) return Infinity;
+  const d = safeDate(date);
+  if (!d) return Infinity;
   const now = Date.now();
-  const t = new Date(date).getTime();
-  return Math.ceil((t - now) / (1000 * 60 * 60 * 24));
+  return Math.ceil((d.getTime() - now) / (1000 * 60 * 60 * 24));
 }
 function daysSince(date) {
-  if (!date) return 0;
+  const d = safeDate(date);
+  if (!d) return 0;
   const now = Date.now();
-  const t = new Date(date).getTime();
-  return Math.ceil((now - t) / (1000 * 60 * 60 * 24));
+  return Math.ceil((now - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 async function retry(fn, { attempts = 2, baseDelay = 400 } = {}) {
   let lastErr;
@@ -72,14 +77,17 @@ function accountKeys(value) {
 }
 
 function usePageVisibility() {
-  const [visible, setVisible] = useState(!document.hidden);
+  // guard for SSR
+  const [visible, setVisible] = useState(typeof document === "undefined" ? true : !document.hidden);
   useEffect(() => {
+    if (typeof document === "undefined") return undefined;
     const onVis = () => setVisible(!document.hidden);
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   return visible;
 }
+
 function exportCSV(rows) {
   if (!rows || !rows.length) return;
   const headers = [
@@ -136,6 +144,7 @@ function deriveCreatedAt(customer) {
 export default function Dashboard() {
   const { isAuthenticated, token, ispId } = useAuth();
   const pageVisible = usePageVisibility();
+  const mountedRef = useRef(true);
 
   // router/system state
   const [mikrotik, setMikrotik] = useState({
@@ -186,22 +195,38 @@ export default function Dashboard() {
 
   // pagination for online users
   const [onlinePage, setOnlinePage] = useState(1);
-  const pageSize = 10;
-
   const customersSectionRef = useRef(null);
 
+  // acting flags for remote ops
+  const [acting, setActing] = useState({});
+
+  // mark mounted/unmounted
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   /* -----------------------------------
-     Fetchers
+     Fetchers (abortable)
   ----------------------------------- */
-  const loadMikrotikStatus = async () => {
+  const loadMikrotikStatus = useCallback(async (signal) => {
+    if (!isAuthenticated || !token || !ispId) return;
     try {
       setLoading((l) => ({ ...l, status: true }));
       const data = await retry(async () => {
-        const a = await api.get("/mikrotik/status");
-        if (a.data?.ok) return a.data;
-        const b = await api.get("/mikrotik/ping");
-        return b.data;
-      });
+        try {
+          const a = await api.get("/mikrotik/status", { signal });
+          if (a.data?.ok) return a.data;
+          const b = await api.get("/mikrotik/ping", { signal });
+          return b.data;
+        } catch (err) {
+          // rethrow to retry
+          throw err;
+        }
+      }, { attempts: 2 });
+      if (!mountedRef.current) return;
       setMikrotik({
         connected: !!data?.connected,
         identity: data?.identity || data?.routerIdentity || "",
@@ -210,68 +235,80 @@ export default function Dashboard() {
       });
       setErrors((e) => ({ ...e, status: null }));
     } catch (e) {
+      if (!mountedRef.current) return;
       setMikrotik((m) => ({ ...m, connected: false }));
-      setErrors((er) => ({ ...er, status: e.message }));
+      setErrors((er) => ({ ...er, status: e?.message || String(e) }));
     } finally {
-      setLoading((l) => ({ ...l, status: false }));
+      if (mountedRef.current) setLoading((l) => ({ ...l, status: false }));
     }
-  };
+  }, [isAuthenticated, token, ispId]);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async (signal) => {
+    if (!isAuthenticated || !token || !ispId) return;
     try {
       setLoading((l) => ({ ...l, stats: true }));
-      const { data } = await api.get("/stats");
+      const { data } = await api.get("/stats", { signal });
+      if (!mountedRef.current) return;
       setStats((s) => ({ ...s, ...data }));
       setErrors((e) => ({ ...e, stats: null }));
     } catch (e) {
-      setErrors((er) => ({ ...er, stats: e.message }));
+      if (!mountedRef.current) return;
+      setErrors((er) => ({ ...er, stats: e?.message || String(e) }));
     } finally {
-      setLoading((l) => ({ ...l, stats: false }));
+      if (mountedRef.current) setLoading((l) => ({ ...l, stats: false }));
     }
-  };
+  }, [isAuthenticated, token, ispId]);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async (signal) => {
+    if (!isAuthenticated || !token || !ispId) return;
     try {
       setLoading((l) => ({ ...l, customers: true }));
-      const { data } = await api.get("/customers");
+      const { data } = await api.get("/customers", { signal });
+      if (!mountedRef.current) return;
       setCustomers(Array.isArray(data) ? data : []);
       setErrors((e) => ({ ...e, customers: null }));
     } catch (e) {
-      setErrors((er) => ({ ...er, customers: e.message }));
+      if (!mountedRef.current) return;
+      setErrors((er) => ({ ...er, customers: e?.message || String(e) }));
     } finally {
-      setLoading((l) => ({ ...l, customers: false }));
+      if (mountedRef.current) setLoading((l) => ({ ...l, customers: false }));
     }
-  };
+  }, [isAuthenticated, token, ispId]);
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async (signal) => {
+    if (!isAuthenticated || !token || !ispId) return;
     try {
       setLoading((l) => ({ ...l, payments: true }));
-      const { data } = await api.get("/payments");
+      const { data } = await api.get("/payments", { signal });
+      if (!mountedRef.current) return;
       setPayments(Array.isArray(data) ? data : []);
       setErrors((e) => ({ ...e, payments: null }));
     } catch (e) {
-      setErrors((er) => ({ ...er, payments: e.message }));
+      if (!mountedRef.current) return;
+      setErrors((er) => ({ ...er, payments: e?.message || String(e) }));
     } finally {
-      setLoading((l) => ({ ...l, payments: false }));
+      if (mountedRef.current) setLoading((l) => ({ ...l, payments: false }));
     }
-  };
+  }, [isAuthenticated, token, ispId]);
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async (signal) => {
+    if (!isAuthenticated || !token || !ispId) return;
     try {
       setLoading((l) => ({ ...l, sessions: true }));
+
       const pppoe = await retry(async () => {
         try {
-          const { data } = await api.get("/pppoe/active"); // primary
+          const { data } = await api.get("/pppoe/active", { signal });
           return Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
         } catch {
-          const { data } = await api.get("/mikrotik/pppoe/active"); // fallback
+          const { data } = await api.get("/mikrotik/pppoe/active", { signal });
           return Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
         }
-      });
+      }, { attempts: 2 });
 
       let hs = [];
       try {
-        const { data } = await api.get("/hotspot/active");
+        const { data } = await api.get("/hotspot/active", { signal });
         hs = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
       } catch {
         hs = [];
@@ -279,116 +316,142 @@ export default function Dashboard() {
 
       let st = [];
       try {
-        const { data } = await api.get("/static/active");
+        const { data } = await api.get("/static/active", { signal });
         st = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
       } catch {
         st = [];
       }
 
+      if (!mountedRef.current) return;
       setPppoeSessions(pppoe);
       setHotspotSessions(hs);
       setStaticSessions(st);
       setErrors((e) => ({ ...e, sessions: null }));
     } catch (e) {
-      setErrors((er) => ({ ...er, sessions: e.message }));
+      if (!mountedRef.current) return;
+      setErrors((er) => ({ ...er, sessions: e?.message || String(e) }));
       setPppoeSessions([]);
       setHotspotSessions([]);
       setStaticSessions([]);
     } finally {
-      setLoading((l) => ({ ...l, sessions: false }));
+      if (mountedRef.current) setLoading((l) => ({ ...l, sessions: false }));
     }
-  };
+  }, [isAuthenticated, token, ispId]);
 
-  // ---- Actions: PPPoE + Static ----
-  const [acting, setActing] = useState({});
-
-  async function enableAccount(account) {
+  // wrapper to create and clean AbortController
+  const runWithSignal = useCallback(async (fn) => {
+    const ctrl = new AbortController();
     try {
-      setActing((a) => ({ ...a, [account]: true }));
+      await fn(ctrl.signal);
+    } finally {
+      // nothing; consumer handles mounted check
+    }
+    return () => ctrl.abort();
+  }, []);
+
+  /* -----------------------------------
+     Actions: PPPoE + Static
+  ----------------------------------- */
+  const setActingFlag = useCallback((account, v) => {
+    setActing((a) => ({ ...a, [account]: !!v }));
+  }, []);
+
+  const enableAccount = useCallback(async (account) => {
+    setActingFlag(account, true);
+    try {
       await api.post(`/pppoe/${encodeURIComponent(account)}/enable`);
       await loadSessions();
     } catch (e) {
-      setToast({ type: 'error', message: e?.message || 'Enable failed' });
+      setToast({ type: "error", message: e?.message || "Enable failed" });
     } finally {
-      setActing((a) => ({ ...a, [account]: false }));
+      setActingFlag(account, false);
     }
-  }
+  }, [loadSessions, setActingFlag]);
 
-  async function disableAccount(account) {
+  const disableAccount = useCallback(async (account) => {
+    setActingFlag(account, true);
     try {
-      setActing((a) => ({ ...a, [account]: true }));
       await api.post(`/pppoe/${encodeURIComponent(account)}/disable`);
       await loadSessions();
     } catch (e) {
-      setToast({ type: 'error', message: e?.message || 'Disable failed' });
+      setToast({ type: "error", message: e?.message || "Disable failed" });
     } finally {
-      setActing((a) => ({ ...a, [account]: false }));
+      setActingFlag(account, false);
     }
-  }
+  }, [loadSessions, setActingFlag]);
 
-  async function enableStaticQueue(account) {
+  const enableStaticQueue = useCallback(async (account) => {
+    setActingFlag(account, true);
     try {
-      setActing((a) => ({ ...a, [account]: true }));
       await api.post(`/static/${encodeURIComponent(account)}/enable-queue`);
       await loadSessions();
     } catch (e) {
-      setToast({ type: 'error', message: e?.message || 'Enable queue failed' });
+      setToast({ type: "error", message: e?.message || "Enable queue failed" });
     } finally {
-      setActing((a) => ({ ...a, [account]: false }));
+      setActingFlag(account, false);
     }
-  }
+  }, [loadSessions, setActingFlag]);
 
-  async function disableStaticQueue(account) {
+  const disableStaticQueue = useCallback(async (account) => {
+    setActingFlag(account, true);
     try {
-      setActing((a) => ({ ...a, [account]: true }));
       await api.post(`/static/${encodeURIComponent(account)}/disable-queue`);
       await loadSessions();
     } catch (e) {
-      setToast({ type: 'error', message: e?.message || 'Disable queue failed' });
+      setToast({ type: "error", message: e?.message || "Disable queue failed" });
     } finally {
-      setActing((a) => ({ ...a, [account]: false }));
+      setActingFlag(account, false);
     }
-  }
+  }, [loadSessions, setActingFlag]);
 
   /* -----------------------------------
-     Lifecycle
+     Lifecycle: initial loads + polling
   ----------------------------------- */
   useEffect(() => setDidMount(true), []);
 
   useEffect(() => {
     if (!isAuthenticated || !token || !ispId) return;
-    loadMikrotikStatus();
-    loadStats();
-    loadCustomers();
-    loadPayments();
-    loadSessions();
+    const ctrl = new AbortController();
+    (async () => {
+      await Promise.all([
+        loadMikrotikStatus(ctrl.signal),
+        loadStats(ctrl.signal),
+        loadCustomers(ctrl.signal),
+        loadPayments(ctrl.signal),
+        loadSessions(ctrl.signal),
+      ]);
+    })();
+    return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token, ispId]);
 
-  // Poll (pause while tab hidden)
+  // fast poll (status + sessions)
   useEffect(() => {
     if (!isAuthenticated || !token || !ispId || !pageVisible) return;
     const id = setInterval(() => {
-      loadMikrotikStatus();
-      loadSessions();
+      const ctrl = new AbortController();
+      loadMikrotikStatus(ctrl.signal);
+      loadSessions(ctrl.signal);
     }, REFRESH_FAST_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token, ispId, pageVisible]);
 
+  // slow poll (stats/customers/payments)
   useEffect(() => {
     if (!isAuthenticated || !token || !ispId || !pageVisible) return;
     const id = setInterval(() => {
-      loadStats();
-      loadPayments();
-      loadCustomers();
+      const ctrl = new AbortController();
+      loadStats(ctrl.signal);
+      loadPayments(ctrl.signal);
+      loadCustomers(ctrl.signal);
     }, REFRESH_SLOW_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, token, ispId, pageVisible]);
 
   // scroll helper
-  const scrollToCustomers = () => {
+  const scrollToCustomers = useCallback(() => {
     try {
       const el =
         customersSectionRef.current ||
@@ -400,12 +463,12 @@ export default function Dashboard() {
     } catch {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!didMount) return;
     if (browseOpen) setTimeout(scrollToCustomers, 0);
-  }, [browseOpen, didMount]);
+  }, [browseOpen, didMount, scrollToCustomers]);
 
   /* -----------------------------------
      Search (abortable + keyboard nav)
@@ -424,6 +487,7 @@ export default function Dashboard() {
           params: { query: q },
           signal: ctrl.signal,
         });
+        if (!mountedRef.current) return;
         setSearchResults(Array.isArray(data) ? data : []);
       } catch (e) {
         if (e.name !== "CanceledError" && e.name !== "AbortError") {
@@ -453,19 +517,20 @@ export default function Dashboard() {
     }
   }
 
-  const openCustomerDetails = async (item) => {
+  const openCustomerDetails = useCallback(async (item) => {
     try {
       const id = item?._id || item?.id;
       if (!id) return;
       const { data } = await api.get(`/customers/by-id/${id}`);
+      if (!mountedRef.current) return;
       setInlineCustomer(data);
       setCustomerModal({ open: false, customer: null });
       setSearchOpen(false);
       setTimeout(scrollToCustomers, 0);
     } catch (e) {
-      setToast({ type: "error", message: e.message });
+      setToast({ type: "error", message: e?.message || "Failed to open customer" });
     }
-  };
+  }, [scrollToCustomers]);
 
   /* -----------------------------------
      Data enrichment / memo
@@ -504,8 +569,7 @@ export default function Dashboard() {
 
   const enrichedOnline = useMemo(() => {
     const mapSession = (s) => {
-      const username =
-        s.username || s.name || s.user || s.account || s.login || "";
+      const username = s.username || s.name || s.user || s.account || s.login || "";
       const acct = String(username || "").trim();
       const accountCandidates = [
         ...accountKeys(username),
@@ -541,7 +605,6 @@ export default function Dashboard() {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
       };
-      // Prefer provided uptime; for Static sessions, also show lastSeen label
       const uptimeStr = s.uptime || (s.lastSeen ? `Last seen ${s.lastSeen}` : "-");
       const uptimeMs = typeof s.uptimeMs === "number" && Number.isFinite(s.uptimeMs)
         ? s.uptimeMs
@@ -559,8 +622,8 @@ export default function Dashboard() {
         ip: s.address || s.ip || s.ipAddress || "-",
         uptime: uptimeStr,
         uptimeMs,
-        bytesIn: toNum(s.bytesIn || s.rx || s["bytes-in"]),
-        bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"]),
+        bytesIn: toNum(s.bytesIn || s.rx || s["bytes-in"] || s["bytesIn"]),
+        bytesOut: toNum(s.bytesOut || s.tx || s["bytes-out"] || s["bytesOut"]),
         planName: c?.plan?.name || s.plan || "-",
         source: s.source || "PPPoE",
         isDisabled,
@@ -587,32 +650,24 @@ export default function Dashboard() {
   }, [pppoeSessions, hotspotSessions, staticSessions, showHotspot, showStatic, customerByAccount, customerByStaticIp]);
 
   const onlineTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(enrichedOnline.length / pageSize)),
-    [enrichedOnline]
+    () => Math.max(1, Math.ceil(enrichedOnline.length / PAGE_SIZE)),
+    [enrichedOnline.length]
   );
   useEffect(() => {
     setOnlinePage((p) => Math.min(Math.max(1, p), onlineTotalPages));
   }, [onlineTotalPages]);
 
   const onlinePageItems = useMemo(() => {
-    const start = (onlinePage - 1) * pageSize;
-    return enrichedOnline.slice(start, start + pageSize);
+    const start = (onlinePage - 1) * PAGE_SIZE;
+    return enrichedOnline.slice(start, start + PAGE_SIZE);
   }, [enrichedOnline, onlinePage]);
 
   const pageBytesIn = useMemo(
-    () =>
-      onlinePageItems.reduce(
-        (a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0),
-        0
-      ),
+    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesIn) ? u.bytesIn : 0), 0),
     [onlinePageItems]
   );
   const pageBytesOut = useMemo(
-    () =>
-      onlinePageItems.reduce(
-        (a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0),
-        0
-      ),
+    () => onlinePageItems.reduce((a, u) => a + (Number.isFinite(u.bytesOut) ? u.bytesOut : 0), 0),
     [onlinePageItems]
   );
 
@@ -721,8 +776,8 @@ export default function Dashboard() {
       map.set(key, 0);
     }
     for (const p of payments) {
-      const key = new Date(p.createdAt).toISOString().slice(0, 10);
-      if (map.has(key)) map.set(key, (map.get(key) || 0) + Number(p.amount || 0));
+      const key = safeDate(p.createdAt) ? new Date(p.createdAt).toISOString().slice(0, 10) : null;
+      if (key && map.has(key)) map.set(key, (map.get(key) || 0) + Number(p.amount || 0));
     }
     return {
       labels,
@@ -739,26 +794,21 @@ export default function Dashboard() {
     };
   }, [payments]);
 
-  const paymentsOpts = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { mode: "index", intersect: false },
+  const paymentsOpts = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { mode: "index", intersect: false },
+    },
+    scales: {
+      x: { ticks: { maxTicksLimit: 7 } },
+      y: {
+        ticks: { callback: (v) => `KES ${Number(v).toLocaleString()}` },
+        grid: { color: "rgba(0,0,0,0.05)" },
       },
-      scales: {
-        x: { ticks: { maxTicksLimit: 7 } },
-        y: {
-          ticks: { callback: (v) => `KES ${Number(v).toLocaleString()}` },
-          grid: { color: "rgba(0,0,0,0.05)" },
-        },
-      },
-    }),
-    []
-  );
-
-  
+    },
+  }), []);
 
   useEffect(() => {
     if (toast && toastRef.current) toastRef.current.focus();
@@ -799,7 +849,7 @@ export default function Dashboard() {
               <div className="search-results">
                 {searchResults.map((r, i) => (
                   <div
-                    key={r._id}
+                    key={r._id || i}
                     className={`search-item ${activeIndex === i ? "active" : ""}`}
                     onClick={() => openCustomerDetails(r)}
                     onMouseEnter={() => setActiveIndex(i)}
@@ -814,9 +864,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
-                {searchResults.length === 0 && (
-                  <div className="search-empty">No matches</div>
-                )}
+                {searchResults.length === 0 && <div className="search-empty">No matches</div>}
               </div>
             )}
           </div>
@@ -885,9 +933,7 @@ export default function Dashboard() {
               display: "flex",
               justifyContent: "flex-end",
             }}
-          >
-            
-          </div>
+          />
         </div>
 
         <section className="pppoe-status-section">
@@ -933,7 +979,7 @@ export default function Dashboard() {
             >
               <strong>No users online.</strong>{" "}
               Tip: check <em>MikroTik Connected</em> status, confirm PPPoE secrets, or{" "}
-              <button className="btn" onClick={loadSessions} style={{ padding: "2px 8px" }}>
+              <button className="btn" onClick={() => loadSessions()}>
                 Refresh
               </button>
               .
@@ -965,8 +1011,8 @@ export default function Dashboard() {
                     <td>{u.phone}</td>
                     <td>{u.ip}</td>
                     <td>{u.uptime}</td>
-                    <td className="num">{u.bytesIn.toLocaleString()}</td>
-                    <td className="num">{u.bytesOut.toLocaleString()}</td>
+                    <td className="num">{(Number.isFinite(u.bytesIn) ? u.bytesIn : 0).toLocaleString()}</td>
+                    <td className="num">{(Number.isFinite(u.bytesOut) ? u.bytesOut : 0).toLocaleString()}</td>
                     <td>{u.planName}</td>
                     <td>
                       {u.source === 'Static' && u.accountNumber && (
@@ -1038,7 +1084,7 @@ export default function Dashboard() {
             </table>
           </div>
 
-          {enrichedOnline.length > pageSize && (
+          {enrichedOnline.length > PAGE_SIZE && (
             <div
               style={{
                 display: "flex",
@@ -1091,7 +1137,7 @@ export default function Dashboard() {
                     <td>{u.name}</td>
                     <td>{u.phone}</td>
                     <td>{(u.connectionType || "").toUpperCase() || "-"}</td>
-                    <td>{u.createdAt ? formatDate(u.createdAt) : "-"}</td>
+                    <td>{u.lastPaymentAt ? formatDate(u.lastPaymentAt) : "-"}</td>
                     <td>{formatDate(u.expiryDate)}</td>
                     <td className="num">{u.daysLeft}</td>
                   </tr>
@@ -1182,7 +1228,6 @@ export default function Dashboard() {
 
       <UsageModal isOpen={showUsageModal} onClose={() => setShowUsageModal(false)} />
 
-      {/* Keep modal wiring available but unused now that inline panel exists */}
       <CustomerDetailsModal
         open={customerModal.open}
         customer={customerModal.customer}
@@ -1201,4 +1246,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
