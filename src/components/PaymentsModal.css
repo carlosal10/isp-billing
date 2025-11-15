@@ -78,15 +78,17 @@
 }
 
 /* ============= TABLES ============= */
+/* <-- REPLACED: make table-wrapper a proper flex content area so table can size & scroll --> */
 .table-wrapper{
   padding:10px 16px 16px;
-  overflow:auto;
-  flex-grow:1;
-  display:block;
-  width:100%;
-  -webkit-overflow-scrolling:touch; /* smooth scrolling on iOS */
-  min-height:0; /* for flexbox */
-  max-height:70vh;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;      /* take remaining space, allow shrink/grow */
+  min-height: 0;       /* CRITICAL — allow child to shrink and produce scroll */
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+  overflow: auto;      /* enable scrolling for tall tables */
+  max-height: 70vh;
 }
 .data-table{
   width:100%; border-collapse:separate; border-spacing:0; background:#fff;
@@ -220,6 +222,8 @@
   .stacked-form .primary{ grid-column:1; }
   .actions button{ width:100%; margin-right:0; margin-bottom:8px; }
   .actions{ display:grid; grid-template-columns:1fr; gap:8px; }
+  .drawer { width: 100%; }
+  .data-table { min-width: 640px; }
 }
 
 /* ============= FOCUS VISIBLE (keyboard) ============= */
@@ -246,8 +250,6 @@ button:focus-visible,
 }
 /* =========================
    PaymentsModal — Enhancements
-   (Edit drawer, confirm dialog, row actions)
-   Append to your PaymentsModal.css
 ========================= */
 
 /* Actions column: compact icon buttons */
@@ -298,7 +300,6 @@ button:focus-visible,
 }
 .drawer-close:hover { transform: translateY(-1px); box-shadow: var(--shadow-soft); }
 
-/* Drawer form fields */
 .drawer .stacked-form { padding: 0; grid-template-columns: 1fr; }
 .drawer .stacked-form .field { margin-bottom: 10px; }
 .drawer .stacked-form label {
@@ -380,10 +381,4 @@ button.secondary:focus-visible,
 button.danger:focus-visible {
   outline: 2px solid var(--ec-accent);
   outline-offset: 2px;
-}
-
-@media (max-width: 720px) {
-  .drawer { width: 100%; }
-  .data-table { min-width: 640px; }
-  .data-table td.actions { text-align: left; }
 }

@@ -1,4 +1,6 @@
 // routes/mikrotikAdmin.js
+'use strict';
+
 // Admin/manage routes for MikroTik (whitelists, enforcement, bootstrap, static helpers)
 // Fixes: pass serverId through helper functions (avoid using `req` inside helpers),
 // ensure helper functions accept serverId where they call sendCommand.
@@ -318,8 +320,6 @@ router.get("/status", limiter, guardRole, async (req, res) => {
   }
 });
 
-module.exports = router;
-
 /*
   ===== Additional enforcement, bootstrap and static helpers follow =====
   The functions below also accept serverId where they invoke sendCommand to
@@ -629,3 +629,6 @@ router.post("/static/renew", limiter, guardRole, async (req, res) => {
     return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
   }
 });
+
+// final export
+module.exports = router;

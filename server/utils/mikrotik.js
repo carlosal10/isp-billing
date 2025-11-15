@@ -1,4 +1,6 @@
 // utils/mikrotik.js
+'use strict';
+
 // Tenant-scoped MikroTik helpers built on the pooled connection manager.
 // Make sure your routes pass req.tenantId into these helpers.
 

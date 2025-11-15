@@ -530,7 +530,7 @@ router.get("/mikrotik/static/active", limiter, async (req, res) => {
 
     return res.json({ ok: true, count: users.length, users });
   } catch (e) {
-    console.warn('[MikroTik] static/active failed:', e?.message || e);
+    console.warn('[Mikrotik] static/active failed:', e?.message || e);
     return res.json({ ok: true, count: 0, users: [] });
   }
 });
@@ -775,15 +775,16 @@ router.post("/static/:account/apply-queue", limiter, async (req, res) => {
 
 router.post("/static/:account/enable-queue", limiter, async (req, res) => {
   try {
+    const tenantId = req.tenantId;
     const serverId = pickServerId(req);
-    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId, timeoutMs: 8000, serverId });
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
+    await sendCommand("/queue/simple/enable", [w("numbers", id)], { tenantId, timeoutMs: 8000, serverId });
 
     // persist + sync firewall lists
     try {
-      const customerDoc = await Customer.findOne({ tenantId: req.tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
+      const customerDoc = await Customer.findOne({ tenantId: tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
       if (customerDoc) {
         await Customer.updateOne({ _id: customerDoc._id }, { $set: { status: 'active', updatedAt: new Date() } });
         const payload = customerDoc.toObject();
@@ -803,15 +804,16 @@ router.post("/static/:account/enable-queue", limiter, async (req, res) => {
 
 router.post("/static/:account/disable-queue", limiter, async (req, res) => {
   try {
+    const tenantId = req.tenantId;
     const serverId = pickServerId(req);
-    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
+    const rows = await sendCommand("/queue/simple/print", [qs("name", String(req.params.account))], { tenantId, timeoutMs: 8000, serverId });
     if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ ok: false, error: "Queue not found" });
     const id = rows[0][".id"] || rows[0].id || rows[0].numbers;
-    await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId: req.tenantId, timeoutMs: 8000, serverId });
+    await sendCommand("/queue/simple/disable", [w("numbers", id)], { tenantId, timeoutMs: 8000, serverId });
 
     // persist + sync firewall lists
     try {
-      const customerDoc = await Customer.findOne({ tenantId: req.tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
+      const customerDoc = await Customer.findOne({ tenantId: tenantId, accountNumber: String(req.params.account), connectionType: 'static' }).populate('plan');
       if (customerDoc) {
         await Customer.updateOne({ _id: customerDoc._id }, { $set: { status: 'inactive', updatedAt: new Date() } });
         const payload = customerDoc.toObject();

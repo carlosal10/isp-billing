@@ -22,11 +22,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
     transactionId: "",
     amount: "",
     method: "",
-    // Backdating/extension controls
-    paidAt: "",       // datetime-local
-    backdateTo: "",   // date
-    expiryDate: "",   // date override
-    extendDays: "",   // number
+    paidAt: "",
+    backdateTo: "",
+    expiryDate: "",
+    extendDays: "",
   });
 
   // ------- Backdate / Goodwill state -------
@@ -49,7 +48,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
   // ------- Edit/Delete state -------
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
-  const [editPayment, setEditPayment] = useState(null); // current payment being edited
+  const [editPayment, setEditPayment] = useState(null);
   const [confirm, setConfirm] = useState({ open: false, id: null, loading: false, message: "" });
 
   const manualDropdownRef = useRef(null);
@@ -72,6 +71,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     if (!isOpen) return;
     fetchPayments();
     fetchInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // close dropdowns on outside click
@@ -87,6 +87,24 @@ export default function PaymentsModal({ isOpen, onClose }) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  // Defensive inline container styles so CSS flex layout assumptions always hold
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!isOpen) {
+      // clear defensive inline styles when modal closed
+      el.style.display = "";
+      el.style.flexDirection = "";
+      el.style.boxSizing = "";
+      return;
+    }
+    // ensure modal container behaves like a flex column (so inner .table-wrapper can flex/scroll)
+    el.style.display = "flex";
+    el.style.flexDirection = "column";
+    el.style.boxSizing = "border-box";
+    // note: hook may still write inline width/height/position; this complements it.
+  }, [isOpen]);
 
   // ---------- API helpers ----------
   const getErrMsg = (err, fallback = "Request failed") =>
@@ -245,7 +263,6 @@ export default function PaymentsModal({ isOpen, onClose }) {
         transactionId: manualPayment.transactionId,
         amount: manualPayment.amount !== "" ? Number(manualPayment.amount) : undefined,
         method: manualPayment.method || "manual",
-        // Backdating
         paidAt: manualPayment.paidAt ? new Date(manualPayment.paidAt).toISOString() : undefined,
         backdateTo: manualPayment.backdateTo || undefined,
         expiryDate: manualPayment.expiryDate || undefined,
@@ -378,7 +395,6 @@ export default function PaymentsModal({ isOpen, onClose }) {
       method: p.method || "manual",
       notes: p.notes || "",
       status: p.status || "Validated",
-      // Backdating fields
       validatedAt: "",
       backdateTo: "",
       expiryDate: "",
@@ -392,21 +408,18 @@ export default function PaymentsModal({ isOpen, onClose }) {
     if (!editPayment?._id) return;
     setEditSaving(true);
     try {
-      // Assumes backend route: PUT /api/payments/:id
       await api.put(`/payments/${editPayment._id}`, {
         transactionId: String(editPayment.transactionId || "").trim(),
         amount: editPayment.amount === "" ? undefined : Number(editPayment.amount),
         method: editPayment.method || "manual",
         notes: editPayment.notes || undefined,
-        status: editPayment.status || undefined, // e.g., Validated/Failed/Refunded
-        // Backdating controls for edit
+        status: editPayment.status || undefined,
         validatedAt: editPayment.validatedAt ? new Date(editPayment.validatedAt).toISOString() : undefined,
         backdateTo: editPayment.backdateTo || undefined,
         expiryDate: editPayment.expiryDate || undefined,
         extendDays: editPayment.extendDays !== "" ? Number(editPayment.extendDays) : undefined,
       });
 
-      // Optimistic refresh
       await fetchPayments();
       setEditOpen(false);
       setEditPayment(null);
@@ -431,11 +444,9 @@ export default function PaymentsModal({ isOpen, onClose }) {
     if (!confirm.id) return;
     setConfirm((s) => ({ ...s, loading: true }));
     try {
-      // Assumes backend route: DELETE /api/payments/:id
       await api.delete(`/payments/${confirm.id}`);
       setPayments((list) => list.filter((p) => p._id !== confirm.id));
       setConfirm({ open: false, id: null, loading: false, message: "" });
-      // Consider refreshing invoices if they depend on payments
       fetchInvoices();
     } catch (err) {
       alert(getErrMsg(err, "Failed to delete payment"));
@@ -461,9 +472,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
             {resizeHandles.map((dir) => (
               <div
                 key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
+                className={`modal-resize-handle ${dir.length === 1 ? "edge" : "corner"} ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
                 {...getResizeHandleProps(dir)}
               />
             ))}
