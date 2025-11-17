@@ -7,17 +7,19 @@ const dns = require("dns").promises;
 const crypto = require("node:crypto");
 
 // --------- Configurable knobs (tweak to taste) ---------
-const DEFAULT_TIMEOUT_MS = 12_000;
-const CONNECT_TIMEOUT_MS = 15_000;
+// timeouts raised to tolerate slower RouterOS replies (7.18+ behaviour)
+const DEFAULT_TIMEOUT_MS = 45_000;   // command timeout (was 12s)
+const CONNECT_TIMEOUT_MS = 20_000;   // connect handshake timeout (was 15s)
 const HEALTH_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
 const CIRCUIT_OPEN_MS = 20_000;
 const MAX_CONSECUTIVE_FAILS = 3;
-const SEND_RETRY_COUNT = 3;
-const SEND_RETRY_DELAY_MS = 500;
+// fewer retries — if we still fail after retry, investigate
+const SEND_RETRY_COUNT = 2;          // lowered to 2
+const SEND_RETRY_DELAY_MS = 600;
 // per-entry command spacing to avoid bursts (ms)
-const PER_COMMAND_GAP_MS = 150;
+const PER_COMMAND_GAP_MS = 200;      // slightly larger gap
 
 // redact keys for logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
@@ -51,10 +53,38 @@ function withTimeout(promise, ms, msg = "Timeout") {
   return Promise.race([promise.finally(()=> clearTimeout(to)), t]);
 }
 
-// Normalize RouterOS result (placeholder)
+// Normalize RouterOS result to a consistent JS type.
+// Accepts arrays, strings, buffers, or library-specific objects.
+// If RouterOS returns '!empty' or other "no-data" tokens, return [].
 function normalizeResult(res){
-  // keep as-is, but guard for weird string responses
-  return res;
+  if (res == null) return [];
+  // routeros-client may return string tokens like '!empty'
+  if (typeof res === 'string') {
+    const t = res.trim();
+    if (!t) return [];
+    if (t.startsWith('!empty') || /^(?:!empty|UNKNOWNREPLY|RosException)/i.test(t)) return [];
+    // otherwise return the raw string (caller can interpret)
+    return res;
+  }
+  // if it's a Buffer, convert to string and apply same rules
+  if (Buffer.isBuffer(res)) {
+    const s = res.toString('utf8').trim();
+    if (!s) return [];
+    if (s.startsWith('!empty') || /^(?:!empty|UNKNOWNREPLY|RosException)/i.test(s)) return [];
+    return s;
+  }
+  // if it's an array-like or object, return as-is
+  if (Array.isArray(res)) return res;
+  if (typeof res === 'object') return res;
+  // fallback: coerce to string
+  try {
+    const s = String(res).trim();
+    if (!s) return [];
+    if (s.startsWith('!empty') || /^(?:!empty|UNKNOWNREPLY|RosException)/i.test(s)) return [];
+    return res;
+  } catch (e) {
+    return [];
+  }
 }
 
 // --------- DNS cache per-entry ---------
@@ -240,19 +270,17 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
   for (let attempt = 1; attempt <= SEND_RETRY_COUNT; attempt++) {
     try {
       const client = await ensureConnected(entry);
-      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 60_000));
+      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 70_000));
       const startedAt = Date.now();
 
       // routeros-client: client.write(cmd, args)
-      const result = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");
+      const raw = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");
 
-      // guard against weird string replies that some UNKNOWNREPLY implementations expose
-      // e.g. library may surface "!empty" or other stray tokens — treat as transient
-      const rawStr = typeof result === 'string' ? result : (result && result.toString ? result.toString() : "");
-      if (rawStr.includes('!empty') || /UNKNOWNREPLY|RosException/i.test(rawStr)) {
-        throw new Error('malformed_reply: ' + rawStr.slice(0, 200));
-      }
+      // normalize result (handles '!empty', Buffer, arrays, etc.)
+      const result = normalizeResult(raw);
 
+      // If normalizeResult returned an empty array because the router returned '!empty' or similar,
+      // treat this as a successful empty response (do not throw).
       // success bookkeeping
       entry.lastOkAt = Date.now();
       entry.fails = 0;
@@ -272,11 +300,11 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
       })).catch(()=>{});
 
       console.log(`🛰️ MT ok ${entry.cfg.host} ${cmd} (${Date.now() - startedAt}ms)`);
-      return normalizeResult(result);
+      return result;
     } catch (err) {
       lastErr = err;
       const errorMsg = String(err?.message || err);
-      // auth errors -> stop and open big circuit
+      // auth errors -> stop and open bigger circuit
       if (/username|password|authentication|login failure|invalid user/i.test(errorMsg)) {
         entry.lastErr = err;
         entry.connected = false;
@@ -288,7 +316,7 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
         throw err;
       }
 
-      // transients: attempt to reset client and retry
+      // transient handling: reset client and possibly retry
       try {
         entry.lastErr = err;
         entry.connected = false;
@@ -359,12 +387,18 @@ async function healthTick() {
     try {
       if (!entry.connected || !entry.client) return;
       const ms0 = Date.now();
-      await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
-      entry.lastOkAt = Date.now();
-      entry.fails = 0;
-      entry.backoff = BASE_BACKOFF_MS;
-      const dur = Date.now() - ms0;
-      if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
+      try {
+        const raw = await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
+        const result = normalizeResult(raw);
+        // treat empty as ok for health check (router answered)
+        entry.lastOkAt = Date.now();
+        entry.fails = 0;
+        entry.backoff = BASE_BACKOFF_MS;
+        const dur = Date.now() - ms0;
+        if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
+      } catch (err) {
+        throw err;
+      }
     } catch (err) {
       entry.connected = false;
       entry.lastErr = err;
