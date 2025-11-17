@@ -8,8 +8,8 @@ const crypto = require("node:crypto");
 
 // --------- Configurable knobs (tweak to taste) ---------
 // timeouts raised to tolerate slower RouterOS replies (7.18+ behaviour)
-const DEFAULT_TIMEOUT_MS = 45_000;   // command timeout (was 12s)
-const CONNECT_TIMEOUT_MS = 20_000;   // connect handshake timeout (was 15s)
+const DEFAULT_TIMEOUT_MS = 120_000;   // command timeout (was 12s)
+const CONNECT_TIMEOUT_MS = 120_000;   // connect handshake timeout (was 15s)
 const HEALTH_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
@@ -19,7 +19,7 @@ const MAX_CONSECUTIVE_FAILS = 3;
 const SEND_RETRY_COUNT = 2;          // lowered to 2
 const SEND_RETRY_DELAY_MS = 600;
 // per-entry command spacing to avoid bursts (ms)
-const PER_COMMAND_GAP_MS = 200;      // slightly larger gap
+const PER_COMMAND_GAP_MS = 300;      // slightly larger gap
 
 // redact keys for logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
