@@ -1,13 +1,13 @@
 // utils/mikrotikConnectionManager.js
-// Multi-tenant, pooled MikroTik connection manager (improved)
-// Requires: npm i routeros-client
+// Multi-tenant, pooled MikroTik connection manager (revised fixes)
+// Notes: addresses connect/command timeouts, DNS caching, health-check robustness,
+// listener cleanup, backoff/circuit tuning, and safer client close handling.
 
 const { RouterOSAPI } = require("routeros-client");
 const dns = require("dns").promises;
 const crypto = require("node:crypto");
 
 // --------- Configurable knobs (tweak to taste) ---------
-// timeouts raised to tolerate slower RouterOS replies (7.18+ behaviour)
 const DEFAULT_TIMEOUT_MS = 120_000;   // command timeout (was 12s)
 const CONNECT_TIMEOUT_MS = 120_000;   // connect handshake timeout (was 15s)
 const HEALTH_INTERVAL_MS = 30_000;
@@ -15,13 +15,10 @@ const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
 const CIRCUIT_OPEN_MS = 20_000;
 const MAX_CONSECUTIVE_FAILS = 3;
-// fewer retries — if we still fail after retry, investigate
-const SEND_RETRY_COUNT = 2;          // lowered to 2
+const SEND_RETRY_COUNT = 2;          // retries
 const SEND_RETRY_DELAY_MS = 600;
-// per-entry command spacing to avoid bursts (ms)
-const PER_COMMAND_GAP_MS = 300;      // slightly larger gap
+const PER_COMMAND_GAP_MS = 300;      // per-command spacing (ms)
 
-// redact keys for logs
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
 
 // --------- Internal state & hooks ---------
@@ -30,7 +27,7 @@ const pool = new Map();
 let loadTenantRouterConfig = async (_tenantId, _selector) => {
   throw new Error("loadTenantRouterConfig not set");
 };
-let auditLog = async (_entry) => {}; // no-op by default
+let auditLog = async (_entry) => {};
 
 function setConfigLoader(fn) { loadTenantRouterConfig = fn; }
 function setAuditLogger(fn) { auditLog = fn || (() => {}); }
@@ -40,8 +37,8 @@ function k(tenantId, host, port) { return `${tenantId}:${host}:${port || 8728}`;
 function redact(str) {
   let s = String(str ?? "");
   for (const k of SECRET_KEYS) {
-    const unquoted = new RegExp(`(${k}\\s*=\\s*)[^\\s"]+`, "ig");
-    const quoted = new RegExp(`(${k}\\s*=\\s*")[^"]*(")`, "ig");
+    const unquoted = new RegExp(`(${k}\\s*=\\s*)[^\\s\"]+`, "ig");
+    const quoted = new RegExp(`(${k}\\s*=\\s*\")[^\"]*(\")`, "ig");
     s = s.replace(unquoted, "$1******").replace(quoted, "$1******$2");
   }
   return s;
@@ -53,30 +50,22 @@ function withTimeout(promise, ms, msg = "Timeout") {
   return Promise.race([promise.finally(()=> clearTimeout(to)), t]);
 }
 
-// Normalize RouterOS result to a consistent JS type.
-// Accepts arrays, strings, buffers, or library-specific objects.
-// If RouterOS returns '!empty' or other "no-data" tokens, return [].
 function normalizeResult(res){
   if (res == null) return [];
-  // routeros-client may return string tokens like '!empty'
   if (typeof res === 'string') {
     const t = res.trim();
     if (!t) return [];
     if (t.startsWith('!empty') || /^(?:!empty|UNKNOWNREPLY|RosException)/i.test(t)) return [];
-    // otherwise return the raw string (caller can interpret)
     return res;
   }
-  // if it's a Buffer, convert to string and apply same rules
   if (Buffer.isBuffer(res)) {
     const s = res.toString('utf8').trim();
     if (!s) return [];
     if (s.startsWith('!empty') || /^(?:!empty|UNKNOWNREPLY|RosException)/i.test(s)) return [];
     return s;
   }
-  // if it's an array-like or object, return as-is
   if (Array.isArray(res)) return res;
   if (typeof res === 'object') return res;
-  // fallback: coerce to string
   try {
     const s = String(res).trim();
     if (!s) return [];
@@ -89,19 +78,20 @@ function normalizeResult(res){
 
 // --------- DNS cache per-entry ---------
 async function resolveHostIfNeeded(entry) {
-  // if host is an IP, return it
   const host = entry.cfg.host;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return host;
   const now = Date.now();
   if (entry._dns && entry._dns.ip && entry._dns.expiresAt > now) return entry._dns.ip;
   try {
+    // explicit lookup to get an IP (don't rely on system blocking resolve)
     const r = await dns.lookup(host);
-    const ttl = entry._dns?.ttlMs || 60_000;
+    // use small TTL to avoid stale DNS if infra changes
+    const ttl = Math.max(30_000, entry._dns?.ttlMs || 60_000);
     entry._dns = { ip: r.address, expiresAt: now + ttl, ttlMs: ttl };
     return r.address;
   } catch (err) {
-    // don't block: return original host as fallback
     console.warn(`DNS lookup failed for ${host}: ${err.message}`);
+    // fallback: return host and let connect attempt fail with readable error
     return host;
   }
 }
@@ -132,12 +122,9 @@ async function getClientEntry(tenantId, selector) {
       backoff: BASE_BACKOFF_MS,
       circuitUntil: 0,
       lastOkAt: 0,
-      // queue + control
       cmdQueue: [],
       queueRunning: false,
-      // dns cache container
       _dns: null,
-      // schedules map for poll jobs
       schedules: new Map(),
     });
   }
@@ -160,22 +147,25 @@ async function ensureConnected(entry) {
 
   entry.connecting = true;
   try {
-    // resolve host first (cache-friendly)
     const resolvedHost = await resolveHostIfNeeded(entry);
 
+    // Use a per-connection timeout for the handshake
     const client = new RouterOSAPI({
       host: resolvedHost,
       user: entry.cfg.user,
       password: entry.cfg.password,
       port: entry.cfg.port,
-      timeout: entry.cfg.timeout,
+      timeout: CONNECT_TIMEOUT_MS,
       tls: entry.cfg.tls,
     });
 
-    await withTimeout(client.connect(), entry.cfg.timeout, "Connect timeout");
+    // note: routeros-client.connect() returns a promise that resolves when handshake done
+    await withTimeout(client.connect(), CONNECT_TIMEOUT_MS, "Connect timeout");
+
+    // if we reached here, client is connected
     entry.client = client;
 
-    // attach listeners carefully (avoid duplicate handlers)
+    // attach listeners bound to entry so we can properly cleanup / replace
     try {
       if (typeof client.on === 'function') {
         const onError = (err) => {
@@ -184,19 +174,21 @@ async function ensureConnected(entry) {
             entry.connected = false;
             entry.fails += 1;
             entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
-            try { client.close().catch(()=>{}); } catch(e){}
+            safeCloseClient(entry);
             console.warn(`MikroTik client error ${entry.cfg.host}: ${String(err?.message || err)}`);
           } catch (e) {}
         };
         const onClose = () => {
           try {
             entry.connected = false;
-            entry.client = null;
+            // keep client null so next ensureConnected will re-create
+            if (entry.client === client) entry.client = null;
             entry.lastErr = new Error('client-closed');
             console.warn(`MikroTik client closed for ${entry.cfg.host}`);
           } catch (e) {}
         };
-        // remove previous if present
+
+        // remove previous bound listeners if present (some older client objects reuse handlers)
         if (client.__mbm_on_error) try { client.removeListener('error', client.__mbm_on_error); } catch(e){}
         if (client.__mbm_on_close) try { client.removeListener('close', client.__mbm_on_close); } catch(e){}
         client.__mbm_on_error = onError;
@@ -204,26 +196,35 @@ async function ensureConnected(entry) {
         client.on('error', onError);
         client.on('close', onClose);
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore listener attach errors */ }
 
     entry.connected = true;
     entry.fails = 0;
     entry.backoff = BASE_BACKOFF_MS;
     entry.lastErr = null;
 
-    // small health write to confirm API healthy
-    await withTimeout(client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health check timeout");
-    entry.lastOkAt = Date.now();
+    // Perform a lightweight health check that tolerates empty replies.
+    try {
+      await withTimeout(client.write("/system/identity/print"), Math.min(DEFAULT_TIMEOUT_MS, 10_000), "Health check timeout");
+      entry.lastOkAt = Date.now();
+    } catch (healthErr) {
+      // don't fail connect just because health read was slow; but record it
+      console.warn(`Health probe slow/failed for ${entry.cfg.host}: ${String(healthErr.message || healthErr)}`);
+    }
 
     return client;
   } catch (err) {
-    entry.connected = false;
+    // connection failure: close any client and bump failure counters
+    try { entry.connected = false; } catch(e){}
+    try { if (entry.client && typeof entry.client.close === 'function') entry.client.close().catch(()=>{}); } catch(e){}
     entry.client = null;
+
     entry.lastErr = err;
     entry.fails += 1;
     entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
     if (entry.fails >= MAX_CONSECUTIVE_FAILS) {
       entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
+      console.warn(`Circuit opened for ${entry.cfg.host} until ${new Date(entry.circuitUntil).toISOString()}`);
     }
     throw new Error(`MikroTikConnectionError: ${err.message}`);
   } finally {
@@ -243,6 +244,27 @@ function waitForConnect(entry) {
   });
 }
 
+// safe close helper (best-effort)
+function safeCloseClient(entry) {
+  try {
+    const c = entry.client;
+    if (!c) return;
+    // detach known handlers
+    try {
+      if (typeof c.removeListener === 'function') {
+        if (c.__mbm_on_error) c.removeListener('error', c.__mbm_on_error);
+        if (c.__mbm_on_close) c.removeListener('close', c.__mbm_on_close);
+      }
+    } catch (e) {}
+    // try close
+    try {
+      const maybe = c.close();
+      if (maybe && typeof maybe.then === 'function') maybe.catch(()=>{});
+    } catch (e) {}
+    entry.client = null;
+  } catch (e) {}
+}
+
 // --------- Per-entry command queue processor (serialize + spacing) ---------
 async function _processEntryQueue(entry) {
   if (entry.queueRunning) return;
@@ -251,14 +273,12 @@ async function _processEntryQueue(entry) {
     const item = entry.cmdQueue.shift();
     const { cmd, args, options, resolve, reject } = item;
     try {
-      // apply backoff if needed
       if (!entry.connected && entry.fails > 0) await delay(entry.backoff);
       const res = await _sendDirect(entry, cmd, args, options);
       resolve(res);
     } catch (err) {
       reject(err);
     }
-    // small gap to avoid bursts
     await delay(PER_COMMAND_GAP_MS);
   }
   entry.queueRunning = false;
@@ -275,18 +295,13 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
 
       // routeros-client: client.write(cmd, args)
       const raw = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");
-
-      // normalize result (handles '!empty', Buffer, arrays, etc.)
       const result = normalizeResult(raw);
 
-      // If normalizeResult returned an empty array because the router returned '!empty' or similar,
-      // treat this as a successful empty response (do not throw).
       // success bookkeeping
       entry.lastOkAt = Date.now();
       entry.fails = 0;
       entry.backoff = BASE_BACKOFF_MS;
 
-      // audit (non-blocking)
       Promise.resolve(auditLog({
         kind: "mikrotik.exec",
         tenantId: entry.tenantId,
@@ -304,7 +319,8 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
     } catch (err) {
       lastErr = err;
       const errorMsg = String(err?.message || err);
-      // auth errors -> stop and open bigger circuit
+
+      // auth errors -> escalate quickly
       if (/username|password|authentication|login failure|invalid user/i.test(errorMsg)) {
         entry.lastErr = err;
         entry.connected = false;
@@ -320,10 +336,7 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
       try {
         entry.lastErr = err;
         entry.connected = false;
-        if (entry.client && typeof entry.client.close === 'function') {
-          try { entry.client.close().catch(()=>{}); } catch(e){}
-        }
-        entry.client = null;
+        safeCloseClient(entry);
         entry.fails += 1;
         entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
       } catch (e) {}
@@ -356,26 +369,18 @@ async function sendCommand(path, words = [], options = {}) {
   };
 
   const entry = await getClientEntry(tenantId, selector);
-
-  // command normalized
   const cmd = String(path || "").trim();
   const args = Array.isArray(words) ? words : [];
 
-  // if circuit is open, fail fast
   if (entry.circuitUntil > Date.now()) {
     const e = new Error(`Circuit open until ${new Date(entry.circuitUntil).toISOString()}`);
     await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(e.message), at: new Date().toISOString() })).catch(()=>{});
     throw e;
   }
 
-  // enqueue and return a promise that resolves when processed
   return new Promise((resolve, reject) => {
     entry.cmdQueue.push({ cmd, args, options, resolve, reject });
-    // kick processor
-    _processEntryQueue(entry).catch(err => {
-      // global fallback logging
-      console.error('Queue processor error', err);
-    });
+    _processEntryQueue(entry).catch(err => console.error('Queue processor error', err));
   });
 }
 
@@ -388,9 +393,9 @@ async function healthTick() {
       if (!entry.connected || !entry.client) return;
       const ms0 = Date.now();
       try {
-        const raw = await withTimeout(entry.client.write("/system/identity/print"), DEFAULT_TIMEOUT_MS, "Health timeout");
+        // use a short timeout for health probes
+        const raw = await withTimeout(entry.client.write("/system/identity/print"), Math.min(DEFAULT_TIMEOUT_MS, 8_000), "Health timeout");
         const result = normalizeResult(raw);
-        // treat empty as ok for health check (router answered)
         entry.lastOkAt = Date.now();
         entry.fails = 0;
         entry.backoff = BASE_BACKOFF_MS;
@@ -406,6 +411,7 @@ async function healthTick() {
       entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
       if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
       console.warn(`⚠️ MT lost ${entry.cfg.host}: ${String(err?.message || err)}`);
+      safeCloseClient(entry);
     }
   }));
 }
@@ -413,7 +419,6 @@ setInterval(healthTick, HEALTH_INTERVAL_MS).unref();
 
 // --------- Schedules (safe periodic polls) ---------
 function schedulePoll(tenantId, selector, name, path, words = [], intervalMs = 5000, staggerMs = 0) {
-  // creates/starts a schedule job on the entry
   return (async () => {
     const entry = await getClientEntry(tenantId, selector);
     if (entry.schedules.has(name)) throw new Error(`Schedule ${name} exists`);
@@ -475,10 +480,9 @@ async function shutdown() {
             if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
           }
         } catch (e) {}
-        closers.push(entry.client.close().catch(() => {}));
+        try { closers.push(entry.client.close().catch(() => {})); } catch(e){}
       } catch {}
     }
-    // clear schedules
     for (const h of entry.schedules.values()) try { clearTimeout(h); } catch(e){}
     entry.connected = false;
     entry.client = null;
@@ -489,7 +493,6 @@ async function shutdown() {
 process.on("SIGINT", () => shutdown().finally(()=> process.exit(0)));
 process.on("SIGTERM", () => shutdown().finally(()=> process.exit(0)));
 
-// Global safety handlers (same approach as before)
 const recentExceptions = [];
 const EXCEPTION_WINDOW_MS = 60_000;
 const EXCEPTION_THRESHOLD = 20;
@@ -514,14 +517,7 @@ process.on('uncaughtException', (err) => {
         try {
           entry.connected = false;
           entry.lastErr = err;
-          if (entry.client && typeof entry.client.close === 'function') {
-            try {
-              if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
-              if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
-            } catch (e){}
-            entry.client.close().catch(()=>{});
-          }
-          entry.client = null;
+          safeCloseClient(entry);
         } catch (e){}
       }
       Promise.resolve(auditLog({ kind: 'uncaught', error: String(msg), at: new Date().toISOString() })).catch(()=>{});
@@ -541,14 +537,7 @@ process.on('unhandledRejection', (reason) => {
         try {
           entry.connected = false;
           entry.lastErr = reason;
-          if (entry.client && typeof entry.client.close === 'function') {
-            try {
-              if (entry.client.__mbm_on_error) entry.client.removeListener('error', entry.client.__mbm_on_error);
-              if (entry.client.__mbm_on_close) entry.client.removeListener('close', entry.client.__mbm_on_close);
-            } catch (e){}
-            entry.client.close().catch(()=>{});
-          }
-          entry.client = null;
+          safeCloseClient(entry);
         } catch (e){}
       }
       Promise.resolve(auditLog({ kind: 'unhandledRejection', error: String(msg), at: new Date().toISOString() })).catch(()=>{});

@@ -15,14 +15,20 @@ const router = express.Router();
 
 // ----- small helper (copied from your other file) -----
 function pickServerId(req) {
-  return (
-    req.headers['x-isp-server'] ||
-    req.headers['x-router-id'] ||
-    req.query?.serverId ||
-    req.query?.server ||
-    null
-  );
+  // prefer explicit header but handle case-insensitive headers & typed values
+  const headers = req.headers || {};
+  const get = (k) => (headers[k] ?? headers[k.toLowerCase()] ?? null);
+  const raw = get('x-isp-server') || get('x-router-id') || req.query?.serverId || req.query?.server || null;
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // basic whitelist: disallow characters that look like shell/URI injection
+  if (/[^\w\-\_\.]/.test(s)) {
+    // keep it simple: allow only typical id chars
+    return null;
+  }
+  return s;
 }
+
 
 // ----- Config -----
 const ADDRESS_LIST = "mgmt-allow";
@@ -62,26 +68,37 @@ const DeleteBody = z.object({
 });
 
 // Strict IP(/CIDR) validation
-function normalizeCidr(ip) {
+// replace normalizeCidr with this (supports optional mask requirement)
+function normalizeCidr(ip, opts = { requireHostMask: 32 /* for v4, 128 for v6, or null to allow any */ }) {
   const s = String(ip).trim();
+  const requireHostMask = opts.requireHostMask ?? 32;
+  // IPv4
   const v4 = s.match(/^(\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/);
   if (v4) {
     const [host, mask] = s.split("/");
     const octets = host.split(".").map(Number);
-    if (octets.some((o) => o < 0 || o > 255)) throw new Error("Invalid IPv4");
-    const cidr = Number(mask ?? 32);
-    if (cidr !== 32) throw new Error("IPv4 must be /32");
-    return { cidr: `${host}/32`, family: "v4" };
+    if (octets.some((o) => Number.isNaN(o) || o < 0 || o > 255)) throw new Error("Invalid IPv4");
+    const cidrNum = Number(mask ?? 32);
+    if (requireHostMask !== null && cidrNum !== Number(requireHostMask)) {
+      throw new Error(`IPv4 must be /${requireHostMask}`);
+    }
+    if (cidrNum < 0 || cidrNum > 32) throw new Error("Invalid IPv4 mask");
+    return { cidr: `${host}/${cidrNum}`, family: "v4" };
   }
+  // IPv6 (basic)
   const v6 = s.match(/^[0-9a-f:]+(?:\/\d{1,3})?$/i);
   if (v6) {
     const [host, mask] = s.split("/");
-    const cidr = Number(mask ?? 128);
-    if (cidr !== 128) throw new Error("IPv6 must be /128");
-    return { cidr: `${host}/128`, family: "v6" };
+    const cidrNum = Number(mask ?? 128);
+    if (requireHostMask !== null && cidrNum !== Number(requireHostMask)) {
+      throw new Error(`IPv6 must be /${requireHostMask}`);
+    }
+    if (cidrNum < 0 || cidrNum > 128) throw new Error("Invalid IPv6 mask");
+    return { cidr: `${host}/${cidrNum}`, family: "v6" };
   }
   throw new Error("Invalid IP address");
 }
+
 
 // ----- Helpers (RouterOS) -----
 const qs = (k, v) => `?${k}=${v}`;

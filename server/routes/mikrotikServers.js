@@ -27,14 +27,16 @@ const UpdateBody = CreateBody.partial();
 
 // helper: pick server id override from headers/query
 function pickServerId(req) {
-  return (
-    req.headers['x-isp-server'] ||
-    req.headers['x-router-id'] ||
-    req.query?.serverId ||
-    req.query?.server ||
-    null
-  );
+  const headers = req.headers || {};
+  const get = (k) => (headers[k] ?? headers[k.toLowerCase()] ?? null);
+  const raw = get('x-isp-server') || get('x-router-id') || req.query?.serverId || req.query?.server || null;
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // allow typical id characters only (alphanumeric, dash, underscore, dot)
+  if (!/^[\w\-.]+$/.test(s)) return null;
+  return s;
 }
+
 
 // GET / - list servers for this tenant
 router.get('/', async (req, res) => {
@@ -194,14 +196,26 @@ router.post('/:id/test', async (req, res) => {
     const id = String(req.params.id || '');
     if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
 
-    // allow header/query override of server selector, fallback to id
-    const serverId = pickServerId(req) || id;
+    // allow header/query override but validate it belongs to tenant
+    const override = pickServerId(req);
+    let serverDoc = null;
+    if (override) {
+      serverDoc = await MikroTikConnection.findOne({ _id: override, tenant: tenantId }).lean();
+      if (!serverDoc) {
+        // header provided a server that doesn't belong to tenant — reject
+        return res.status(403).json({ ok: false, error: 'serverId override invalid or not found' });
+      }
+    } else {
+      serverDoc = await MikroTikConnection.findOne({ _id: id, tenant: tenantId }).lean();
+      if (!serverDoc) return res.status(404).json({ ok: false, error: 'Server not found' });
+    }
 
-    const out = await sendCommand('/system/identity/print', [], { tenantId, serverId, timeoutMs: 10000 });
+    const serverIdToUse = String(serverDoc._id);
+    const out = await sendCommand('/system/identity/print', [], { tenantId, serverId: serverIdToUse, timeoutMs: 10000 });
     const identity = Array.isArray(out) && out[0]?.name || null;
 
     try {
-      await MikroTikConnection.updateOne({ _id: id, tenant: tenantId }, { $set: { lastVerifiedAt: new Date() } });
+      await MikroTikConnection.updateOne({ _id: serverIdToUse, tenant: tenantId }, { $set: { lastVerifiedAt: new Date() } });
     } catch (uErr) {
       // ignore update errors
     }
