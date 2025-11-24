@@ -1,11 +1,16 @@
 // utils/mikrotikConnectionManager.js
-// Multi-tenant, pooled MikroTik connection manager (revised fixes)
-// Notes: addresses connect/command timeouts, DNS caching, health-check robustness,
-// listener cleanup, backoff/circuit tuning, and safer client close handling.
+// Multi-tenant, pooled MikroTik connection manager (patched)
+// - queue cap + early reject
+// - connect promise to avoid busy-wait races
+// - idle eviction for pool entries
+// - stronger redactObj for logging
+// - bounded concurrent health probes
+// - removed circuit-breaker (no circuitUntil use)
+// - touch semantics, forceReconnect helper
+// - minimal API surface unchanged
 
 const { RouterOSAPI } = require("routeros-client");
 const dns = require("dns").promises;
-const crypto = require("node:crypto");
 
 // --------- Configurable knobs (tweak to taste) ---------
 const DEFAULT_TIMEOUT_MS = 120_000;   // command timeout (was 12s)
@@ -13,13 +18,18 @@ const CONNECT_TIMEOUT_MS = 120_000;   // connect handshake timeout (was 15s)
 const HEALTH_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
-const CIRCUIT_OPEN_MS = 20_000;
 const MAX_CONSECUTIVE_FAILS = 3;
 const SEND_RETRY_COUNT = 2;          // retries
 const SEND_RETRY_DELAY_MS = 600;
 const PER_COMMAND_GAP_MS = 300;      // per-command spacing (ms)
 
 const SECRET_KEYS = ["password", "pass", "secret", "key", "token"];
+
+// new knobs
+const MAX_QUEUE_LENGTH = 200;
+const ENTRY_IDLE_MS = 10 * 60_000; // 10 minutes idle eviction
+const POOL_EVICT_INTERVAL_MS = 60_000;
+const HEALTH_CONCURRENCY = 10; // bound concurrent health probes
 
 // --------- Internal state & hooks ---------
 const pool = new Map();
@@ -30,20 +40,35 @@ let loadTenantRouterConfig = async (_tenantId, _selector) => {
 let auditLog = async (_entry) => {};
 
 function setConfigLoader(fn) { loadTenantRouterConfig = fn; }
-function setAuditLogger(fn) { auditLog = fn || (() => {}); }
+function setAuditLogger(fn) { auditLog = fn || (async()=>{}); }
 
 // --------- Helpers ---------
 function k(tenantId, host, port) { return `${tenantId}:${host}:${port || 8728}`; }
-function redact(str) {
-  let s = String(str ?? "");
-  for (const k of SECRET_KEYS) {
-    const unquoted = new RegExp(`(${k}\\s*=\\s*)[^\\s\"]+`, "ig");
-    const quoted = new RegExp(`(${k}\\s*=\\s*\")[^\"]*(\")`, "ig");
-    s = s.replace(unquoted, "$1******").replace(quoted, "$1******$2");
+
+function redactObj(obj) {
+  if (obj == null) return obj;
+  if (typeof obj !== 'object') return obj;
+  const out = Array.isArray(obj) ? [] : {};
+  for (const [kk, vv] of Object.entries(obj)) {
+    const keyLower = String(kk).toLowerCase();
+    if (SECRET_KEYS.includes(keyLower)) {
+      out[kk] = '******';
+    } else if (vv && typeof vv === 'object') {
+      out[kk] = redactObj(vv);
+    } else if (typeof vv === 'string') {
+      // also scrub tokens in URLs or querystrings
+      try {
+        out[kk] = vv.replace(/(token|password|pass|secret|key)=([^&\s"]+)/ig, "$1=******");
+      } catch (e) { out[kk] = '******'; }
+    } else {
+      out[kk] = vv;
+    }
   }
-  return s;
+  return out;
 }
+
 function delay(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
 function withTimeout(promise, ms, msg = "Timeout") {
   let to;
   const t = new Promise((_, rej) => (to = setTimeout(()=> rej(new Error(msg)), ms)));
@@ -83,15 +108,12 @@ async function resolveHostIfNeeded(entry) {
   const now = Date.now();
   if (entry._dns && entry._dns.ip && entry._dns.expiresAt > now) return entry._dns.ip;
   try {
-    // explicit lookup to get an IP (don't rely on system blocking resolve)
     const r = await dns.lookup(host);
-    // use small TTL to avoid stale DNS if infra changes
-    const ttl = Math.max(30_000, entry._dns?.ttlMs || 60_000);
-    entry._dns = { ip: r.address, expiresAt: now + ttl, ttlMs: ttl };
+    const ttl = entry._dns?.ttlMs ?? 60_000;
+    entry._dns = { ip: r.address, expiresAt: now + Math.max(30_000, ttl), ttlMs: Math.max(30_000, ttl) };
     return r.address;
   } catch (err) {
     console.warn(`DNS lookup failed for ${host}: ${err.message}`);
-    // fallback: return host and let connect attempt fail with readable error
     return host;
   }
 }
@@ -117,131 +139,119 @@ async function getClientEntry(tenantId, selector) {
       client: null,
       connected: false,
       connecting: false,
+      _connectPromise: null,
       lastErr: null,
       fails: 0,
       backoff: BASE_BACKOFF_MS,
-      circuitUntil: 0,
       lastOkAt: 0,
       cmdQueue: [],
       queueRunning: false,
       _dns: null,
       schedules: new Map(),
+      _lastTouched: Date.now(),
     });
   }
   return pool.get(key);
 }
 
-// --------- Connect with backoff/circuit breaker (uses resolved IP) ---------
+function touchEntry(entry){ entry._lastTouched = Date.now(); }
+
+// --------- Connect with backoff (uses resolved IP) using a connect promise ---------
 async function ensureConnected(entry) {
-  const now = Date.now();
   if (entry.connected && entry.client) return entry.client;
 
-  if (entry.circuitUntil > now) {
-    throw new Error(`Circuit open until ${new Date(entry.circuitUntil).toISOString()}`);
-  }
-
-  if (entry.connecting) {
-    await waitForConnect(entry);
+  // if a connect is already in progress, await it
+  if (entry._connectPromise) {
+    try {
+      await entry._connectPromise;
+    } catch (e) {
+      // swallow; will proceed to start a new attempt below if needed
+    }
     if (entry.connected && entry.client) return entry.client;
   }
 
+  // create a new connect promise
   entry.connecting = true;
-  try {
-    const resolvedHost = await resolveHostIfNeeded(entry);
-
-    // Use a per-connection timeout for the handshake
-    const client = new RouterOSAPI({
-      host: resolvedHost,
-      user: entry.cfg.user,
-      password: entry.cfg.password,
-      port: entry.cfg.port,
-      timeout: CONNECT_TIMEOUT_MS,
-      tls: entry.cfg.tls,
-    });
-
-    // note: routeros-client.connect() returns a promise that resolves when handshake done
-    await withTimeout(client.connect(), CONNECT_TIMEOUT_MS, "Connect timeout");
-
-    // if we reached here, client is connected
-    entry.client = client;
-
-    // attach listeners bound to entry so we can properly cleanup / replace
+  entry._connectPromise = (async () => {
     try {
-      if (typeof client.on === 'function') {
-        const onError = (err) => {
-          try {
-            entry.lastErr = err;
-            entry.connected = false;
-            entry.fails += 1;
-            entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
-            safeCloseClient(entry);
-            console.warn(`MikroTik client error ${entry.cfg.host}: ${String(err?.message || err)}`);
-          } catch (e) {}
-        };
-        const onClose = () => {
-          try {
-            entry.connected = false;
-            // keep client null so next ensureConnected will re-create
-            if (entry.client === client) entry.client = null;
-            entry.lastErr = new Error('client-closed');
-            console.warn(`MikroTik client closed for ${entry.cfg.host}`);
-          } catch (e) {}
-        };
+      const resolvedHost = await resolveHostIfNeeded(entry);
 
-        // remove previous bound listeners if present (some older client objects reuse handlers)
-        if (client.__mbm_on_error) try { client.removeListener('error', client.__mbm_on_error); } catch(e){}
-        if (client.__mbm_on_close) try { client.removeListener('close', client.__mbm_on_close); } catch(e){}
-        client.__mbm_on_error = onError;
-        client.__mbm_on_close = onClose;
-        client.on('error', onError);
-        client.on('close', onClose);
+      const client = new RouterOSAPI({
+        host: resolvedHost,
+        user: entry.cfg.user,
+        password: entry.cfg.password,
+        port: entry.cfg.port,
+        timeout: CONNECT_TIMEOUT_MS,
+        tls: entry.cfg.tls,
+      });
+
+      await withTimeout(client.connect(), CONNECT_TIMEOUT_MS, "Connect timeout");
+
+      // attach listeners
+      try {
+        if (typeof client.on === 'function') {
+          const onError = (err) => {
+            try {
+              entry.lastErr = err;
+              entry.connected = false;
+              entry.fails += 1;
+              entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
+              safeCloseClient(entry);
+              console.warn(`MikroTik client error ${entry.cfg.host}: ${String(err?.message || err)}`);
+            } catch (e) {}
+          };
+          const onClose = () => {
+            try {
+              entry.connected = false;
+              if (entry.client === client) entry.client = null;
+              entry.lastErr = new Error('client-closed');
+              console.warn(`MikroTik client closed for ${entry.cfg.host}`);
+            } catch (e) {}
+          };
+
+          if (client.__mbm_on_error) try { client.removeListener('error', client.__mbm_on_error); } catch(e){}
+          if (client.__mbm_on_close) try { client.removeListener('close', client.__mbm_on_close); } catch(e){}
+          client.__mbm_on_error = onError;
+          client.__mbm_on_close = onClose;
+          client.on('error', onError);
+          client.on('close', onClose);
+        }
+      } catch (e) {}
+
+      entry.client = client;
+      entry.connected = true;
+      entry.fails = 0;
+      entry.backoff = BASE_BACKOFF_MS;
+      entry.lastErr = null;
+
+      // Do a lightweight health check (don't fail the connect if it times out)
+      try {
+        await withTimeout(client.write("/system/identity/print"), Math.min(DEFAULT_TIMEOUT_MS, 10_000), "Health check timeout");
+        entry.lastOkAt = Date.now();
+      } catch (healthErr) {
+        console.warn(`Health probe slow/failed for ${entry.cfg.host}: ${String(healthErr.message || healthErr)}`);
       }
-    } catch (e) { /* ignore listener attach errors */ }
 
-    entry.connected = true;
-    entry.fails = 0;
-    entry.backoff = BASE_BACKOFF_MS;
-    entry.lastErr = null;
+      touchEntry(entry);
+      return client;
+    } catch (err) {
+      // ensure client is closed and state updated
+      try { entry.connected = false; } catch(e){}
+      try { if (entry.client && typeof entry.client.close === 'function') entry.client.close().catch(()=>{}); } catch(e){}
+      entry.client = null;
 
-    // Perform a lightweight health check that tolerates empty replies.
-    try {
-      await withTimeout(client.write("/system/identity/print"), Math.min(DEFAULT_TIMEOUT_MS, 10_000), "Health check timeout");
-      entry.lastOkAt = Date.now();
-    } catch (healthErr) {
-      // don't fail connect just because health read was slow; but record it
-      console.warn(`Health probe slow/failed for ${entry.cfg.host}: ${String(healthErr.message || healthErr)}`);
+      entry.lastErr = err;
+      entry.fails = (entry.fails || 0) + 1;
+      entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
+      throw err;
+    } finally {
+      entry.connecting = false;
+      // clear promise only after a small delay to prevent thundering herd
+      setTimeout(() => { if (entry._connectPromise) entry._connectPromise = null; }, 50);
     }
+  })();
 
-    return client;
-  } catch (err) {
-    // connection failure: close any client and bump failure counters
-    try { entry.connected = false; } catch(e){}
-    try { if (entry.client && typeof entry.client.close === 'function') entry.client.close().catch(()=>{}); } catch(e){}
-    entry.client = null;
-
-    entry.lastErr = err;
-    entry.fails += 1;
-    entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
-    if (entry.fails >= MAX_CONSECUTIVE_FAILS) {
-      entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
-      console.warn(`Circuit opened for ${entry.cfg.host} until ${new Date(entry.circuitUntil).toISOString()}`);
-    }
-    throw new Error(`MikroTikConnectionError: ${err.message}`);
-  } finally {
-    entry.connecting = false;
-  }
-}
-
-function waitForConnect(entry) {
-  return new Promise((resolve) => {
-    const t0 = Date.now();
-    const tick = () => {
-      if (!entry.connecting) return resolve();
-      if (Date.now() - t0 > CONNECT_TIMEOUT_MS + 1000) return resolve();
-      setTimeout(tick, 50);
-    };
-    tick();
-  });
+  return entry._connectPromise;
 }
 
 // safe close helper (best-effort)
@@ -249,19 +259,18 @@ function safeCloseClient(entry) {
   try {
     const c = entry.client;
     if (!c) return;
-    // detach known handlers
     try {
       if (typeof c.removeListener === 'function') {
         if (c.__mbm_on_error) c.removeListener('error', c.__mbm_on_error);
         if (c.__mbm_on_close) c.removeListener('close', c.__mbm_on_close);
       }
     } catch (e) {}
-    // try close
     try {
       const maybe = c.close();
       if (maybe && typeof maybe.then === 'function') maybe.catch(()=>{});
     } catch (e) {}
     entry.client = null;
+    entry.connected = false;
   } catch (e) {}
 }
 
@@ -269,19 +278,22 @@ function safeCloseClient(entry) {
 async function _processEntryQueue(entry) {
   if (entry.queueRunning) return;
   entry.queueRunning = true;
-  while (entry.cmdQueue.length > 0) {
-    const item = entry.cmdQueue.shift();
-    const { cmd, args, options, resolve, reject } = item;
-    try {
-      if (!entry.connected && entry.fails > 0) await delay(entry.backoff);
-      const res = await _sendDirect(entry, cmd, args, options);
-      resolve(res);
-    } catch (err) {
-      reject(err);
+  try {
+    while (entry.cmdQueue.length > 0) {
+      const item = entry.cmdQueue.shift();
+      const { cmd, args, options, resolve, reject } = item;
+      try {
+        if (!entry.connected && entry.fails > 0) await delay(entry.backoff);
+        const res = await _sendDirect(entry, cmd, args, options);
+        resolve(res);
+      } catch (err) {
+        reject(err);
+      }
+      await delay(PER_COMMAND_GAP_MS);
     }
-    await delay(PER_COMMAND_GAP_MS);
+  } finally {
+    entry.queueRunning = false;
   }
-  entry.queueRunning = false;
 }
 
 // Internal direct send with retries + malformed reply handling
@@ -293,7 +305,6 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
       const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 70_000));
       const startedAt = Date.now();
 
-      // routeros-client: client.write(cmd, args)
       const raw = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");
       const result = normalizeResult(raw);
 
@@ -301,6 +312,7 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
       entry.lastOkAt = Date.now();
       entry.fails = 0;
       entry.backoff = BASE_BACKOFF_MS;
+      touchEntry(entry);
 
       Promise.resolve(auditLog({
         kind: "mikrotik.exec",
@@ -320,13 +332,12 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
       lastErr = err;
       const errorMsg = String(err?.message || err);
 
-      // auth errors -> escalate quickly
+      // auth errors -> escalate quickly (no circuit)
       if (/username|password|authentication|login failure|invalid user/i.test(errorMsg)) {
         entry.lastErr = err;
         entry.connected = false;
-        entry.fails += 1;
-        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-        entry.circuitUntil = Date.now() + (CIRCUIT_OPEN_MS * 6);
+        entry.fails = (entry.fails || 0) + 1;
+        entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
         console.error(`❌ MT auth err ${entry.cfg.host} ${cmd}: ${errorMsg}`);
         await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId: entry.tenantId, host: entry.cfg.host, command: cmd, ok: false, error: errorMsg, at: new Date().toISOString() })).catch(()=>{});
         throw err;
@@ -337,8 +348,8 @@ async function _sendDirect(entry, cmd, args = [], options = {}) {
         entry.lastErr = err;
         entry.connected = false;
         safeCloseClient(entry);
-        entry.fails += 1;
-        entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
+        entry.fails = (entry.fails || 0) + 1;
+        entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
       } catch (e) {}
 
       const ms = errorMsg.includes('Timeout') ? 'timeout' : 'err';
@@ -372,48 +383,69 @@ async function sendCommand(path, words = [], options = {}) {
   const cmd = String(path || "").trim();
   const args = Array.isArray(words) ? words : [];
 
-  if (entry.circuitUntil > Date.now()) {
-    const e = new Error(`Circuit open until ${new Date(entry.circuitUntil).toISOString()}`);
-    await Promise.resolve(auditLog({ kind: 'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok: false, error: String(e.message), at: new Date().toISOString() })).catch(()=>{});
+  // queue cap check
+  if (entry.cmdQueue.length >= MAX_QUEUE_LENGTH) {
+    const e = new Error('Router busy — command queue full');
+    e.code = 'QUEUE_FULL';
+    await Promise.resolve(auditLog({ kind:'mikrotik.exec', tenantId, host: entry.cfg.host, command: cmd, ok:false, error: e.message, at: new Date().toISOString() })).catch(()=>{});
     throw e;
   }
 
+  touchEntry(entry);
+
   return new Promise((resolve, reject) => {
     entry.cmdQueue.push({ cmd, args, options, resolve, reject });
-    _processEntryQueue(entry).catch(err => console.error('Queue processor error', err));
+    _processEntryQueue(entry).catch(err => {
+      console.error('Queue processor error', err);
+    });
   });
 }
 
-// --------- Health tick (per pooled client) ---------
+// --------- Health tick (bounded concurrency) ---------
+async function _limitedMap(list, concurrency, fn) {
+  const out = [];
+  let i = 0;
+  const workers = new Array(Math.min(concurrency, list.length)).fill(0).map(async () => {
+    while (i < list.length) {
+      const idx = i++;
+      try {
+        out[idx] = await fn(list[idx], idx);
+      } catch (e) {
+        out[idx] = e;
+      }
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 async function healthTick() {
-  const now = Date.now();
-  await Promise.all(Array.from(pool.values()).map(async (entry) => {
-    if (entry.circuitUntil > now) return;
+  const entries = Array.from(pool.values()).filter(e => e.connected && e.client);
+  if (!entries.length) return;
+  await _limitedMap(entries, HEALTH_CONCURRENCY, async (entry) => {
     try {
-      if (!entry.connected || !entry.client) return;
       const ms0 = Date.now();
       try {
-        // use a short timeout for health probes
         const raw = await withTimeout(entry.client.write("/system/identity/print"), Math.min(DEFAULT_TIMEOUT_MS, 8_000), "Health timeout");
-        const result = normalizeResult(raw);
+        normalizeResult(raw);
         entry.lastOkAt = Date.now();
         entry.fails = 0;
         entry.backoff = BASE_BACKOFF_MS;
         const dur = Date.now() - ms0;
         if (dur > 500) console.log(`💓 MT health ${entry.cfg.host} ${dur}ms`);
+        touchEntry(entry);
       } catch (err) {
         throw err;
       }
     } catch (err) {
       entry.connected = false;
       entry.lastErr = err;
-      entry.fails += 1;
-      entry.backoff = Math.min(entry.backoff * 2, MAX_BACKOFF_MS);
-      if (entry.fails >= MAX_CONSECUTIVE_FAILS) entry.circuitUntil = Date.now() + CIRCUIT_OPEN_MS;
+      entry.fails = (entry.fails || 0) + 1;
+      entry.backoff = Math.min((entry.backoff || BASE_BACKOFF_MS) * 2, MAX_BACKOFF_MS);
       console.warn(`⚠️ MT lost ${entry.cfg.host}: ${String(err?.message || err)}`);
       safeCloseClient(entry);
     }
-  }));
+  });
 }
 setInterval(healthTick, HEALTH_INTERVAL_MS).unref();
 
@@ -459,13 +491,44 @@ function getStatus() {
       lastOkAt: entry.lastOkAt,
       fails: entry.fails,
       backoff: entry.backoff,
-      circuitUntil: entry.circuitUntil,
       lastErr: entry.lastErr ? String(entry.lastErr.message || entry.lastErr) : null,
       queueLength: entry.cmdQueue.length,
       schedules: Array.from(entry.schedules.keys()),
+      lastTouched: entry._lastTouched || null,
     });
   }
   return arr;
+}
+
+// --------- Idle eviction ---------
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, entry] of pool.entries()) {
+    if (!entry.queueRunning && entry.cmdQueue.length === 0 && entry.schedules.size === 0) {
+      const lastOk = entry.lastOkAt || entry._lastTouched || 0;
+      if (now - lastOk > ENTRY_IDLE_MS) {
+        try {
+          safeCloseClient(entry);
+        } catch (e) {}
+        pool.delete(k);
+        console.log('Evicted idle router', entry.cfg.host);
+      }
+    }
+  }
+}, POOL_EVICT_INTERVAL_MS).unref();
+
+// --------- Force reconnect helper for ops/tests ---------
+async function forceReconnect(tenantId, selector) {
+  const entry = await getClientEntry(tenantId, selector);
+  entry.fails = 0;
+  entry.backoff = BASE_BACKOFF_MS;
+  entry.lastErr = null;
+  try {
+    safeCloseClient(entry);
+  } catch (e) {}
+  // start a new connect asynchronously
+  entry._connectPromise = null;
+  return ensureConnected(entry);
 }
 
 // --------- Graceful shutdown ---------
@@ -555,4 +618,5 @@ module.exports = {
   setConfigLoader,
   setAuditLogger,
   schedulePoll,
+  forceReconnect,
 };
