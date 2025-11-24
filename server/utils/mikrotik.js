@@ -4,7 +4,7 @@
 // Tenant-scoped MikroTik helpers built on the pooled connection manager.
 // Make sure your routes pass req.tenantId into these helpers.
 
-const { sendCommand, getStatus } = require("./mikrotikConnectionManager"); // ← correct path
+const { sendCommand, getStatus, forceReconnect } = require("./mikrotikConnectionManager"); // ← updated to include forceReconnect
 
 // RouterOS word helpers
 const qs = (k, v) => `?${k}=${v}`;
@@ -30,7 +30,6 @@ function normalizeRows(res) {
   // routeros-client often returns array of objects on print; keep that
   if (!res) return [];
   if (Array.isArray(res)) return res;
-  // sometimes library returns a single object or string - try to wrap
   if (typeof res === "object") return [res];
   return [];
 }
@@ -38,8 +37,9 @@ function normalizeRows(res) {
 /**
  * safeSend - wrapper around sendCommand that:
  *  - retries on transient parse/network errors like '!empty' or timeouts
+ *  - retries when pool queue is full (QUEUE_FULL) with backoff
  *  - treats auth errors as non-retriable
- *  - returns normalized rows or throws
+ *  - returns raw sendCommand result (caller normalizes) or throws
  */
 async function safeSend(path, words = [], options = {}) {
   const retries = options.retries ?? DEFAULT_SEND_RETRIES;
@@ -51,29 +51,51 @@ async function safeSend(path, words = [], options = {}) {
     attempt++;
     try {
       const res = await sendCommand(path, words, options);
-      // catch odd textual replies from underlying lib
-      const raw = (typeof res === "string") ? res : JSON.stringify(res || "");
-      if (TRANSIENT_REPLY_RE.test(raw)) {
-        throw new Error(`malformed_reply:${raw.slice(0, 200)}`);
+
+      // Evaluate raw reply for transient textual markers.
+      // Avoid JSON.stringify on large objects — inspect string/primitive or join array->string.
+      let rawForTest = "";
+      if (typeof res === "string") rawForTest = res;
+      else if (Array.isArray(res)) rawForTest = res.map(r => (typeof r === 'string' ? r : JSON.stringify(r))).join(' ');
+      else if (res && typeof res === 'object') rawForTest = Object.values(res).map(v => (typeof v === 'string' ? v : '')).join(' ');
+      else rawForTest = String(res || "");
+
+      if (TRANSIENT_REPLY_RE.test(rawForTest)) {
+        // treat as transient malformed reply
+        const e = new Error(`malformed_reply:${(rawForTest || "").slice(0, 200)}`);
+        e.code = 'MALFORMED_REPLY';
+        throw e;
       }
+
       return res;
     } catch (err) {
       lastErr = err;
       const msg = String(err && (err.message || err) || "");
-      // auth errors -> rethrow immediately (non-transient)
+
+      // Auth errors -> rethrow immediately (caller may need to refresh credentials)
       if (AUTH_ERR_RE.test(msg)) {
-        // bubble auth error quickly so callers may update credentials
         console.error(`mikrotik auth error: ${msg}`);
+        // Optionally trigger forceReconnect for the tenant/server if caller requests it elsewhere.
         throw err;
       }
-      // If last attempt, rethrow
+
+      // Queue full from connection manager -> retry with backoff (this is transient)
+      if (err && err.code === 'QUEUE_FULL' || /queue full|command queue full|Router busy/i.test(msg)) {
+        if (attempt > retries) break;
+        const backoff = startBackoff * Math.pow(2, attempt - 1);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+
+      // Other transient parser/network errors (malformed_reply, Timeout etc) -> retry
       if (attempt > retries) break;
-      // else small backoff
+
       const backoff = startBackoff * Math.pow(2, attempt - 1);
       await new Promise((r) => setTimeout(r, backoff));
+      continue;
     }
   }
-  // augment error
+
   const e = new Error(`safeSend failed: ${String(lastErr?.message || lastErr || 'unknown')}`);
   e.cause = lastErr;
   throw e;
@@ -96,11 +118,8 @@ async function ensureHotspotUser(tenantId, opts) {
   try {
     found = await safeSend("/ip/hotspot/user/print", [qs("name", username)], { tenantId, timeoutMs: 10000 });
   } catch (err) {
-    // transient parser issues may be treated as "not found" depending on caller semantics
-    // rethrow auth errors, otherwise surface as operational error
     const msg = String(err && (err.message || err) || "");
-    if (/auth/i.test(msg)) throw err;
-    // log and continue with empty result
+    if (AUTH_ERR_RE.test(msg)) throw err; // bubble auth errors
     console.warn(`ensureHotspotUser: lookup transient error for ${username}: ${msg}`);
     found = [];
   }
@@ -138,7 +157,6 @@ async function ensureHotspotUser(tenantId, opts) {
   let newId;
   if (Array.isArray(res) && res.length && extractId(res[0])) newId = extractId(res[0]);
   else if (res && extractId(res)) newId = extractId(res);
-  // fall back: some libs return string like "added id=XYZ" - ignore for now
   return { ok: true, updated: false, created: true, id: newId };
 }
 
@@ -153,11 +171,9 @@ async function getHotspotActive(tenantId) {
     return { ok: true, users, count: users.length };
   } catch (err) {
     const msg = String(err && (err.message || err) || "");
-    // If parser returned !empty treat as empty set (fail-open)
     if (TRANSIENT_REPLY_RE.test(msg)) {
       return { ok: true, users: [], count: 0 };
     }
-    // rethrow otherwise
     throw err;
   }
 }
@@ -179,21 +195,23 @@ async function getPPPoEActive(tenantId) {
   for (let page = 0; page < maxPages; page++) {
     try {
       const args = [`=limit=${bundleSize}`, `=offset=${offset}`];
-      const res = await safeSend("/ppp/active/print", args, opts).catch((e) => { throw e; });
+      const res = await safeSend("/ppp/active/print", args, opts);
       const rows = normalizeRows(res);
       if (!rows.length) break;
       all.push(...rows);
       if (rows.length < bundleSize) break; // last page
       offset += bundleSize;
-      // small pause to avoid hammering router (and let per-entry queue drain)
       if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     } catch (err) {
       const msg = String(err && (err.message || err) || '');
-      // treat well-known parser/no-data responses as end-of-data
       if (TRANSIENT_REPLY_RE.test(msg)) {
         break;
       }
-      // for other transient errors, log and break to avoid long loops
+      // If queue-full was the reason, let caller know partial and continue gracefully.
+      if (err && err.code === 'QUEUE_FULL') {
+        console.warn('getPPPoEActive: partial result due to router busy (QUEUE_FULL)');
+        break;
+      }
       console.warn('getPPPoEActive chunk error:', msg);
       break;
     }
@@ -215,4 +233,6 @@ module.exports = {
   getHotspotActive,
   getPPPoEActive,
   getMikrotikStatusForTenant,
+  // expose for admin tooling if needed:
+  forceReconnect,
 };
