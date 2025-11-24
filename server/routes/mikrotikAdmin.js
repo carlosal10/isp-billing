@@ -1,9 +1,10 @@
-// routes/mikrotikAdmin.js
 'use strict';
 
 // Admin/manage routes for MikroTik (whitelists, enforcement, bootstrap, static helpers)
-// Fixes: pass serverId through helper functions (avoid using `req` inside helpers),
-// ensure helper functions accept serverId where they call sendCommand.
+// Notes:
+// - pass serverId through helper functions (avoid using `req` inside helpers)
+// - validate serverId format early to avoid passing garbage to sendCommand
+// - normalizeCidr default allows any mask (but callers can require host-mask)
 
 const express = require("express");
 const rateLimit = require("express-rate-limit");
@@ -21,19 +22,21 @@ function pickServerId(req) {
   const raw = get('x-isp-server') || get('x-router-id') || req.query?.serverId || req.query?.server || null;
   if (!raw) return null;
   const s = String(raw).trim();
-  // basic whitelist: disallow characters that look like shell/URI injection
-  if (/[^\w\-\_\.]/.test(s)) {
-    // keep it simple: allow only typical id chars
-    return null;
-  }
+  if (!s) return null;
   return s;
 }
 
+function validateServerIdFormat(id) {
+  if (id == null) return true;
+  const s = String(id);
+  // allow alnum, dash, underscore, dot; disallow spaces and other punctuation
+  return /^[A-Za-z0-9._-]+$/.test(s);
+}
 
 // ----- Config -----
 const ADDRESS_LIST = "mgmt-allow";
 const MGMT_COMMENT = "mgmt-allow";
-const DEFAULT_PORTS = ["22", "8291", "8728"]; // + "8729" for api-ssl if used
+const DEFAULT_PORTS = ["22", "8291", "8728", "8729"]; // include api-ssl by default
 const STRICT_LIST = "ALLOWED-WAN";
 
 // ----- RBAC (FIXED precedence) -----
@@ -68,10 +71,10 @@ const DeleteBody = z.object({
 });
 
 // Strict IP(/CIDR) validation
-// replace normalizeCidr with this (supports optional mask requirement)
-function normalizeCidr(ip, opts = { requireHostMask: 32 /* for v4, 128 for v6, or null to allow any */ }) {
+// supports optional mask requirement via opts.requireHostMask (null to allow any)
+function normalizeCidr(ip, opts = { requireHostMask: null }) {
   const s = String(ip).trim();
-  const requireHostMask = opts.requireHostMask ?? 32;
+  const requireHostMask = opts.requireHostMask ?? null;
   // IPv4
   const v4 = s.match(/^(\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?$/);
   if (v4) {
@@ -98,7 +101,6 @@ function normalizeCidr(ip, opts = { requireHostMask: 32 /* for v4, 128 for v6, o
   }
   throw new Error("Invalid IP address");
 }
-
 
 // ----- Helpers (RouterOS) -----
 const qs = (k, v) => `?${k}=${v}`;
@@ -252,6 +254,7 @@ router.post("/whitelist", limiter, guardRole, async (req, res) => {
 
     const { ip, services, comment, ports, timeoutMs = 12000 } = parsed.data;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
 
     const { cidr, family } = normalizeCidr(ip);
 
@@ -262,9 +265,9 @@ router.post("/whitelist", limiter, guardRole, async (req, res) => {
     const ruleId = await ensureMgmtAllowRule(tenantId, chosenPorts, timeoutMs, serverId);
 
     const touchedServices = [];
-    for (const s of services || []) {
-      const sid = await ensureServiceAllowsIp(tenantId, s, cidr, timeoutMs, serverId).catch(() => null);
-      if (sid) touchedServices.push({ service: s, id: sid });
+    for (const sName of services || []) {
+      const sid = await ensureServiceAllowsIp(tenantId, sName, cidr, timeoutMs, serverId).catch(() => null);
+      if (sid) touchedServices.push({ service: sName, id: sid });
     }
 
     return res.json({
@@ -294,6 +297,8 @@ router.delete("/whitelist", limiter, guardRole, async (req, res) => {
     if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
 
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
+
     const { cidr } = normalizeCidr(parsed.data.ip);
     const removed = await removeAddressList(tenantId, cidr, parsed.data.timeoutMs || 12000, serverId);
 
@@ -313,6 +318,8 @@ router.get("/status", limiter, guardRole, async (req, res) => {
 
     const timeoutMs = 8000;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
+
     const rules = await findMgmtAllowRules(tenantId, timeoutMs, serverId);
     const ports = rules.map((r) => String(r?.["dst-port"] || "")).filter(Boolean);
 
@@ -414,6 +421,7 @@ router.post("/enforce/strict-internet", limiter, guardRole, async (req, res) => 
     const { allowInterfaces = [], disableDhcpOn = [] } = req.body || {};
     const timeoutMs = 12000;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
     if (!Array.isArray(allowInterfaces) || allowInterfaces.length === 0) {
       return res.status(400).json({ ok: false, error: "allowInterfaces required" });
     }
@@ -437,6 +445,7 @@ router.delete("/enforce/strict-internet", limiter, guardRole, async (req, res) =
     const tenantId = req.tenantId;
     const timeoutMs = 12000;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
     // Remove drop rule
     const rows = await sendCommand(
       "/ip/firewall/filter/print",
@@ -501,6 +510,8 @@ router.post("/bootstrap/static-ip", limiter, guardRole, async (req, res) => {
   const bridge = String(req.body?.bridge || "bridge1");
   const timeoutMs = 12000;
   const serverId = pickServerId(req);
+  if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
+
   try {
     const summary = { createdLists: [], ensuredRules: [], moved: [], dhcpDisabledOn: [] };
 
@@ -581,6 +592,7 @@ router.post("/static/allow", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     const add = await sendCommand(
@@ -600,6 +612,7 @@ router.post("/static/block", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     const add = await sendCommand(
@@ -619,6 +632,7 @@ router.post("/static/renew", limiter, guardRole, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const serverId = pickServerId(req);
+    if (!validateServerIdFormat(serverId)) return res.status(400).json({ ok: false, error: "Invalid serverId format" });
     const { address, comment } = req.body || {};
     if (!address) return res.status(400).json({ ok: false, error: "address required" });
     // remove from block
@@ -647,5 +661,4 @@ router.post("/static/renew", limiter, guardRole, async (req, res) => {
   }
 });
 
-// final export
 module.exports = router;
