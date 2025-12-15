@@ -222,6 +222,8 @@ const fs = require('fs');
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
 app.use("/api/health", authenticate, requireTenant, healthDetailRoutes);
+// Simple unauthenticated health endpoint (useful for external probes and CORS preflight)
+app.get("/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
 // Serve OpenAPI (raw yaml)
 app.get('/api/docs/openapi.yaml', (req, res) => {
   try {
