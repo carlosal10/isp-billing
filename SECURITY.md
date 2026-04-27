@@ -1,21 +1,27 @@
 # Security Policy
 
-## Supported Versions
+## Supported Scope
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Security fixes are currently expected to land on the latest state of `main`.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please report security issues privately to the maintainers instead of opening a public issue.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+When reporting, include:
+
+- affected endpoint, page, or workflow
+- reproduction steps
+- impact assessment
+- any suggested mitigations
+
+## Secret Handling
+
+- Never commit real `.env` files or provider credentials
+- Rotate any credential immediately if it is exposed in git history, logs, screenshots, or support messages
+- Prefer tenant-scoped or environment-scoped secrets over shared credentials
+
+## Operational Expectations
+
+- Payment, auth, tenant, and router-control changes should be reviewed carefully before release
+- Debug logging that could expose tokens, credentials, or sensitive customer data should be disabled outside controlled troubleshooting

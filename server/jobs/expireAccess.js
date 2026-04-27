@@ -322,10 +322,14 @@ async function runExpirySweep() {
   return summary;
 }
 
-scheduleJob({
-  name: 'expireAccess',
-  cronExpr: '*/5 * * * *',
-  task: runExpirySweep,
-});
+function registerExpireAccessJob() {
+  return scheduleJob({
+    name: 'expireAccess',
+    cronExpr: '*/5 * * * *',
+    lockTtlMs: 15 * 60 * 1000,
+    allowManualRun: true,
+    task: runExpirySweep,
+  });
+}
 
-module.exports = { runExpirySweep };
+module.exports = { runExpirySweep, registerExpireAccessJob };

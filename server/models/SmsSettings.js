@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const SmsSettingsSchema = new mongoose.Schema(
   {
     // Tenant scope
-    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
 
     enabled: { type: Boolean, default: false },
     defaultLanguage: { type: String, default: 'en' },

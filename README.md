@@ -1,86 +1,70 @@
-# Getting Started with Create React App
+# ISP Billing
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Multi-tenant ISP billing and network operations platform for managing customers, plans, payments, MikroTik provisioning, reminders, and paylinks from a single codebase.
 
-## Available Scripts
+## Current Architecture
 
-In the project directory, you can run:
+- Frontend: React 19 application under `src/`
+- Backend: Express + Mongoose application under `server/`
+- Network automation: MikroTik integration for PPPoE, hotspot, static IP, queues, and terminal access
+- Commercial flows: M-Pesa, Stripe, PayPal, SMS reminders, paylinks, invoices, tenant administration
 
-### `npm start`
+## Key Entry Points
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- Frontend app shell: `src/App.js`
+- Main dashboard: `src/pages/Dashboard.jsx`
+- Backend server: `server/App.js`
+- API contract snapshot: `docs/openapi.yaml`
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Development Notes
 
-### `npm test`
+- `npm start` runs the React client
+- `npm test -- --watch=false` runs the current frontend test suite
+- `npm run build` creates a production client build
+- Backend startup currently uses `server/App.js`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Jobs And Scheduler
 
-### `npm run build`
+- Scheduler registration is centralized in `server/jobs/register.js`
+- Job state is persisted in MongoDB, including pause/resume state and manual run metadata
+- The admin Jobs console lives in `src/pages/Jobs.jsx` and surfaces live definitions, recent runs, and scheduler action history
+- Owners, admins, and platform admins can manually run, pause, and resume permitted jobs through the tenant API
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Scheduler Environment Controls
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- `JOB_TIMEZONE` or `APP_TIMEZONE`: default scheduler timezone
+- `LEGACY_ENFORCEMENT_JOBS=true`: restore the older `expireAccess`, `expireStatic`, and `enforceInactiveCustomers` registrations instead of the unified `enforceAllExpired` job
+- `JOB_RUN_RETENTION_DAYS`: retention window for persisted job runs, default `90`
+- `JOB_ACTION_RETENTION_DAYS`: retention window for scheduler action logs, default `180`
+- `JOB_HISTORY_RETENTION_CRON`: cron expression for the history retention job, default `15 3 * * *`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Repository Status
 
-### `npm run eject`
+This repository is in active hardening and modernization. Recent stabilization work has focused on:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+- auth/session consistency
+- tenant-safe schema behavior
+- shared MikroTik terminal command policy
+- test baseline repair
+- production build cleanliness
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Near-Term Priorities
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- consolidate duplicated backend auth and middleware paths
+- split oversized route files into service-oriented modules
+- strengthen payment correctness and reconciliation flows
+- add broader automated coverage for billing, tenants, and router orchestration
+- improve deployment, observability, and operational runbooks
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## MikroTik Debugging
 
-## Learn More
+The backend includes a short-lived raw capture helper for diagnosing RouterOS parser issues such as `UNKNOWNREPLY` or unexpected `!empty` responses.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
-
-## Debugging MikroTik connection issues
-
-The server includes a debug helper that can capture a short raw socket dump from the underlying RouterOS TCP stream to help diagnose parser errors such as `UNKNOWNREPLY` or unexpected `!empty` responses.
-
-To enable the short-lived raw capture, set the environment variable `MBM_RAW_CAPTURE=1` before starting the server. Example (PowerShell):
+Enable it temporarily before starting the backend:
 
 ```powershell
 $env:MBM_RAW_CAPTURE = '1'
-npm start
+node server/App.js
 ```
 
-Notes:
-- The capture is intentionally short-lived (a few seconds) and prints a hex preview and ASCII snippet to the server logs.
-- Only enable in staging or with controlled traffic — it will produce noisy logs and is intended for debugging only.
-- To disable, unset `MBM_RAW_CAPTURE` or set it to any value other than `1`.
+Use this only in controlled environments because it increases log noise and may expose sensitive operational context.

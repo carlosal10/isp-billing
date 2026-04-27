@@ -252,6 +252,12 @@ async function runUnifiedEnforce() {
 }
 
 // schedule every 5 minutes
-scheduleJob({ name: 'enforceAllExpired', cronExpr: '*/5 * * * *', task: runUnifiedEnforce });
+scheduleJob({
+  name: 'enforceAllExpired',
+  cronExpr: '*/5 * * * *',
+  lockTtlMs: LOCK_TTL,
+  allowManualRun: true,
+  task: runUnifiedEnforce,
+});
 
 module.exports = { runUnifiedEnforce };

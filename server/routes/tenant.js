@@ -1,7 +1,6 @@
 // routes/tenant.js
 const express = require('express');
 const Tenant = require('../models/Tenant');
-const { requireAuth, requireTenant } = require("../security/auth");
 const { isValidIPv4 } = require('../utils/staticIpPool');
 const router = express.Router();
 

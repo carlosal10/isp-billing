@@ -97,6 +97,8 @@ async function processTenantQueue(tenantId) {
 scheduleJob({
   name: 'expireStatic',
   cronExpr: '*/10 * * * *',
+  lockTtlMs: 20 * 60 * 1000,
+  allowManualRun: true,
   task: async () => {
     const now = new Date();
 

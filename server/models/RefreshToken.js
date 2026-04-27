@@ -8,7 +8,7 @@ const RefreshTokenSchema = new mongoose.Schema(
     tenant: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     isRevoked: { type: Boolean, default: false },
     // Optional explicit expiresAt; we’ll also add TTL for automatic cleanup
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
   },
   { timestamps: true }
 );

@@ -5,6 +5,10 @@ const mongoose = require('mongoose');
 const JobRunSchema = new mongoose.Schema(
   {
     name: { type: String, index: true },
+    trigger: { type: String, default: 'scheduled', index: true },
+    triggeredBy: { type: String, default: null },
+    triggeredRole: { type: String, default: null },
+    tenantId: { type: String, default: null, index: true },
     startedAt: { type: Date, default: Date.now, index: true },
     finishedAt: { type: Date },
     ok: { type: Boolean, index: true },
@@ -17,4 +21,3 @@ const JobRunSchema = new mongoose.Schema(
 JobRunSchema.index({ name: 1, startedAt: -1 });
 
 module.exports = mongoose.model('JobRun', JobRunSchema);
-

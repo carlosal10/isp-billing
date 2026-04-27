@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
  * Verifies a Bearer JWT and attaches claims to req.user
  * - Skips CORS preflight (OPTIONS)
  * - Accepts "Authorization: Bearer <token>"
- * - Optional cookie fallback (AUTH_TOKEN) if you ever need it
+ * - Cookie fallback supports both AUTH_TOKEN and the current `at` cookie
  */
 module.exports = function requireAuth(req, res, next) {
   if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -15,7 +15,7 @@ module.exports = function requireAuth(req, res, next) {
   const [, tokenFromHeader] = hdr.split(" ");
 
   // 2) Optional cookie support (disabled by default)
-  const tokenFromCookie = req.cookies?.AUTH_TOKEN;
+  const tokenFromCookie = req.cookies?.AUTH_TOKEN || req.cookies?.at;
 
   const token = tokenFromHeader || tokenFromCookie;
   if (!token) {

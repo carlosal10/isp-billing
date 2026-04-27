@@ -27,6 +27,7 @@ module.exports = function requireRole(...roles) {
 
       // Optional platform override
       if (req.user?.isPlatformAdmin === true) {
+        req.role = "platform-admin";
         // You can restrict this override if you need:
         // if (!required.includes('owner')) return next();
         return next();
@@ -39,6 +40,8 @@ module.exports = function requireRole(...roles) {
 
       if (!m) return res.status(403).json({ ok: false, error: "No membership in tenant" });
 
+      req.role = m.role;
+
       // "any" means any membership is fine
       if (required.includes("any")) return next();
 
@@ -46,7 +49,6 @@ module.exports = function requireRole(...roles) {
         return res.status(403).json({ ok: false, error: "Insufficient role" });
       }
 
-      req.role = m.role;
       return next();
     } catch (e) {
       console.error("Role check failed:", e?.message || e);

@@ -4,6 +4,7 @@ const { getPayInfo, verifyPayToken } = require('../utils/paylink');
 const Payment = require('../models/Payment');
 const { sendSTKPush } = require('../utils/stkPush');
 const PaymentConfig = require('../models/PaymentConfig');
+const { upsertStkCorrelation } = require('../services/paymentGatewayCorrelationService');
 
 function normalizePhone(msisdn) {
   let s = String(msisdn).replace(/\D/g, '');
@@ -139,6 +140,21 @@ router.post('/stk', async (req, res) => {
           { _id: payment._id },
           { $set: { checkoutRequestId: checkoutRequestId || undefined, merchantRequestId: merchantRequestId || undefined } }
         );
+        await upsertStkCorrelation({
+          tenantId,
+          paymentId: payment._id,
+          customerId,
+          planId,
+          accountNumber: info.customer?.accountNumber || null,
+          phoneNumber: msisdn,
+          amount,
+          checkoutRequestId,
+          merchantRequestId,
+          source: 'paylink:/stk',
+          callbackUrl,
+        }).catch((correlationError) => {
+          console.warn('Could not persist STK correlation:', correlationError?.message || correlationError);
+        });
         console.log('[paylink:/stk] saved STK ids to payment', {
           paymentId: String(payment._id),
           CheckoutRequestID: checkoutRequestId || null,

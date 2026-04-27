@@ -12,6 +12,104 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: OK }
+  /jobs/definitions:
+    get:
+      summary: List registered scheduler jobs with live state and latest run metadata
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /jobs/runs:
+    get:
+      summary: List persisted job execution history
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: name
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+  /jobs/actions:
+    get:
+      summary: List manual scheduler actions such as run, pause, and resume
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: name
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+  /jobs/{name}/run:
+    post:
+      summary: Trigger a manually runnable job immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: OK }
+  /jobs/{name}/pause:
+    post:
+      summary: Pause a scheduler job so cron-triggered runs stop firing
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                note: { type: string }
+      responses:
+        '200': { description: OK }
+  /jobs/{name}/resume:
+    post:
+      summary: Resume a paused scheduler job
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                note: { type: string }
+      responses:
+        '200': { description: OK }
   /mikrotik/servers:
     get:
       summary: List MikroTik servers
@@ -44,6 +142,219 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: OK }
+  /payments/events:
+    get:
+      summary: List persisted payment gateway webhook and callback events for the current tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: kind
+          schema: { type: string }
+        - in: query
+          name: eventStatus
+          schema: { type: string }
+        - in: query
+          name: paymentId
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+  /payments/events/{id}:
+    get:
+      summary: Get a persisted payment gateway event detail for the current tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /payments/events/{id}/retry:
+    post:
+      summary: Retry processing a persisted unmatched, failed, or rejected payment gateway event
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+        '404': { description: Not found }
+        '409': { description: Retry not allowed for current event status }
+  /payments/events/{id}/resolve:
+    post:
+      summary: Manually resolve a persisted gateway event to a selected payment or customer, then reprocess it
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid resolution target }
+        '403': { description: Forbidden }
+        '404': { description: Not found }
+        '409': { description: Resolve not allowed for current event status }
+  /platform-api/gateway-events/orphans:
+    get:
+      summary: List orphaned payment gateway events without tenant assignment
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /platform-api/gateway-events/orphans/summary:
+    get:
+      summary: Get platform orphan queue summary metrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /platform-api/gateway-events/orphans/{id}:
+    get:
+      summary: Get orphaned payment gateway event detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /platform-api/gateway-events/orphans/{id}/actions:
+    get:
+      summary: Get platform queue action history for an orphaned payment gateway event
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /platform-api/gateway-events/tenants/search:
+    get:
+      summary: Search tenants for orphan gateway event assignment
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /platform-api/gateway-events/tenants/{tenantId}/payments/search:
+    get:
+      summary: Search payment candidates inside a tenant for manual orphan resolution
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /platform-api/gateway-events/tenants/{tenantId}/customers/search:
+    get:
+      summary: Search customer candidates inside a tenant for manual orphan resolution
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /platform-api/gateway-events/orphans/{id}/claim:
+    post:
+      summary: Claim ownership of an orphaned payment gateway event in the platform queue
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+        '409': { description: Already claimed by another operator }
+  /platform-api/gateway-events/orphans/{id}/release:
+    post:
+      summary: Release platform queue ownership of an orphaned payment gateway event
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+        '409': { description: Claim owned by another operator }
+  /platform-api/gateway-events/orphans/{id}/adopt:
+    post:
+      summary: Assign an orphaned payment gateway event to a tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+        '409': { description: Queue claim conflict }
+  /platform-api/gateway-events/orphans/{id}/retry:
+    post:
+      summary: Assign an orphaned payment gateway event to a tenant and retry processing
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+        '409': { description: Queue claim conflict }
+  /platform-api/gateway-events/orphans/{id}/resolve:
+    post:
+      summary: Assign an orphaned payment gateway event to a tenant and resolve it to a chosen payment or customer
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid resolution target }
+        '404': { description: Not found }
+        '409': { description: Queue claim conflict }
   /paylink/stk:
     post:
       summary: Public STK paylink starter
@@ -55,4 +366,3 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-

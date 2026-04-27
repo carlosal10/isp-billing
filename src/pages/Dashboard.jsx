@@ -338,17 +338,6 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, token, ispId]);
 
-  // wrapper to create and clean AbortController
-  const runWithSignal = useCallback(async (fn) => {
-    const ctrl = new AbortController();
-    try {
-      await fn(ctrl.signal);
-    } finally {
-      // nothing; consumer handles mounted check
-    }
-    return () => ctrl.abort();
-  }, []);
-
   /* -----------------------------------
      Actions: PPPoE + Static
   ----------------------------------- */

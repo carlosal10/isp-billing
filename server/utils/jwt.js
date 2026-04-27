@@ -30,7 +30,14 @@ function signTenantAccessToken({ user, tenantId }) {
 function signPlatformAccessToken({ admin }) {
   if (!admin) throw new Error("signPlatformAccessToken: admin is required");
   return jwt.sign(
-    { sub: String(admin._id), email: admin.email, aud: "platform-admin" },
+    {
+      sub: String(admin._id),
+      email: admin.email,
+      username: admin.username || null,
+      role: "platform-admin",
+      isSuper: Boolean(admin.isSuper),
+      aud: "platform-admin",
+    },
     SECRET,
     { expiresIn: "15m" }
   );

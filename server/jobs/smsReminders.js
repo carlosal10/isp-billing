@@ -29,8 +29,6 @@ async function resolvePaybillForTenant(tenantId) {
   return { paybillShortcode: paybillShortcode || FALLBACK_PAYBILL, tillNumber };
 }
 
-let running = false;
-
 function daysBetween(a, b) {
   const ms = new Date(a).getTime() - new Date(b).getTime();
   return ms / (24 * 3600 * 1000);
@@ -119,20 +117,23 @@ async function processTenantReminders(now) {
 }
 
 // Run once daily at 09:00 Nairobi time
-scheduleJob({ name: 'smsReminders', cronExpr: '0 9 * * *', task: async () => {
-  if (running) return;
-  running = true;
-  const now = new Date();
-  try {
-    await processTenantReminders(now);
-    return { ok: true };
-  } catch (e) {
-    console.error('sms reminders job error', e);
-    throw e;
-  } finally {
-    running = false;
-  }
-} });
+scheduleJob({
+  name: 'smsReminders',
+  cronExpr: '0 9 * * *',
+  timezone: 'Africa/Nairobi',
+  lockTtlMs: 6 * 60 * 60 * 1000,
+  allowManualRun: true,
+  task: async () => {
+    const now = new Date();
+    try {
+      await processTenantReminders(now);
+      return { ok: true };
+    } catch (e) {
+      console.error('sms reminders job error', e);
+      throw e;
+    }
+  },
+});
 
 console.log('SMS reminder job scheduled (09:00 Africa/Nairobi)');
 

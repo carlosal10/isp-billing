@@ -7,7 +7,7 @@ const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
 const RefreshToken = require("../models/RefreshToken");
-const { signTenantAccessToken } = require("../utils/jwt");
+const { signTenantAccessToken, verifyAccessToken } = require("../utils/jwt");
 
 const router = express.Router();
 
@@ -42,6 +42,12 @@ async function issueRefreshToken({ userId, tenantId }) {
     isRevoked: false,
   });
   return token;
+}
+
+function readAccessToken(req) {
+  const bearer = req.headers.authorization || "";
+  const [, headerToken] = bearer.split(" ");
+  return headerToken || req.cookies?.at || null;
 }
 
 /* ----------------- Register ----------------- */
@@ -103,8 +109,9 @@ router.post("/register", async (req, res) => {
     console.log('[auth] register success', { userId: String(user._id), tenantId: String(tenant._id) });
     return res.json({
       ok: true,
-      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+      user: { id: String(user._id), email: user.email, displayName: user.displayName, role: "owner" },
       ispId: String(tenant._id),
+      role: "owner",
       accessToken,
       refreshToken,
     });
@@ -178,14 +185,57 @@ router.post("/login", async (req, res) => {
     console.log('[auth] login success', { userId: String(user._id), tenantId: String(tenantId) });
     return res.json({
       ok: true,
-      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+      user: { id: String(user._id), email: user.email, displayName: user.displayName, role: mem.role },
       ispId: String(tenantId),
+      role: mem.role,
       accessToken,
       refreshToken,
     });
   } catch (e) {
     console.error("[auth] login error:", e?.message || e);
     return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+/* ----------------- Session Introspection ----------------- */
+router.get("/me", async (req, res) => {
+  try {
+    const token = readAccessToken(req);
+    if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+
+    const claims = verifyAccessToken(token);
+    const tenantId = claims?.ispId ? String(claims.ispId) : null;
+    const userId = claims?.sub ? String(claims.sub) : null;
+
+    if (!tenantId || !userId) {
+      return res.status(401).json({ ok: false, error: "Invalid token claims" });
+    }
+
+    const [user, membership] = await Promise.all([
+      User.findById(userId, { email: 1, displayName: 1, isActive: 1 }).lean(),
+      Membership.findOne({ user: userId, tenant: tenantId }).lean(),
+    ]);
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ ok: false, error: "User disabled" });
+    }
+    if (!membership) {
+      return res.status(403).json({ ok: false, error: "No access to tenant" });
+    }
+
+    return res.json({
+      ok: true,
+      ispId: tenantId,
+      role: membership.role,
+      user: {
+        id: String(user._id),
+        email: user.email,
+        displayName: user.displayName,
+        role: membership.role,
+      },
+    });
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
   }
 });
 
@@ -226,6 +276,13 @@ router.post("/refresh", async (req, res) => {
       isRevoked: false,
     });
 
+    const membership = await Membership.findOne({ user: current.user, tenant: current.tenant })
+      .select({ role: 1 })
+      .lean();
+    if (!membership) {
+      return res.status(403).json({ ok: false, error: "No access to tenant" });
+    }
+
     const accessToken = signTenantAccessToken({ user, tenantId: current.tenant });
 
     // Log token issuance (no secrets)
@@ -247,7 +304,8 @@ router.post("/refresh", async (req, res) => {
       accessToken,
       refreshToken: nextRaw,
       ispId: String(current.tenant),
-      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+      role: membership.role,
+      user: { id: String(user._id), email: user.email, displayName: user.displayName, role: membership.role },
     });
   } catch (e) {
     console.error("[auth] refresh error:", e?.message || e);

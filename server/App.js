@@ -1,4 +1,3 @@
-require('./jobs/exports');
 // App.js
 require("dotenv").config();
 if (process.env.MPESA_CALLBACK_URL) {
@@ -9,14 +8,13 @@ validateEnv();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');
 const path = require("path");
 const { buildBaseUrl } = require("./utils/paylink");
-require("./jobs/expireAccess");
-require("./jobs/expireStatic");
-require("./jobs/smsReminders");
-require("./jobs/enforceInactiveCustomers");
+const requireAuth = require("./middleware/requireAuth");
+const requireTenant = require("./middleware/requireTenant");
+const requirePlatformAdmin = require("./middleware/requirePlatformAdmin");
+const { isPublicRequestPath } = require("./middleware/publicPaths");
 
 const app = express();
 
@@ -90,77 +88,27 @@ app.use((req, res, next) => {
 // ----------------- MongoDB -----------------
 mongoose
   .connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 })
-  .then(() => console.log("✅ Connected to MongoDB Atlas"))
+  .then(async () => {
+    console.log("✅ Connected to MongoDB Atlas");
+    const { registerJobs } = require("./jobs/register");
+    const { syncScheduledJobStates } = require("./utils/scheduler");
+    registerJobs();
+    await syncScheduledJobStates().catch((err) => {
+      console.warn("[scheduler] failed to sync persisted job state", err?.message || err);
+    });
+  })
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 // ----------------- Auth Middlewares -----------------
 const authenticate = (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
-  try {
-    const url = req.originalUrl || req.url || '';
-    // Public endpoints: allow without auth
-    const isPaylink = url.startsWith('/api/paylink');
-    const isPaylinkAdmin = url.startsWith('/api/paylink/admin');
-    const isPublic =
-      url.startsWith('/api/auth') ||
-      (isPaylink && !isPaylinkAdmin) ||
-      url.startsWith('/api/payment/callback') ||
-      url.startsWith('/api/payments/callback') ||
-      url.startsWith('/api/payment/stripe') ||
-      url === '/api/health' ||
-      url === '/api/docs/openapi.yaml';
-    if (isPublic) return next();
-  } catch {}
-  const bearer = req.headers.authorization || "";
-  const [, headerToken] = bearer.split(" ");
-  // Fallback to access token cookie (set on login/refresh)
-  const cookieToken = req.cookies?.at;
-  const token = headerToken || cookieToken;
-  if (!token) {
-    console.warn('[authz] Missing token', {
-      url: req.originalUrl,
-      hasAuthHeader: !!req.headers.authorization,
-      hasAtCookie: !!cookieToken,
-      origin: req.headers.origin || null,
-    });
-    return res.status(401).json({ ok: false, error: "Missing token" });
-  }
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET); // { sub/email/ispId, ... }
-    next();
-  } catch (err) {
-    console.warn('[authz] Invalid or expired token', { url: req.originalUrl });
-    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
-  }
+  if (isPublicRequestPath(req.originalUrl || req.url || "")) return next();
+  return requireAuth(req, res, next);
 };
 
-const requireTenant = (req, res, next) => {
-  try {
-    const url = req.originalUrl || req.url || '';
-    // Public endpoints that do not require tenant
-    const isPaylink = url.startsWith('/api/paylink');
-    const isPaylinkAdmin = url.startsWith('/api/paylink/admin');
-    const isPublic =
-      url.startsWith('/api/auth') ||
-      (isPaylink && !isPaylinkAdmin) ||
-      url.startsWith('/api/payment/callback') ||
-      url.startsWith('/api/payments/callback') ||
-      url.startsWith('/api/payment/stripe') ||
-      url === '/api/health' ||
-      url === '/api/docs/openapi.yaml';
-    if (isPublic) return next();
-  } catch {}
-  const tenantId = req.headers["x-isp-id"] || req.user?.ispId;
-  if (!tenantId) {
-    console.warn('[tenant] Missing tenant id', {
-      url: req.originalUrl,
-      hasUser: !!req.user,
-      hasHeader: !!req.headers["x-isp-id"],
-    });
-    return res.status(401).json({ ok: false, error: "Missing tenant (x-isp-id)" });
-  }
-  req.tenantId = String(tenantId);
-  next();
+const attachTenant = (req, res, next) => {
+  if (isPublicRequestPath(req.originalUrl || req.url || "")) return next();
+  return requireTenant(req, res, next);
 };
 
 // ----------------- Routes -----------------
@@ -175,6 +123,7 @@ const statsRoutes = require("./routes/Stats");
 const tenantAuthRoutes = require("./routes/tenantAuth");      // /api/auth/*
 const invitesRoutes = require("./routes/invites");            // /api/invites (tenant-protected)
 const platformAuthRoutes = require("./routes/platformAuth");  // /platform-api/auth/*
+const platformGatewayEventsRoutes = require("./routes/platformGatewayEvents");
 
 // MikroTik
 const mikrotikUserRoutes = require("./routes/mikrotikUser");
@@ -221,7 +170,7 @@ const fs = require('fs');
 
 // ----------------- Health -----------------
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
-app.use("/api/health", authenticate, requireTenant, healthDetailRoutes);
+app.use("/api/health", authenticate, attachTenant, healthDetailRoutes);
 // Simple unauthenticated health endpoint (useful for external probes and CORS preflight)
 app.get("/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
 // Serve OpenAPI (raw yaml)
@@ -253,10 +202,11 @@ app.get('/pl/:token', (req, res) => {
 // ----------------- Mount APIs -----------------
 // Tenant realm auth
 app.use("/api/auth", tenantAuthRoutes);
-app.use("/api/invites", authenticate, requireTenant, invitesRoutes);
+app.use("/api/invites", authenticate, attachTenant, invitesRoutes);
 
 // Platform-admin realm
 app.use("/platform-api/auth", platformAuthRoutes);
+app.use("/platform-api/gateway-events", requirePlatformAdmin, platformGatewayEventsRoutes);
 
 // Public paylink endpoints (must be before any generic /api auth wrappers)
 app.use("/api/paylink", paylinkRoutes);
@@ -267,63 +217,63 @@ app.use("/api/payment/stripe", stripeWebhook);
 app.use("/api/mpesa/c2b", mpesaC2BRoutes);
 
 // Now mount generic '/api' stacks and protected APIs
-app.use("/api", authenticate, requireTenant, eventsRoutes);
-app.use("/api", authenticate, requireTenant, jobsRoutes);
-app.use("/api/api-keys", authenticate, requireTenant, apiKeysRoutes);
-app.use("/api/flags", authenticate, requireTenant, flagsRoutes);
-app.use("/api", authenticate, requireTenant, archiveRoutes);
+app.use("/api", authenticate, attachTenant, eventsRoutes);
+app.use("/api", authenticate, attachTenant, jobsRoutes);
+app.use("/api/api-keys", authenticate, attachTenant, apiKeysRoutes);
+app.use("/api/flags", authenticate, attachTenant, flagsRoutes);
+app.use("/api", authenticate, attachTenant, archiveRoutes);
 
 // Tenant-protected app APIs
-app.use("/api/customers", authenticate, requireTenant, customerRoutes);
-app.use("/api/plans", authenticate, requireTenant, planRoutes);
-app.use("/api/invoices", authenticate, requireTenant, invoiceRoutes);
-app.use("/api/usageLogs", authenticate, requireTenant, usageLogsRoutes);
-app.use("/api/stats", authenticate, requireTenant, statsRoutes);
-app.use("/api/tenant", authenticate, requireTenant, tenantRoutes);
+app.use("/api/customers", authenticate, attachTenant, customerRoutes);
+app.use("/api/plans", authenticate, attachTenant, planRoutes);
+app.use("/api/invoices", authenticate, attachTenant, invoiceRoutes);
+app.use("/api/usageLogs", authenticate, attachTenant, usageLogsRoutes);
+app.use("/api/stats", authenticate, attachTenant, statsRoutes);
+app.use("/api/tenant", authenticate, attachTenant, tenantRoutes);
 app.use("/api/account", authenticate, accountRoutes);
-app.use("/api/queues", authenticate, requireTenant, queuesRoutes);
-app.use("/api/arp", authenticate, requireTenant, arpRoutes);
-app.use("/api/pppoe", authenticate, requireTenant, pppoeRoutes);  
-app.use("/api/customers", authenticate, requireTenant, customersProfilesRoutes);
-app.use("/api/mikrotik", authenticate, requireTenant, mikrotikProfilesRoutes);
-app.use("/api/static-candidates", authenticate, requireTenant, staticCandidatesRoutes);
+app.use("/api/queues", authenticate, attachTenant, queuesRoutes);
+app.use("/api/arp", authenticate, attachTenant, arpRoutes);
+app.use("/api/pppoe", authenticate, attachTenant, pppoeRoutes);  
+app.use("/api/customers", authenticate, attachTenant, customersProfilesRoutes);
+app.use("/api/mikrotik", authenticate, attachTenant, mikrotikProfilesRoutes);
+app.use("/api/static-candidates", authenticate, attachTenant, staticCandidatesRoutes);
 
 
 // MikroTik PPPoE & connectivity
-app.use("/api/pppoe", authenticate, requireTenant, mikrotikUserRoutes);
-app.use("/api/connect", authenticate, requireTenant, mikrotikConnectRoutes);
-app.use("/api", authenticate, requireTenant, mikrotikRoutes);
+app.use("/api/pppoe", authenticate, attachTenant, mikrotikUserRoutes);
+app.use("/api/connect", authenticate, attachTenant, mikrotikConnectRoutes);
+app.use("/api", authenticate, attachTenant, mikrotikRoutes);
 
 // Terminal: allow OPTIONS, then auth
 app.use(
   "/api/mikrotik/terminal",
   (req, res, next) => (req.method === "OPTIONS" ? res.sendStatus(204) : next()),
   authenticate,
-  requireTenant,
+  attachTenant,
   mikrotikTerminalRoutes
 );
 
 // Admin Mikrotik ops (whitelist, connection upsert/test)
-app.use("/api/mikrotik/admin", authenticate, requireTenant, mikrotikAdminRoutes);
-app.use("/api/mikrotik/servers", authenticate, requireTenant, mikrotikServersRoutes);
+app.use("/api/mikrotik/admin", authenticate, attachTenant, mikrotikAdminRoutes);
+app.use("/api/mikrotik/servers", authenticate, attachTenant, mikrotikServersRoutes);
 // Static-IP migration & enforcement (monitor -> enforce)
-app.use("/api/static", authenticate, requireTenant, staticControlRoutes);
+app.use("/api/static", authenticate, attachTenant, staticControlRoutes);
 
 // Hotspot
-app.use("/api/hotspot-plans", authenticate, requireTenant, hotspotPlansRoutes);
-app.use("/api/hotspot", authenticate, requireTenant, hotspotRoutes);
+app.use("/api/hotspot-plans", authenticate, attachTenant, hotspotPlansRoutes);
+app.use("/api/hotspot", authenticate, attachTenant, hotspotRoutes);
 
 // Payments & M-Pesa
-app.use("/api/payments", authenticate, requireTenant, paymentRoutes);
-app.use("/api/payment-config", authenticate, requireTenant, paymentConfigRoutes);
-app.use("/api/mpesa-settings", authenticate, requireTenant, mpesaSettingsRoutes);
+app.use("/api/payments", authenticate, attachTenant, paymentRoutes);
+app.use("/api/payment-config", authenticate, attachTenant, paymentConfigRoutes);
+app.use("/api/mpesa-settings", authenticate, attachTenant, mpesaSettingsRoutes);
 // SMS settings/templates (tenant)
-app.use("/api/sms", authenticate, requireTenant, smsRoutes);
+app.use("/api/sms", authenticate, attachTenant, smsRoutes);
 // Admin/protected paylink helpers
-app.use("/api/paylink/admin", authenticate, requireTenant, paylinkAdminRoutes);
+app.use("/api/paylink/admin", authenticate, attachTenant, paylinkAdminRoutes);
 
 // Debug (echo headers as seen *after* guards)
-app.use("/api/debug", authenticate, requireTenant, debugRoutes);
+app.use("/api/debug", authenticate, attachTenant, debugRoutes);
 
 // ----------------- Serve SPA (static build) -----------------
 // Gate behind SERVE_CLIENT to avoid double-hosting when frontend is separate
@@ -378,29 +328,6 @@ app.use((err, req, res, next) => {
   console.error("🔥 Error:", err);
   res.status(500).json({ ok: false, error: "Internal server error" });
 });
-// -----------------------------
-// Delay scheduler import to avoid circular deps
-// -----------------------------
-function startJobs() {
-  const { scheduleJob } = require('./utils/scheduler'); // lazy require
-  const JobRun = require('./models/JobRun'); // also safe to require here if needed
-
-  scheduleJob({
-    name: 'heartbeat',
-    cronExpr: '* * * * *',
-    task: async () => {
-      // example task
-      const run = await JobRun.create({ name: 'heartbeat', startedAt: new Date(), ok: true });
-      return { created: run._id };
-    },
-  });
-
-  console.log('[scheduler] heartbeat job scheduled');
-}
-
-// start scheduler after server is ready
-startJobs();
-
 // ----------------- Start -----------------
 const PORT = process.env.PORT || 5000;
 // IMPORTANT: use server.listen so Socket.IO works

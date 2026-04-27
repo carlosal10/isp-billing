@@ -215,9 +215,43 @@
 .btn-ghost{ background:#fff; color:#0B2545; border:1px solid #e6e9f1; cursor:pointer }
 .helper-text{ font-size:.9rem }
 .helper-text.err{ color:#b91c1c }
+.login-mode-caption{ margin: 4px 0 14px; color:#475569; font-size:.92rem; line-height:1.55 }
+.platform-login-note{
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  border: 1px solid #c7d2fe;
+  line-height: 1.5;
+}
 .form-links{ display:flex; justify-content:center; gap:8px; align-items:center; margin-top:8px }
 .form-links .sep{ opacity:.5 }
 .sso-actions{ display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.login-mode-switch{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border-radius: 14px;
+  background: #e2e8f0;
+}
+.login-mode-switch button{
+  height: 42px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 800;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.login-mode-switch button.active{
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .10);
+}
 
 /* Ensure consistent control sizes across all auth forms */
 .login-form input,

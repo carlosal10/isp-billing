@@ -1,30 +1,32 @@
-// src/context/AuthContext.jsx
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
-  useCallback,
 } from "react";
 import { jwtDecode } from "jwt-decode";
-import { api, setApiAccessors } from "../lib/apiClient";
+import { api, platformApi, setApiAccessors } from "../lib/apiClient";
 
 /** ---------- storage helpers ---------- **/
 const SESSIONS_KEY = "auth.sessions.v1";
 const ACTIVE_SESSION_KEY = "auth.active.tenant";
 const LAST_TENANT_KEY = "auth.last.tenant";
+const PLATFORM_SESSION_KEY = "auth.platform.v1";
+const ACTIVE_MODE_KEY = "auth.active.mode";
 
-const safeParse = (s) => {
+const safeParse = (value) => {
   try {
-    return JSON.parse(s || "null");
+    return JSON.parse(value || "null");
   } catch {
     return null;
   }
 };
 
 const loadSessions = () => safeParse(localStorage.getItem(SESSIONS_KEY)) || {};
+const loadPlatformSession = () => safeParse(localStorage.getItem(PLATFORM_SESSION_KEY)) || null;
 
 const saveSessions = (sessions) => {
   try {
@@ -32,6 +34,16 @@ const saveSessions = (sessions) => {
       localStorage.removeItem(SESSIONS_KEY);
     } else {
       localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    }
+  } catch {}
+};
+
+const savePlatformSession = (session) => {
+  try {
+    if (session?.accessToken) {
+      localStorage.setItem(PLATFORM_SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(PLATFORM_SESSION_KEY);
     }
   } catch {}
 };
@@ -52,9 +64,30 @@ const setActiveTenantId = (tenantId) => {
   } catch {}
 };
 
+const setActiveMode = (mode) => {
+  try {
+    if (mode) {
+      sessionStorage.setItem(ACTIVE_MODE_KEY, mode);
+    } else {
+      sessionStorage.removeItem(ACTIVE_MODE_KEY);
+    }
+  } catch {}
+};
+
+const getStoredActiveMode = () => {
+  try {
+    return sessionStorage.getItem(ACTIVE_MODE_KEY) || null;
+  } catch {
+    return null;
+  }
+};
+
 const resolveActiveTenant = () => {
   const sessions = loadSessions();
-  let tenantId = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  let tenantId = null;
+  try {
+    tenantId = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {}
   if (tenantId && sessions[tenantId]) return { tenantId, sessions };
 
   const last = localStorage.getItem(LAST_TENANT_KEY);
@@ -76,23 +109,50 @@ const resolveActiveTenant = () => {
   return { tenantId: null, sessions };
 };
 
-const getActiveAuth = () => {
+const getActiveTenantAuth = () => {
   const { tenantId, sessions } = resolveActiveTenant();
   if (!tenantId) return null;
   const session = sessions[tenantId];
   if (!session) return null;
-  return { ...session, ispId: session.ispId ?? tenantId, tenantId };
+  return {
+    ...session,
+    mode: "tenant",
+    ispId: session.ispId ?? tenantId,
+    tenantId,
+  };
 };
 
-const persistSession = (tenantId, payload) => {
+const getActivePlatformAuth = () => {
+  const session = loadPlatformSession();
+  if (!session?.accessToken) return null;
+  return {
+    ...session,
+    mode: "platform",
+  };
+};
+
+const getActiveAuth = () => {
+  const activeMode = getStoredActiveMode();
+  const tenantAuth = getActiveTenantAuth();
+  const platformAuth = getActivePlatformAuth();
+
+  if (activeMode === "platform" && platformAuth) return platformAuth;
+  if (activeMode === "tenant" && tenantAuth) return tenantAuth;
+  if (tenantAuth) return tenantAuth;
+  if (platformAuth) return platformAuth;
+  return null;
+};
+
+const persistTenantSession = (tenantId, payload) => {
   if (!tenantId) return;
   const sessions = loadSessions();
   sessions[tenantId] = { ...payload, ispId: payload.ispId ?? tenantId };
   saveSessions(sessions);
   setActiveTenantId(tenantId);
+  setActiveMode("tenant");
 };
 
-const removeSession = (tenantId) => {
+const removeTenantSession = (tenantId) => {
   if (!tenantId) return;
   const sessions = loadSessions();
   if (sessions[tenantId]) {
@@ -117,16 +177,64 @@ const removeSession = (tenantId) => {
   }
 };
 
+const removePlatformSession = () => {
+  savePlatformSession(null);
+};
+
 /** ---------- token utils ---------- **/
-const decodeToken = (t) => { try { return jwtDecode(t); } catch { return null; } };
+const decodeToken = (token) => {
+  try {
+    return jwtDecode(token);
+  } catch {
+    return null;
+  }
+};
 const msUntil = (exp) => Math.max(exp * 1000 - Date.now(), 0);
+
 const userFromToken = (token) => {
-  const d = decodeToken(token);
-  if (!d) return null;
+  const decoded = decodeToken(token);
+  if (!decoded) return null;
+  const isPlatformAdmin = decoded.aud === "platform-admin";
   return {
-    id: d.sub || d.userId || d.uid || null,
-    email: d.email || d.upn || null,
-    displayName: d.name || d.preferred_username || null,
+    id: decoded.sub || decoded.userId || decoded.uid || null,
+    email: decoded.email || decoded.upn || null,
+    username: decoded.username || null,
+    displayName:
+      decoded.name ||
+      decoded.username ||
+      decoded.preferred_username ||
+      decoded.email ||
+      null,
+    role: decoded.role || (isPlatformAdmin ? "platform-admin" : null),
+    isPlatformAdmin,
+    isSuper: Boolean(decoded.isSuper),
+  };
+};
+
+const normalizePlatformUser = (user, token, fallback = null) => {
+  const decodedUser = userFromToken(token) || {};
+  const source = user || {};
+  return {
+    id: source.id || source.sub || fallback?.id || decodedUser.id || null,
+    email: source.email || fallback?.email || decodedUser.email || null,
+    username: source.username || source.name || fallback?.username || decodedUser.username || null,
+    displayName:
+      source.displayName ||
+      source.username ||
+      source.name ||
+      fallback?.displayName ||
+      fallback?.username ||
+      decodedUser.displayName ||
+      source.email ||
+      decodedUser.email ||
+      null,
+    role: "platform-admin",
+    isPlatformAdmin: true,
+    isSuper:
+      source.isSuper ??
+      fallback?.isSuper ??
+      decodedUser.isSuper ??
+      false,
   };
 };
 
@@ -134,22 +242,14 @@ const userFromToken = (token) => {
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-/**
- * AuthProvider with:
- * - status gating: "unknown" | "auth" | "guest"
- * - strict-mode-safe init (no double side effects)
- * - proactive refresh (30s before exp) + reactive (on 401 via api client)
- * - refresh-token rotation support (persists new refreshToken from /refresh)
- */
 export function AuthProvider({ children }) {
-  // public state
-  const [status, setStatus] = useState("unknown"); // "unknown" | "auth" | "guest"
+  const [status, setStatus] = useState("unknown");
   const [user, setUser] = useState(null);
   const [ispId, setIspId] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
   const [refreshToken, setRefreshToken] = useState(null);
+  const [authMode, setAuthMode] = useState(null);
 
-  // internals
   const refreshTimerRef = useRef(null);
   const inFlightRefreshRef = useRef(null);
   const didInitRef = useRef(false);
@@ -164,7 +264,6 @@ export function AuthProvider({ children }) {
   const scheduleRefresh = useCallback((decoded) => {
     clearRefreshTimer();
     if (!decoded?.exp) return;
-    // Try to refresh 30s before expiry; never schedule in the past.
     const delay = Math.max(msUntil(decoded.exp) - 30_000, 1_000);
     refreshTimerRef.current = setTimeout(() => {
       refresh().catch(() => logout());
@@ -173,84 +272,89 @@ export function AuthProvider({ children }) {
   }, []);
 
   const setAuthState = useCallback(
-    ({ access, refresh: r, isp, usr }) => {
+    ({ mode, access, refresh: nextRefresh, isp, usr }) => {
       const decoded = access ? decodeToken(access) : null;
       const activeBefore = getActiveAuth();
+      const resolvedMode =
+        mode ||
+        activeBefore?.mode ||
+        (decoded?.aud === "platform-admin" ? "platform" : "tenant");
       const tenantKey =
-        isp ??
-        decoded?.ispId ??
-        activeBefore?.ispId ??
-        null;
+        resolvedMode === "tenant"
+          ? isp ?? decoded?.ispId ?? activeBefore?.ispId ?? null
+          : null;
+      const nextUser =
+        usr !== undefined
+          ? usr
+          : access
+            ? activeBefore?.user ?? userFromToken(access) ?? null
+            : null;
 
-      if (tenantKey) {
-        setActiveTenantId(tenantKey);
-      }
-
+      setAuthMode(access ? resolvedMode : null);
+      setActiveMode(access ? resolvedMode : null);
       setAccessToken(access || null);
-      setRefreshToken(r || null);
-      setIspId(tenantKey || null);
+      setRefreshToken(resolvedMode === "tenant" ? nextRefresh || null : null);
+      setIspId(resolvedMode === "tenant" ? tenantKey || null : null);
+      setUser(nextUser);
 
-      if (usr !== undefined) {
-        setUser(usr);
-      } else if (access) {
-        setUser((prev) => prev ?? userFromToken(access));
-      } else {
-        setUser(null);
+      if (resolvedMode === "tenant") {
+        if (access && nextRefresh && tenantKey) {
+          persistTenantSession(tenantKey, {
+            accessToken: access,
+            refreshToken: nextRefresh,
+            ispId: tenantKey,
+            user: nextUser,
+          });
+        } else if (tenantKey) {
+          removeTenantSession(tenantKey);
+        }
+      } else if (resolvedMode === "platform") {
+        if (access) {
+          savePlatformSession({
+            accessToken: access,
+            user: nextUser,
+          });
+          setActiveMode("platform");
+        } else {
+          removePlatformSession();
+        }
       }
 
-      if (access && r && tenantKey) {
-        const existing = getActiveAuth() || activeBefore;
-        const payload = {
-          accessToken: access,
-          refreshToken: r,
-          ispId: tenantKey,
-          user:
-            usr !== undefined
-              ? usr
-              : existing?.user ?? userFromToken(access) ?? null,
-        };
-        persistSession(tenantKey, payload);
-      } else if (tenantKey) {
-        removeSession(tenantKey);
-        clearRefreshTimer();
-      } else {
-        const active = getActiveAuth();
-        if (active?.tenantId) removeSession(active.tenantId);
-        clearRefreshTimer();
-      }
-
-      if (access && decoded) {
+      if (resolvedMode === "tenant" && access && decoded && nextRefresh) {
         scheduleRefresh(decoded);
-      } else if (!access) {
+      } else {
         clearRefreshTimer();
       }
     },
-    [scheduleRefresh, clearRefreshTimer]
+    [clearRefreshTimer, scheduleRefresh]
   );
 
-  /** ---------- core ops ---------- **/
   const refresh = useCallback(async () => {
     if (inFlightRefreshRef.current) return inFlightRefreshRef.current;
 
     const run = (async () => {
       const saved = getActiveAuth();
-      const r = refreshToken || saved?.refreshToken;
-      if (!r) throw new Error("No refresh token");
+      if (saved?.mode !== "tenant") {
+        throw new Error("Session expired");
+      }
+      const tokenToRefresh = refreshToken || saved?.refreshToken;
+      if (!tokenToRefresh) throw new Error("No refresh token");
 
-      const { data } = await api.post("/auth/refresh", { refreshToken: r });
+      const { data } = await api.post("/auth/refresh", { refreshToken: tokenToRefresh });
       if (!data?.ok || !data?.accessToken) {
         throw new Error(data?.error || "Refresh failed");
       }
+
+      const decoded = decodeToken(data.accessToken);
       const nextUser =
         data.user ?? saved?.user ?? userFromToken(data.accessToken) ?? user ?? null;
-      const dec = decodeToken(data.accessToken);
-      const nextIsp = data.ispId ?? ispId ?? saved?.ispId ?? dec?.ispId ?? null;
-      // Rotation support: backend may return a new refresh token
-      const nextRefresh = data.refreshToken ?? r;
+      const nextIsp = data.ispId ?? ispId ?? saved?.ispId ?? decoded?.ispId ?? null;
+      const rotatedRefresh = data.refreshToken ?? tokenToRefresh;
 
       setAuthState({
+        mode: "tenant",
         access: data.accessToken,
-        refresh: nextRefresh,
+        refresh: rotatedRefresh,
         isp: nextIsp,
         usr: nextUser,
       });
@@ -264,21 +368,31 @@ export function AuthProvider({ children }) {
     } finally {
       inFlightRefreshRef.current = null;
     }
-  }, [refreshToken, ispId, user, setAuthState]);
+  }, [ispId, refreshToken, setAuthState, user]);
 
   const logout = useCallback(async () => {
+    const active = getActiveAuth();
     try {
-      const saved = getActiveAuth();
-      const r = refreshToken || saved?.refreshToken;
-      if (r) await api.post("/auth/logout", { refreshToken: r });
+      if (active?.mode === "tenant") {
+        const tokenToRefresh = refreshToken || active?.refreshToken;
+        if (tokenToRefresh) {
+          await api.post("/auth/logout", { refreshToken: tokenToRefresh });
+        }
+      }
     } catch {
       /* ignore network errors on logout */
     }
+
     clearRefreshTimer();
-    const active = getActiveAuth();
-    setAuthState({ access: null, refresh: null, isp: active?.ispId ?? null, usr: null });
+    setAuthState({
+      mode: active?.mode || authMode || null,
+      access: null,
+      refresh: null,
+      isp: active?.ispId ?? null,
+      usr: null,
+    });
     setStatus("guest");
-  }, [refreshToken, clearRefreshTimer, setAuthState]);
+  }, [authMode, clearRefreshTimer, refreshToken, setAuthState]);
 
   const login = useCallback(
     async ({ email, password, ispId: ispOverride }) => {
@@ -291,15 +405,36 @@ export function AuthProvider({ children }) {
         throw new Error(data?.error || "Login failed");
       }
 
-      const dec = decodeToken(data.accessToken);
-      const isp = data.ispId ?? dec?.ispId ?? ispOverride ?? null;
-      const u = data.user ?? userFromToken(data.accessToken) ?? null;
+      const decoded = decodeToken(data.accessToken);
+      const nextIsp = data.ispId ?? decoded?.ispId ?? ispOverride ?? null;
+      const nextUser = data.user ?? userFromToken(data.accessToken) ?? null;
 
       setAuthState({
+        mode: "tenant",
         access: data.accessToken,
         refresh: data.refreshToken,
-        isp,
-        usr: u,
+        isp: nextIsp,
+        usr: nextUser,
+      });
+      setStatus("auth");
+    },
+    [setAuthState]
+  );
+
+  const loginPlatform = useCallback(
+    async ({ email, password }) => {
+      const { data } = await platformApi.post("/auth/login", { email, password });
+      if (!data?.ok || !data?.token) {
+        throw new Error(data?.error || "Platform admin login failed");
+      }
+
+      const nextUser = normalizePlatformUser(data.user, data.token);
+      setAuthState({
+        mode: "platform",
+        access: data.token,
+        refresh: null,
+        isp: null,
+        usr: nextUser,
       });
       setStatus("auth");
     },
@@ -318,60 +453,104 @@ export function AuthProvider({ children }) {
         throw new Error(data?.error || "Registration failed");
       }
 
-      const dec = decodeToken(data.accessToken);
-      const isp = data.ispId ?? dec?.ispId ?? null;
-      const u = data.user ?? userFromToken(data.accessToken) ?? null;
+      const decoded = decodeToken(data.accessToken);
+      const nextIsp = data.ispId ?? decoded?.ispId ?? null;
+      const nextUser = data.user ?? userFromToken(data.accessToken) ?? null;
 
       setAuthState({
+        mode: "tenant",
         access: data.accessToken,
         refresh: data.refreshToken,
-        isp,
-        usr: u,
+        isp: nextIsp,
+        usr: nextUser,
       });
       setStatus("auth");
     },
     [setAuthState]
   );
 
-  /** ---------- mount/bootstrap ---------- **/
   useEffect(() => {
-    if (didInitRef.current) return; // StrictMode-safe
+    if (didInitRef.current) return;
     didInitRef.current = true;
 
-    // Wire axios accessors once (used by interceptors for auth headers/refresh)
     setApiAccessors({
       getAccessToken: () => getActiveAuth()?.accessToken || null,
-      getIspId:       () => getActiveAuth()?.ispId || null,
-      tryRefresh:     () => refresh(),
-      forceLogout:    () => logout(),
+      getIspId: () => {
+        const active = getActiveAuth();
+        return active?.mode === "tenant" ? active?.ispId || null : null;
+      },
+      tryRefresh: () => {
+        const active = getActiveAuth();
+        if (active?.mode !== "tenant") {
+          return Promise.reject(new Error("Session expired"));
+        }
+        return refresh();
+      },
+      forceLogout: () => logout(),
     });
 
     const saved = getActiveAuth();
-    const haveBoth = Boolean(saved?.accessToken && saved?.refreshToken);
 
     (async () => {
-      if (!haveBoth) {
-        if (saved?.ispId) removeSession(saved.ispId);
+      if (!saved?.accessToken) {
         setStatus("guest");
         return;
       }
 
-      const dec = decodeToken(saved.accessToken);
-      setIspId(saved.ispId ?? dec?.ispId ?? null);
+      if (saved.mode === "platform") {
+        setAuthMode("platform");
+        setAccessToken(saved.accessToken);
+        setRefreshToken(null);
+        setIspId(null);
+        setUser(saved.user ?? normalizePlatformUser(null, saved.accessToken));
+
+        try {
+          const { data } = await platformApi.get("/auth/verify");
+          if (!data?.ok) throw new Error("Platform session verification failed");
+          setAuthState({
+            mode: "platform",
+            access: saved.accessToken,
+            refresh: null,
+            isp: null,
+            usr: normalizePlatformUser(data.user, saved.accessToken, saved.user ?? null),
+          });
+          setStatus("auth");
+        } catch {
+          await logout();
+        }
+        return;
+      }
+
+      const decoded = decodeToken(saved.accessToken);
+      const hasRefresh = Boolean(saved.refreshToken);
+      if (!hasRefresh) {
+        if (saved.ispId) removeTenantSession(saved.ispId);
+        setStatus("guest");
+        return;
+      }
+
+      setAuthMode("tenant");
+      setIspId(saved.ispId ?? decoded?.ispId ?? null);
       setAccessToken(saved.accessToken);
       setRefreshToken(saved.refreshToken);
       setUser(saved.user ?? userFromToken(saved.accessToken));
 
-      const nearExpiry = !dec?.exp || msUntil(dec.exp) < 30_000;
+      const nearExpiry = !decoded?.exp || msUntil(decoded.exp) < 30_000;
 
       try {
         if (nearExpiry) {
-          await refresh(); // sets status to "auth" on success
+          await refresh();
         } else {
-          // quick validation; if it fails, try refresh; else mark auth
           try {
-            await api.get("/auth/me");
-            scheduleRefresh(dec);
+            const { data } = await api.get("/auth/me");
+            setAuthState({
+              mode: "tenant",
+              access: saved.accessToken,
+              refresh: saved.refreshToken,
+              isp: data?.ispId ?? saved.ispId ?? decoded?.ispId ?? null,
+              usr: data?.user ?? saved.user ?? userFromToken(saved.accessToken) ?? null,
+            });
+            scheduleRefresh(decoded);
             setStatus("auth");
           } catch {
             await refresh();
@@ -386,22 +565,42 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** ---------- value ---------- **/
   const isAuthed = status === "auth";
+  const role = user?.role || (authMode === "platform" ? "platform-admin" : null);
+  const isPlatformAdmin = role === "platform-admin";
+
   const value = useMemo(
     () => ({
       status,
       isAuthed,
-      isAuthenticated: isAuthed, // alias for convenience
+      isAuthenticated: isAuthed,
       user,
+      role,
+      authMode,
+      isPlatformAdmin,
       ispId,
       token: accessToken,
       login,
+      loginPlatform,
       register,
       refresh,
       logout,
     }),
-    [status, isAuthed, user, ispId, accessToken, login, register, refresh, logout]
+    [
+      accessToken,
+      authMode,
+      isAuthed,
+      isPlatformAdmin,
+      ispId,
+      login,
+      loginPlatform,
+      logout,
+      refresh,
+      register,
+      role,
+      status,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

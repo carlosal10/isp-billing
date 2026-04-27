@@ -20,23 +20,29 @@ async function exportTenant(tenantId, baseDir) {
   return { customers: customers.length, payments: payments.length };
 }
 
-scheduleJob({ name: 'nightlyExport', cronExpr: '30 2 * * *', task: async () => {
-  const day = new Date();
-  const yyyy = day.getFullYear();
-  const mm = String(day.getMonth() + 1).padStart(2, '0');
-  const dd = String(day.getDate()).padStart(2, '0');
-  const baseDir = path.resolve(__dirname, `../../exports/${yyyy}-${mm}-${dd}`);
-  ensureDir(baseDir);
-  // Distinct tenants from customers collection
-  const tenants = await Customer.distinct('tenantId');
-  let totalC = 0, totalP = 0;
-  for (const t of tenants) {
-    const stats = await exportTenant(t, baseDir);
-    totalC += stats.customers;
-    totalP += stats.payments;
+scheduleJob({
+  name: 'nightlyExport',
+  cronExpr: '30 2 * * *',
+  timezone: 'Africa/Nairobi',
+  lockTtlMs: 12 * 60 * 60 * 1000,
+  allowManualRun: true,
+  task: async () => {
+    const day = new Date();
+    const yyyy = day.getFullYear();
+    const mm = String(day.getMonth() + 1).padStart(2, '0');
+    const dd = String(day.getDate()).padStart(2, '0');
+    const baseDir = path.resolve(__dirname, `../../exports/${yyyy}-${mm}-${dd}`);
+    ensureDir(baseDir);
+    const tenants = await Customer.distinct('tenantId');
+    let totalC = 0;
+    let totalP = 0;
+    for (const t of tenants) {
+      const stats = await exportTenant(t, baseDir);
+      totalC += stats.customers;
+      totalP += stats.payments;
+    }
+    return { tenants: tenants.length, customers: totalC, payments: totalP, dir: baseDir };
   }
-  return { tenants: tenants.length, customers: totalC, payments: totalP, dir: baseDir };
-}});
+});
 
 console.log('Nightly export job scheduled (02:30).');
-

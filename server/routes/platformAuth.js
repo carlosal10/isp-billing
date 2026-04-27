@@ -28,7 +28,18 @@ router.post("/register", async (req, res) => {
     const admin = await PlatformAdmin.create({ email, username, passwordHash, isSuper: !!isSuper });
 
     const token = signPlatformAccessToken({ admin });
-    res.json({ ok: true, token, user: { id: String(admin._id), email, username } });
+    res.json({
+      ok: true,
+      token,
+      user: {
+        id: String(admin._id),
+        email,
+        username,
+        displayName: username,
+        role: "platform-admin",
+        isSuper: Boolean(admin.isSuper),
+      },
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: "Server error" });
   }
@@ -47,7 +58,18 @@ router.post("/login", async (req, res) => {
     if (!ok) return res.status(400).json({ ok: false, error: "Invalid credentials" });
 
     const token = signPlatformAccessToken({ admin });
-    res.json({ ok: true, token, user: { id: String(admin._id), email: admin.email, username: admin.username } });
+    res.json({
+      ok: true,
+      token,
+      user: {
+        id: String(admin._id),
+        email: admin.email,
+        username: admin.username,
+        displayName: admin.username,
+        role: "platform-admin",
+        isSuper: Boolean(admin.isSuper),
+      },
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: "Server error" });
   }

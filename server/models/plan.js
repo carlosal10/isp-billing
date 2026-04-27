@@ -24,7 +24,7 @@ function parseDurationToDays(v) {
 const planSchema = new mongoose.Schema({
   // Tenant scope
   tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
-  name: { type: String, required: true, unique: true, trim: true },
+  name: { type: String, required: true, trim: true },
   description: { type: String, required: true },
   price: { type: Number, required: true },
   duration: { type: String, required: true }, // keep your current field
@@ -37,5 +37,7 @@ const planSchema = new mongoose.Schema({
 planSchema.virtual('durationDays').get(function () {
   return parseDurationToDays(this.duration);
 });
+
+planSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Plan', planSchema);

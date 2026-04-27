@@ -15,7 +15,7 @@
  * - robust, non-throwing logging
  */
 
-const cron = require('node-cron');
+const { scheduleJob } = require('../utils/scheduler');
 const Customer = require('../models/customers');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const { disableCustomerQueue } = require('../utils/mikrotikBandwidthManager');
@@ -280,16 +280,23 @@ async function runOnce() {
   return { tenants: tenants.length, staticEnforced: totalStatic, pppoeEnforced: totalPppoe };
 }
 
-// Schedule every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
-  try {
-    const out = await runOnce();
-    console.log('[enforce] cycle done', out);
-  } catch (e) {
-    console.error('[enforce] cycle error', e?.message || e);
-  }
+scheduleJob({
+  name: 'enforceInactiveCustomers',
+  cronExpr: '*/5 * * * *',
+  lockTtlMs: 15 * 60 * 1000,
+  allowManualRun: true,
+  task: async () => {
+    try {
+      const out = await runOnce();
+      console.log('[enforce] cycle done', out);
+      return out;
+    } catch (e) {
+      console.error('[enforce] cycle error', e?.message || e);
+      throw e;
+    }
+  },
 });
 
 console.log('[enforce] inactive customers enforcement scheduled (*/5)');
 
-module.exports = {};
+module.exports = { runOnce };
