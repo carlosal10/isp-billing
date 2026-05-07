@@ -38,6 +38,7 @@ import Routers from "./pages/Routers";
 import ServiceOperations from "./pages/ServiceOperations";
 import SupportOperations from "./pages/SupportOperations";
 import TeamAccess from "./pages/TeamAccess";
+import "./theme.css";
 
 export default function App() {
   const { isAuthed, authMode, role } = useAuth();

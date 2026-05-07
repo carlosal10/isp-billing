@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { api, API_BASE } from "../lib/apiClient";
+import { api } from "../lib/apiClient";
 import "./Login.css";
 
 function scorePassword(pw) {
@@ -37,7 +37,7 @@ export default function Register() {
       try {
         const { data } = await api.get("/health");
         if (!mounted) return;
-        setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
+        setApiHealth({ ok: !!data?.ok, msg: "API OK" });
       } catch (e) {
         setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
       }

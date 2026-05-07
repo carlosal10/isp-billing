@@ -9,22 +9,22 @@
 
 .content-area {
   min-height: 100vh;
-  padding: 18px 16px;
+  padding: 24px 16px 36px;
 }
 
 /* On desktop, shift content when sidebar is open */
 @media (min-width: 1024px) {
   .app-container .content-area { margin-left: 0; }
   .app-container.sidebar-open .content-area { margin-left: var(--sidebar-w); }
-  .content-area { padding: 24px 28px; }
+  .content-area { padding: 30px 34px 48px; }
 }
 
 /* Hamburger (mobile/desktop when sidebar closed) */
 .hamburger{
-  position:fixed;top:14px;left:14px;z-index:60;
-  width:42px;height:42px;border-radius:12px;
-  background:#f5f5f5;box-shadow:0 2px 5px rgba(10,31,68,.08);display:grid;place-items:center;
-  color:#0A1F44;cursor:pointer;border:1px solid #e6eaf2;
+  position:fixed;top:16px;left:16px;z-index:60;
+  width:42px;height:42px;border-radius:6px;
+  background:#fff;box-shadow:0 14px 30px rgba(10,31,68,.13);display:grid;place-items:center;
+  color:#0A1F44;cursor:pointer;border:1px solid #dfe6ef;
 }
 /* On desktop, show only when sidebar is closed */
 @media (min-width:1024px){
@@ -34,6 +34,6 @@
 
 /* Sidebar backdrop (mobile) */
 .sidebar-backdrop{
-  position:fixed;inset:0;background:rgba(10,31,68,.35);backdrop-filter:blur(1px);z-index:50;
+  position:fixed;inset:0;background:rgba(10,31,68,.42);backdrop-filter:blur(4px);z-index:50;
 }
 

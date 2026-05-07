@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { api, API_BASE } from "../lib/apiClient";
+import { api } from "../lib/apiClient";
 import "./Login.css";
 
 function loginModeCopy(mode) {
