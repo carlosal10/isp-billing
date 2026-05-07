@@ -12,8 +12,29 @@ function loadAuth() {
   }
 }
 
+function verificationReason(reason) {
+  if (reason === "auth") {
+    return "authentication failed. Check the username, password, and RouterOS API permissions.";
+  }
+  if (reason === "connect") {
+    return "the backend could not reach this router. If it is on a private LAN, run the backend on that network or expose it through a VPN/tunnel.";
+  }
+  if (reason === "no-identity") {
+    return "the router replied, but did not return an identity.";
+  }
+  return "the router could not be verified.";
+}
+
 export default function ConnectMikrotikModal({ isOpen, onClose }) {
-  const [form, setForm] = useState({ name: "default", primary: true, host: "", port: 8728, user: "", password: "", tls: false });
+  const [form, setForm] = useState({
+    name: "default",
+    primary: true,
+    host: "",
+    port: 8728,
+    user: "",
+    password: "",
+    tls: false,
+  });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -22,7 +43,7 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
   const ispId = saved?.ispId || null;
 
   const debugSent = useMemo(() => {
-    return `sending headers → Authorization: ${token ? "yes" : "no"}, x-isp-id: ${ispId || "(none)"}`;
+    return `sending headers -> Authorization: ${token ? "yes" : "no"}, x-isp-id: ${ispId || "(none)"}`;
   }, [token, ispId]);
 
   if (!isOpen) return null;
@@ -40,16 +61,18 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       const { data } = await api.post(
         "/connect",
         {
-          name: form.name.trim() || 'default',
+          name: form.name.trim() || "default",
           primary: !!form.primary,
           host: form.host.trim(),
           port: Number(form.port) || (form.tls ? 8729 : 8728),
           user: form.user.trim(),
           password: form.password,
           tls: !!form.tls,
+          timeoutMs: 12000,
         },
         {
-          // Force headers in case interceptors aren't wired yet
+          timeout: 45000,
+          // Force headers in case interceptors aren't wired yet.
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(ispId ? { "x-isp-id": ispId } : {}),
@@ -58,15 +81,26 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       );
 
       if (!data?.ok) throw new Error(data?.error || "Connection failed");
+      if (!data.verified) {
+        setMsg(`Saved, but not verified: ${verificationReason(data.reason)}`);
+        return;
+      }
+
       setMsg(`Connected: ${data.identity || "ok"}`);
-      // Auto-close shortly after success
       setTimeout(() => {
         try {
           onClose && onClose();
         } catch {}
       }, 800);
     } catch (err) {
-      setMsg("Failed: " + (err?.message || "Connection failed"));
+      const debug = err?.__debug || {};
+      const isTimeout = debug.code === "ECONNABORTED" || /timeout/i.test(err?.message || debug.message || "");
+      const noResponse = !debug.status && !err?.response;
+      const message =
+        isTimeout || noResponse
+          ? "request timed out before the server responded. If this router is on a private LAN, the deployed backend cannot reach it unless the router is exposed through VPN/tunnel or the backend runs on that network."
+          : err?.message || "Connection failed";
+      setMsg("Failed: " + message);
       console.error("Connect error:", err?.__debug || err);
     } finally {
       setLoading(false);

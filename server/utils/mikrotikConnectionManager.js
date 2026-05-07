@@ -15,6 +15,8 @@ const dns = require("dns").promises;
 // --------- Configurable knobs (tweak to taste) ---------
 const DEFAULT_TIMEOUT_MS = 120_000;   // command timeout (was 12s)
 const CONNECT_TIMEOUT_MS = 120_000;   // connect handshake timeout (was 15s)
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
+const MAX_CONNECT_TIMEOUT_MS = 60_000;
 const HEALTH_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 60_000;
 const BASE_BACKOFF_MS = 2_000;
@@ -68,6 +70,13 @@ function redactObj(obj) {
 }
 
 function delay(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+function clampMs(value, fallback, min = 500, max = 70_000) {
+  const n = Number(value);
+  const fb = Number(fallback);
+  const picked = Number.isFinite(n) && n > 0 ? n : fb;
+  return Math.max(min, Math.min(picked, max));
+}
 
 function withTimeout(promise, ms, msg = "Timeout") {
   let to;
@@ -134,7 +143,7 @@ async function getClientEntry(tenantId, selector) {
         password: cfg.password,
         port: cfg.port || 8728,
         tls: !!cfg.tls,
-        timeout: cfg.timeout || CONNECT_TIMEOUT_MS,
+        timeout: clampMs(cfg.timeout, DEFAULT_CONNECT_TIMEOUT_MS, 1_000, MAX_CONNECT_TIMEOUT_MS),
       },
       client: null,
       connected: false,
@@ -157,7 +166,7 @@ async function getClientEntry(tenantId, selector) {
 function touchEntry(entry){ entry._lastTouched = Date.now(); }
 
 // --------- Connect with backoff (uses resolved IP) using a connect promise ---------
-async function ensureConnected(entry) {
+async function ensureConnected(entry, options = {}) {
   if (entry.connected && entry.client) return entry.client;
 
   // if a connect is already in progress, await it
@@ -175,17 +184,23 @@ async function ensureConnected(entry) {
   entry._connectPromise = (async () => {
     try {
       const resolvedHost = await resolveHostIfNeeded(entry);
+      const connectTimeoutMs = clampMs(
+        options.timeoutMs,
+        entry.cfg.timeout || DEFAULT_CONNECT_TIMEOUT_MS,
+        1_000,
+        MAX_CONNECT_TIMEOUT_MS
+      );
 
       const client = new RouterOSAPI({
         host: resolvedHost,
         user: entry.cfg.user,
         password: entry.cfg.password,
         port: entry.cfg.port,
-        timeout: CONNECT_TIMEOUT_MS,
+        timeout: connectTimeoutMs,
         tls: entry.cfg.tls,
       });
 
-      await withTimeout(client.connect(), CONNECT_TIMEOUT_MS, "Connect timeout");
+      await withTimeout(client.connect(), connectTimeoutMs, "Connect timeout");
 
       // attach listeners
       try {
@@ -299,10 +314,11 @@ async function _processEntryQueue(entry) {
 // Internal direct send with retries + malformed reply handling
 async function _sendDirect(entry, cmd, args = [], options = {}) {
   let lastErr;
-  for (let attempt = 1; attempt <= SEND_RETRY_COUNT; attempt++) {
+  const retryCount = Math.max(1, Math.min(Number(options.retryCount) || SEND_RETRY_COUNT, SEND_RETRY_COUNT));
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
-      const client = await ensureConnected(entry);
-      const timeoutMs = Math.max(500, Math.min(options.timeoutMs || DEFAULT_TIMEOUT_MS, 70_000));
+      const client = await ensureConnected(entry, options);
+      const timeoutMs = clampMs(options.timeoutMs, DEFAULT_TIMEOUT_MS, 500, 70_000);
       const startedAt = Date.now();
 
       const raw = await withTimeout(client.write(String(cmd), Array.isArray(args) ? args : []), timeoutMs, "Command timeout");

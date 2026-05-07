@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const requireRole = require('../middleware/requireRole');
 const SmsSettings = require('../models/SmsSettings');
 const SmsTemplate = require('../models/SmsTemplate');
 const { renderTemplate, buildTemplateVariables } = require('../utils/template');
@@ -14,6 +15,11 @@ const {
   recordMessageDelivery,
 } = require('../services/messageDeliveryService');
 const { assessSmsPermission } = require('../services/customerCommunicationPreferencesService');
+const {
+  listCampaigns,
+  previewCampaign,
+  sendCampaign,
+} = require('../services/messageCampaignService');
 
 const FALLBACK_PAYBILL =
   process.env.MPESA_SHORTCODE ||
@@ -65,6 +71,14 @@ async function recordSmsAttempt({
     errorMessage: error?.message || null,
     context,
   }).catch(() => null);
+}
+
+function requestActor(req) {
+  return {
+    id: String(req.user?.email || req.user?.sub || req.user?.id || req.user?._id || ''),
+    email: req.user?.email || null,
+    role: req.role || null,
+  };
 }
 
 // GET settings (tenant scoped)
@@ -126,6 +140,43 @@ router.get('/deliveries', async (req, res) => {
   } catch (e) {
     console.error('sms deliveries list error', e);
     res.status(500).json({ error: 'Failed to list message deliveries' });
+  }
+});
+
+router.get('/campaigns', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const rows = await listCampaigns(req.tenantId, { limit: req.query.limit });
+    res.json(rows);
+  } catch (e) {
+    console.error('sms campaigns list error', e);
+    res.status(500).json({ error: 'Failed to list campaigns' });
+  }
+});
+
+router.post('/campaigns/preview', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const preview = await previewCampaign({
+      tenantId: req.tenantId,
+      payload: req.body || {},
+    });
+    res.json(preview);
+  } catch (e) {
+    console.error('sms campaign preview error', e);
+    res.status(e?.statusCode || 500).json({ error: e?.message || 'Failed to preview campaign' });
+  }
+});
+
+router.post('/campaigns', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const campaign = await sendCampaign({
+      tenantId: req.tenantId,
+      payload: req.body || {},
+      actor: requestActor(req),
+    });
+    res.status(201).json({ ok: true, campaign });
+  } catch (e) {
+    console.error('sms campaign send error', e);
+    res.status(e?.statusCode || 500).json({ error: e?.message || 'Failed to send campaign' });
   }
 });
 

@@ -190,6 +190,8 @@ function annotateAxiosError(err) {
       status,
       url,
       method,
+      code: err?.code,
+      message: err?.message,
       data: err?.response?.data,
       headers: err?.response?.headers,
     };

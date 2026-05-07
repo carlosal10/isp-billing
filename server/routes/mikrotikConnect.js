@@ -137,6 +137,7 @@ router.post("/", async (req, res) => {
     const name = String(body.name || "default").trim();
     const primary = !!body.primary;
     const timeoutMs = Number(body.timeoutMs) || 15000;
+    const connectTimeoutMs = Math.max(5000, Math.min(timeoutMs, 20000));
 
     // Upsert the MikroTikConnection document (do not return password in response)
     if (primary === true) {
@@ -154,6 +155,7 @@ router.post("/", async (req, res) => {
       username: user,
       password, // stored as-is; consider vaulting or encryption in production
       tls,
+      timeout: connectTimeoutMs,
       primary,
       name,
       updatedBy: req.user?.sub || null,
@@ -180,8 +182,9 @@ router.post("/", async (req, res) => {
         [],
         {
           tenantId,
-          timeoutMs: Math.max(5000, Math.min(timeoutMs, 20000)),
-          serverId
+          timeoutMs: connectTimeoutMs,
+          serverId,
+          retryCount: 1
         }
       );
 

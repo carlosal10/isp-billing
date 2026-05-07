@@ -93,6 +93,22 @@ function StatusBadge({ value }) {
   );
 }
 
+const EMPTY_CAMPAIGN_FORM = {
+  name: "",
+  templateType: "broadcast",
+  category: "service",
+  language: "en",
+  body: "Hi {{name}}, {{message}}",
+  message: "",
+  includePaylink: false,
+  audience: {
+    status: "active",
+    connectionType: "",
+    query: "",
+    limit: 200,
+  },
+};
+
 export default function Communications() {
   const { role, status } = useAuth();
   const canView = role === "owner" || role === "admin";
@@ -100,7 +116,12 @@ export default function Communications() {
   const [summary, setSummary] = useState(null);
   const [deliveries, setDeliveries] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [filters, setFilters] = useState({ status: "", templateType: "", limit: 100 });
+  const [campaignForm, setCampaignForm] = useState(EMPTY_CAMPAIGN_FORM);
+  const [campaignPreview, setCampaignPreview] = useState(null);
+  const [campaignBusy, setCampaignBusy] = useState("");
+  const [campaignMessage, setCampaignMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -132,10 +153,12 @@ export default function Communications() {
         }),
         api.get("/sms/templates").catch(() => ({ data: [] })),
       ]);
+      const campaignsRes = await api.get("/sms/campaigns", { params: { limit: 25 } }).catch(() => ({ data: [] }));
       setSettings(settingsRes.data || {});
       setSummary(summaryRes.data || {});
       setDeliveries(Array.isArray(deliveriesRes.data) ? deliveriesRes.data : []);
       setTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
+      setCampaigns(Array.isArray(campaignsRes.data) ? campaignsRes.data : []);
       setLastUpdatedAt(new Date().toISOString());
     } catch (err) {
       setError(err?.message || "Failed to load communications data");
@@ -157,6 +180,71 @@ export default function Communications() {
 
   const updateFilter = (key, value) => {
     setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateCampaignField = (key, value) => {
+    setCampaignForm((current) => ({ ...current, [key]: value }));
+    setCampaignPreview(null);
+    setCampaignMessage("");
+  };
+
+  const updateAudienceField = (key, value) => {
+    setCampaignForm((current) => ({
+      ...current,
+      audience: { ...current.audience, [key]: value },
+    }));
+    setCampaignPreview(null);
+    setCampaignMessage("");
+  };
+
+  const campaignPayload = () => ({
+    ...campaignForm,
+    audience: {
+      ...campaignForm.audience,
+      limit: Number(campaignForm.audience.limit || 200),
+    },
+  });
+
+  const previewCampaign = async () => {
+    setCampaignBusy("preview");
+    setCampaignMessage("");
+    setError("");
+    try {
+      const { data } = await api.post("/sms/campaigns/preview", campaignPayload());
+      setCampaignPreview(data);
+      setCampaignMessage(`Preview ready: ${data?.counts?.sendable || 0} sendable of ${data?.counts?.total || 0}.`);
+    } catch (err) {
+      setCampaignMessage("");
+      setError(err?.message || "Failed to preview campaign");
+    } finally {
+      setCampaignBusy("");
+    }
+  };
+
+  const sendCampaign = async () => {
+    const sendable = Number(campaignPreview?.counts?.sendable || 0);
+    if (!sendable) {
+      setCampaignMessage("Preview the campaign and confirm at least one recipient is sendable.");
+      return;
+    }
+    const confirmed = window.confirm(`Send this campaign to ${sendable} recipient(s)? Suppressed customers will be logged as skipped.`);
+    if (!confirmed) return;
+
+    setCampaignBusy("send");
+    setCampaignMessage("");
+    setError("");
+    try {
+      const { data } = await api.post("/sms/campaigns", campaignPayload());
+      const campaign = data?.campaign || data;
+      setCampaignMessage(`Campaign sent: ${campaign?.counts?.sent || 0} sent, ${campaign?.counts?.skipped || 0} skipped, ${campaign?.counts?.failed || 0} failed.`);
+      setCampaignPreview(null);
+      setCampaignForm(EMPTY_CAMPAIGN_FORM);
+      await load();
+    } catch (err) {
+      setError(err?.message || "Failed to send campaign");
+    } finally {
+      setCampaignBusy("");
+    }
   };
 
   if (status === "unknown") return <div style={{ padding: 20 }}>Checking session...</div>;
@@ -239,6 +327,154 @@ export default function Communications() {
         </div>
       </SectionCard>
 
+      <SectionCard
+        title="Campaign Composer"
+        subtitle="Preview the audience and suppression decisions before sending a bulk customer notice."
+        actions={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn" onClick={previewCampaign} disabled={campaignBusy === "preview"}>
+              {campaignBusy === "preview" ? "Previewing..." : "Preview"}
+            </button>
+            <button
+              className="btn"
+              style={{ background: "#c2410c" }}
+              onClick={sendCampaign}
+              disabled={campaignBusy === "send" || !campaignPreview?.counts?.sendable}
+            >
+              {campaignBusy === "send" ? "Sending..." : "Send Campaign"}
+            </button>
+          </div>
+        }
+      >
+        {campaignMessage ? <div style={{ color: "#166534", fontWeight: 800, marginBottom: 12 }}>{campaignMessage}</div> : null}
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+            <input
+              value={campaignForm.name}
+              onChange={(event) => updateCampaignField("name", event.target.value)}
+              placeholder="Campaign name"
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            />
+            <select
+              value={campaignForm.templateType}
+              onChange={(event) => updateCampaignField("templateType", event.target.value)}
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            >
+              <option value="broadcast">broadcast</option>
+              <option value="payment-link">payment-link</option>
+              {templateOptions.filter((type) => !["broadcast", "payment-link"].includes(type)).map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+            <select
+              value={campaignForm.category}
+              onChange={(event) => updateCampaignField("category", event.target.value)}
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            >
+              <option value="service">Service alert</option>
+              <option value="billing">Billing</option>
+              <option value="payment-link">Payment link</option>
+              <option value="marketing">Marketing</option>
+            </select>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#334155", fontWeight: 800 }}>
+              <input
+                type="checkbox"
+                checked={campaignForm.includePaylink}
+                onChange={(event) => updateCampaignField("includePaylink", event.target.checked)}
+              />
+              Generate paylinks
+            </label>
+          </div>
+
+          <textarea
+            value={campaignForm.body}
+            onChange={(event) => updateCampaignField("body", event.target.value)}
+            rows={3}
+            placeholder="Message body. Supports {{name}}, {{account_number}}, {{plan_name}}, {{payment_link}}, and {{message}}."
+            style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+          />
+          <input
+            value={campaignForm.message}
+            onChange={(event) => updateCampaignField("message", event.target.value)}
+            placeholder="Optional {{message}} variable"
+            style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+          />
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
+            <select
+              value={campaignForm.audience.status}
+              onChange={(event) => updateAudienceField("status", event.target.value)}
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            >
+              <option value="">Any status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="suspended">Suspended</option>
+            </select>
+            <select
+              value={campaignForm.audience.connectionType}
+              onChange={(event) => updateAudienceField("connectionType", event.target.value)}
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            >
+              <option value="">Any connection</option>
+              <option value="pppoe">PPPoE</option>
+              <option value="static">Static</option>
+            </select>
+            <input
+              value={campaignForm.audience.query}
+              onChange={(event) => updateAudienceField("query", event.target.value)}
+              placeholder="Audience search"
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            />
+            <select
+              value={campaignForm.audience.limit}
+              onChange={(event) => updateAudienceField("limit", Number(event.target.value))}
+              style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
+            >
+              {[50, 100, 200, 500].map((value) => (
+                <option key={value} value={value}>{value} max recipients</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {campaignPreview ? (
+          <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+              <SummaryCard title="Matched" value={campaignPreview.counts?.total || 0} />
+              <SummaryCard title="Sendable" value={campaignPreview.counts?.sendable || 0} accent="#166534" />
+              <SummaryCard title="Suppressed" value={campaignPreview.counts?.skipped || 0} accent="#92400e" />
+              <SummaryCard title="Missing Phone" value={campaignPreview.counts?.missingPhone || 0} accent="#b91c1c" />
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Recipient</th>
+                    <th>Allowed</th>
+                    <th>Reason</th>
+                    <th>Preview</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(campaignPreview.sample || []).map((row) => (
+                    <tr key={row.customerId}>
+                      <td>
+                        <strong>{row.name || "-"}</strong>
+                        <div style={{ color: "#64748b", fontSize: 13 }}>{row.accountNumber || row.phone || "-"}</div>
+                      </td>
+                      <td><StatusBadge value={row.allowed ? "sent" : "skipped"} /></td>
+                      <td>{row.reason || "-"}</td>
+                      <td style={{ maxWidth: 420 }}>{row.messagePreview || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </SectionCard>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 16 }}>
         <SectionCard title="Provider Mix" subtitle="Volume by provider and channel over the last 30 days">
           <div style={{ display: "grid", gap: 10 }}>
@@ -319,6 +555,51 @@ export default function Communications() {
                   <td colSpan={7} style={{ textAlign: "center", padding: 24 }}>
                     {loading ? "Loading deliveries..." : "No delivery records match the current filters."}
                   </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Recent Campaigns" subtitle={`${campaigns.length} campaign audit record(s)`}>
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Audience</th>
+                <th>Counts</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((campaign) => (
+                <tr key={campaign.id}>
+                  <td>{formatDateTime(campaign.createdAt)}</td>
+                  <td>
+                    <strong>{campaign.name || "-"}</strong>
+                    <div style={{ color: "#64748b", fontSize: 13 }}>{campaign.templateType || "-"} / {campaign.category || "-"}</div>
+                  </td>
+                  <td><StatusBadge value={campaign.status} /></td>
+                  <td>
+                    {campaign.audience?.status || "any"} status
+                    <div style={{ color: "#64748b", fontSize: 13 }}>{campaign.audience?.connectionType || "any"} connection</div>
+                  </td>
+                  <td>
+                    {campaign.counts?.sent || 0} sent
+                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                      {campaign.counts?.skipped || 0} skipped / {campaign.counts?.failed || 0} failed
+                    </div>
+                  </td>
+                  <td style={{ maxWidth: 340 }}>{campaign.bodyPreview || "-"}</td>
+                </tr>
+              ))}
+              {!campaigns.length ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>No campaigns have been sent yet.</td>
                 </tr>
               ) : null}
             </tbody>

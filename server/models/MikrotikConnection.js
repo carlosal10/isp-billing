@@ -10,6 +10,7 @@ const MikroTikConnectionSchema = new mongoose.Schema(
     username: { type: String, required: true, trim: true },
     password: { type: String, required: true }, // store encrypted at rest if you have KMS
     tls: { type: Boolean, default: false },
+    timeout: { type: Number, default: 15000, min: 1000, max: 60000 },
     primary: { type: Boolean, default: false }, // mark one as default per tenant
     site: { type: String, trim: true },
     tags: { type: [String], default: [] },

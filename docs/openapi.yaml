@@ -822,6 +822,61 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 500 }
       responses:
         '200': { description: OK }
+  /sms/campaigns:
+    get:
+      summary: List outbound SMS campaigns with send, skip, and failure counts
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+    post:
+      summary: Send a controlled outbound SMS campaign after audience preview
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                templateType: { type: string }
+                category: { type: string, example: service }
+                language: { type: string, example: en }
+                body: { type: string }
+                message: { type: string }
+                includePaylink: { type: boolean }
+                dueAt: { type: string, format: date-time }
+                audience:
+                  type: object
+                  properties:
+                    status: { type: string }
+                    connectionType: { type: string, enum: [pppoe, static] }
+                    planId: { type: string }
+                    query: { type: string }
+                    customerIds:
+                      type: array
+                      items: { type: string }
+                    limit: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid campaign payload }
+        '403': { description: Owner or admin role required }
+  /sms/campaigns/preview:
+    post:
+      summary: Preview campaign audience, suppression decisions, and sample rendered messages without sending
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid campaign payload }
+        '403': { description: Owner or admin role required }
   /payments/events:
     get:
       summary: List persisted payment gateway webhook and callback events for the current tenant
