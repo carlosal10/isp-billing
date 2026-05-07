@@ -24,11 +24,19 @@ const { Server } = require("socket.io");
 const server = http.createServer(app);
 
 // ---- CORS origins (prod + local dev) ----
-const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://isp-billing-1crk.onrender.com";
+function parseOrigins(value) {
+  return String(value || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
+const CLIENT_ORIGINS = parseOrigins(process.env.CLIENT_ORIGINS || process.env.CLIENT_URL);
 const ALLOWED_ORIGINS = [
-  CLIENT_ORIGIN,
+  ...CLIENT_ORIGINS,
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "https://isp-billing-is9m.onrender.com",
   "https://isp-billing-1crk.onrender.com",
 ].filter(Boolean);
 
