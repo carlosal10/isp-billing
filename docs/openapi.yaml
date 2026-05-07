@@ -47,6 +47,284 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 200 }
       responses:
         '200': { description: OK }
+  /audit-logs:
+    get:
+      summary: List tenant audit events with filters, pagination, and redacted payloads
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: actor
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 250 }
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+  /audit-logs/actions:
+    get:
+      summary: List tenant audit action names with counts for filters
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+  /audit-logs/summary:
+    get:
+      summary: Summarize matching tenant audit events by action and actor
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+  /team/members:
+    get:
+      summary: List tenant team members and their roles
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+  /team/members/{id}/role:
+    patch:
+      summary: Update a tenant team member role
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Insufficient role }
+        '404': { description: Team member not found }
+        '409': { description: Last owner protection }
+  /team/members/{id}:
+    delete:
+      summary: Remove a team member from the tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Insufficient role }
+        '404': { description: Team member not found }
+        '409': { description: Last owner or self-removal protection }
+  /invites:
+    get:
+      summary: List pending tenant invites
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+    post:
+      summary: Create a tenant invite for owner, admin, or operator access
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid payload }
+        '403': { description: Insufficient role for requested invite role }
+        '409': { description: User is already a member }
+  /invites/accept:
+    post:
+      summary: Publicly accept a tenant invite and create a tenant session
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid or expired invite }
+  /invites/{id}:
+    delete:
+      summary: Revoke a pending tenant invite
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Insufficient role }
+        '404': { description: Invite not found }
+  /api-keys:
+    get:
+      summary: List tenant API keys without exposing secret material
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+    post:
+      summary: Create a scoped tenant API key and return the plaintext key once
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid scopes or expiry }
+        '403': { description: Owner or admin role required }
+  /api-keys/scopes:
+    get:
+      summary: List supported tenant API key scopes
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
+  /api-keys/{id}:
+    patch:
+      summary: Update API key label, description, scopes, or expiry
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: API key not found }
+        '409': { description: Revoked API key cannot be updated }
+    delete:
+      summary: Revoke a tenant API key
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: API key not found }
+  /integration/v1/health:
+    get:
+      summary: Validate a tenant API key and return its tenant and scope context
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Missing or invalid API key }
+  /integration/v1/customers:
+    get:
+      summary: List tenant customers through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: OK }
+        '403': { description: customers:read scope required }
+  /integration/v1/customers/{id}:
+    get:
+      summary: Get one tenant customer through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: customers:read scope required }
+        '404': { description: Customer not found }
+  /integration/v1/invoices:
+    get:
+      summary: List tenant invoices through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: customerId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: OK }
+        '403': { description: invoices:read scope required }
+  /integration/v1/invoices/{id}:
+    get:
+      summary: Get one tenant invoice through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: invoices:read scope required }
+        '404': { description: Invoice not found }
+  /integration/v1/payments:
+    get:
+      summary: List tenant payments through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: OK }
+        '403': { description: payments:read scope required }
+  /integration/v1/support/tickets:
+    post:
+      summary: Create a support ticket through a scoped integration API key
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                priority: { type: string }
+                customerId: { type: string }
+                accountNumber: { type: string }
+                category: { type: string }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid request }
+        '403': { description: support:write scope required }
   /jobs/{name}/run:
     post:
       summary: Trigger a manually runnable job immediately
@@ -513,6 +791,37 @@ paths:
       responses:
         '200': { description: OK }
         '404': { description: Not found }
+  /sms/summary:
+    get:
+      summary: Summarize tenant outbound message delivery over a recent window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365 }
+      responses:
+        '200': { description: OK }
+  /sms/deliveries:
+    get:
+      summary: List tenant message delivery ledger entries with status and template filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: templateType
+          schema: { type: string }
+        - in: query
+          name: customerId
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: OK }
   /payments/events:
     get:
       summary: List persisted payment gateway webhook and callback events for the current tenant
@@ -693,6 +1002,67 @@ paths:
         '400': { description: Invalid request or PIN format }
         '403': { description: Owner or admin role required }
         '404': { description: Customer not found }
+  /customers/{id}/communication-preferences:
+    get:
+      summary: Get customer messaging consent, suppression, and quiet-hours preferences
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Customer not found }
+    put:
+      summary: Update customer messaging consent, suppression, and quiet-hours preferences
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferredLanguage: { type: string }
+                transactionalSmsEnabled: { type: boolean }
+                billingSmsEnabled: { type: boolean }
+                serviceAlertsSmsEnabled: { type: boolean }
+                marketingSmsEnabled: { type: boolean }
+                doNotContactUntil: { type: string, format: date-time, nullable: true }
+                quietHours:
+                  type: object
+                  properties:
+                    enabled: { type: boolean }
+                    start: { type: string, example: '21:00' }
+                    end: { type: string, example: '07:00' }
+                    timezone: { type: string, example: Africa/Nairobi }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid preference payload }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
+    patch:
+      summary: Partially update customer messaging consent, suppression, and quiet-hours preferences
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid preference payload }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
   /platform-api/gateway-events/orphans/{id}/claim:
     post:
       summary: Claim ownership of an orphaned payment gateway event in the platform queue
@@ -871,3 +1241,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY

@@ -54,6 +54,23 @@ const customerSchema = new mongoose.Schema({
     lastLoginAt: { type: Date, default: null },
     lastLoginMethod: { type: String, default: null },
     lastSeenAt: { type: Date, default: null },
+  },
+
+  communicationPreferences: {
+    preferredLanguage: { type: String, default: 'en' },
+    transactionalSmsEnabled: { type: Boolean, default: true },
+    billingSmsEnabled: { type: Boolean, default: true },
+    serviceAlertsSmsEnabled: { type: Boolean, default: true },
+    marketingSmsEnabled: { type: Boolean, default: false },
+    doNotContactUntil: { type: Date, default: null },
+    quietHours: {
+      enabled: { type: Boolean, default: false },
+      start: { type: String, default: '21:00' },
+      end: { type: String, default: '07:00' },
+      timezone: { type: String, default: 'Africa/Nairobi' },
+    },
+    updatedAt: { type: Date, default: null },
+    updatedBy: { type: String, default: null },
   }
 });
 

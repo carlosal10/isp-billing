@@ -19,9 +19,13 @@ import SubscriptionPlansModal from "./components/PlanModal";
 
 import { useAuth } from "./context/AuthContext";
 import AccountSettings from "./pages/AccountSettings";
+import AuditLogs from "./pages/AuditLogs";
+import ApiKeys from "./pages/ApiKeys";
+import Communications from "./pages/Communications";
 import CustomerPortal from "./pages/CustomerPortal";
 import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "./pages/ForgotPassword";
+import InviteAccept from "./pages/InviteAccept";
 import Jobs from "./pages/Jobs";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -33,6 +37,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Routers from "./pages/Routers";
 import ServiceOperations from "./pages/ServiceOperations";
 import SupportOperations from "./pages/SupportOperations";
+import TeamAccess from "./pages/TeamAccess";
 
 export default function App() {
   const { isAuthed, authMode, role } = useAuth();
@@ -80,6 +85,7 @@ export default function App() {
       <Router>
         <Routes>
           <Route path="/pay" element={<PayLink />} />
+          <Route path="/invite/accept" element={<InviteAccept />} />
           <Route path="/portal" element={<Navigate to="/login?mode=customer" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -122,6 +128,7 @@ export default function App() {
         <div className="content-area">
           <Routes>
             <Route path="/pay" element={<PayLink />} />
+            <Route path="/invite/accept" element={<InviteAccept />} />
 
             {isPlatformAdmin ? (
               <>
@@ -151,6 +158,10 @@ export default function App() {
                 <Route path="/settings" element={<AccountSettings />} />
                 <Route path="/routers" element={<Routers />} />
                 <Route path="/jobs" element={<Jobs />} />
+                <Route path="/audit-logs" element={<AuditLogs />} />
+                <Route path="/api-keys" element={<ApiKeys />} />
+                <Route path="/communications" element={<Communications />} />
+                <Route path="/team-access" element={<TeamAccess />} />
                 <Route path="/noc" element={<NocOperations />} />
                 <Route path="/service-ops" element={<ServiceOperations />} />
                 <Route path="/support-ops" element={<SupportOperations />} />

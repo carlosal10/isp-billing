@@ -7,6 +7,7 @@ import {
   MdDashboard,
   MdDns,
   MdHistory,
+  MdKey,
   MdLan,
   MdLogout,
   MdNotificationsActive,
@@ -111,6 +112,26 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
             <li>
               <Link to="/jobs" onClick={toggleSidebar}>
                 <MdSchedule /> Jobs
+              </Link>
+            </li>
+            <li>
+              <Link to="/audit-logs" onClick={toggleSidebar}>
+                <MdSecurity /> Audit Logs
+              </Link>
+            </li>
+            <li>
+              <Link to="/team-access" onClick={toggleSidebar}>
+                <FaUsers /> Team Access
+              </Link>
+            </li>
+            <li>
+              <Link to="/api-keys" onClick={toggleSidebar}>
+                <MdKey /> API Keys
+              </Link>
+            </li>
+            <li>
+              <Link to="/communications" onClick={toggleSidebar}>
+                <MdSms /> Communications
               </Link>
             </li>
             <li>

@@ -524,12 +524,21 @@ export default function Dashboard() {
 
   const refreshCustomerAfterPortalUpdate = useCallback(async (access) => {
     const profile = access?.portalProfile || {};
+    const communicationPreferences = access?.communicationPreferences || null;
     const mergePortalProfile = (customer) => ({
       ...(customer || {}),
       portalProfile: {
         ...(customer?.portalProfile || {}),
         ...profile,
       },
+      ...(communicationPreferences
+        ? {
+            communicationPreferences: {
+              ...(customer?.communicationPreferences || {}),
+              ...communicationPreferences,
+            },
+          }
+        : {}),
     });
 
     if (access?.customerId) {

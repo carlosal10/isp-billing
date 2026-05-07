@@ -3,11 +3,30 @@ import axios from "axios";
 /** ================================
  *  Config
  *  ================================ */
-export const API_BASE =
+function normalizeApiBase(value) {
+  const base = String(value || "").trim().replace(/\/+$/, "");
+  if (!base) return base;
+  if (/\/api$/i.test(base)) return base;
+
+  try {
+    const url = new URL(base);
+    if (!url.pathname || url.pathname === "/") {
+      url.pathname = "/api";
+      return url.toString().replace(/\/+$/, "");
+    }
+  } catch {
+    // Keep relative or otherwise custom bases untouched.
+  }
+
+  return base;
+}
+
+export const API_BASE = normalizeApiBase(
   process.env.REACT_APP_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:5000/api"
-    : "https://isp-billing-server.onrender.com/api");
+    (typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? "http://localhost:5000/api"
+      : "https://isp-billing-server.onrender.com/api")
+);
 
 export const PLATFORM_API_BASE = API_BASE.replace(/\/api\/?$/, "/platform-api");
 export const PORTAL_API_BASE = API_BASE.replace(/\/api\/?$/, "/portal-api");

@@ -22,8 +22,13 @@ const {
 } = require("../utils/mikrotikBandwidthManager");
 const { createPayLink } = require("../utils/paylink");
 const { renderTemplate, formatDateISO } = require("../utils/template");
-const { sendSms } = require("../utils/sms");
+const { sendSms, normalizePhone } = require("../utils/sms");
 const { createProrationAdjustmentForPlanChange } = require("./billingFinanceService");
+const {
+  assessSmsPermission,
+  normalizeCommunicationPreferences,
+} = require("./customerCommunicationPreferencesService");
+const { recordMessageDelivery } = require("./messageDeliveryService");
 
 function serviceError(statusCode, message) {
   const err = new Error(message);
@@ -107,7 +112,73 @@ async function maybeSendPaylinkSms({ tenantId, customer, plan, onPlanChange = fa
   });
 
   if (customer.phone) {
-    await sendSms(tenantId, customer.phone, rendered);
+    const permission = assessSmsPermission(customer, {
+      category: templateType || "payment-link",
+    });
+
+    if (!permission.allowed) {
+      await recordMessageDelivery({
+        tenantId,
+        channel: "sms",
+        provider: null,
+        templateType,
+        language: customer.communicationPreferences?.preferredLanguage || "en",
+        status: "skipped",
+        to: customer.phone,
+        normalizedTo: normalizePhone(customer.phone),
+        body: rendered,
+        customerId: customer._id,
+        planId: plan._id,
+        errorMessage: permission.reason,
+        context: {
+          mode: onPlanChange ? "auto-plan-change" : "auto-create",
+          reason: permission.reason,
+        },
+      }).catch(() => null);
+      return;
+    }
+
+    try {
+      const response = await sendSms(tenantId, customer.phone, rendered);
+      await recordMessageDelivery({
+        tenantId,
+        channel: "sms",
+        provider: response?.provider || null,
+        templateType,
+        language: customer.communicationPreferences?.preferredLanguage || "en",
+        status: response?.status || "sent",
+        to: customer.phone,
+        normalizedTo: normalizePhone(customer.phone),
+        body: rendered,
+        providerMessageId: response?.id || null,
+        providerStatus: response?.status || null,
+        cost: response?.cost || null,
+        customerId: customer._id,
+        planId: plan._id,
+        context: {
+          mode: onPlanChange ? "auto-plan-change" : "auto-create",
+        },
+      }).catch(() => null);
+    } catch (err) {
+      await recordMessageDelivery({
+        tenantId,
+        channel: "sms",
+        provider: null,
+        templateType,
+        language: customer.communicationPreferences?.preferredLanguage || "en",
+        status: "failed",
+        to: customer.phone,
+        normalizedTo: normalizePhone(customer.phone),
+        body: rendered,
+        customerId: customer._id,
+        planId: plan._id,
+        errorMessage: err?.message || "SMS send failed",
+        context: {
+          mode: onPlanChange ? "auto-plan-change" : "auto-create",
+        },
+      }).catch(() => null);
+      throw err;
+    }
   }
 }
 
@@ -163,6 +234,7 @@ async function createCustomer({
     staticConfig,
     accountAliases,
     billingProfile,
+    communicationPreferences,
   } = payload || {};
 
   const plan = await resolvePlan(tenantId, planId);
@@ -207,6 +279,9 @@ async function createCustomer({
     staticConfig: connectionType === "static" ? nextStaticConfig : undefined,
     accountAliases: sanitizeAliases(accountAliases, accountNumber),
     billingProfile: billingProfile || undefined,
+    communicationPreferences: communicationPreferences
+      ? normalizeCommunicationPreferences(communicationPreferences)
+      : undefined,
   });
 
   const saved = await customer.save();

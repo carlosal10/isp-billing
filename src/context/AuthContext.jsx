@@ -563,6 +563,33 @@ export function AuthProvider({ children }) {
     [setAuthState]
   );
 
+  const acceptInvite = useCallback(
+    async ({ code, displayName, password }) => {
+      const { data } = await api.post("/invites/accept", {
+        code,
+        displayName,
+        password,
+      });
+      if (!data?.ok || !data?.accessToken || !data?.refreshToken) {
+        throw new Error(data?.error || "Invite acceptance failed");
+      }
+
+      const decoded = decodeToken(data.accessToken);
+      const nextIsp = data.ispId ?? decoded?.ispId ?? null;
+      const nextUser = data.user ?? userFromToken(data.accessToken) ?? null;
+
+      setAuthState({
+        mode: "tenant",
+        access: data.accessToken,
+        refresh: data.refreshToken,
+        isp: nextIsp,
+        usr: nextUser,
+      });
+      setStatus("auth");
+    },
+    [setAuthState]
+  );
+
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
@@ -703,12 +730,14 @@ export function AuthProvider({ children }) {
       login,
       loginCustomer,
       loginPlatform,
+      acceptInvite,
       register,
       refresh,
       logout,
     }),
     [
       accessToken,
+      acceptInvite,
       authMode,
       isAuthed,
       isPlatformAdmin,

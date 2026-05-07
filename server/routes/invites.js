@@ -4,15 +4,24 @@ const { z } = require("zod");
 const Invite = require("../models/Invite");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
-const bcrypt = require("bcrypt");
+const RefreshToken = require("../models/RefreshToken");
+const bcrypt = require("bcryptjs");
 const { signTenantAccessToken } = require("../utils/jwt");
+const requireAuth = require("../middleware/requireAuth");
+const requireTenant = require("../middleware/requireTenant");
+const requireRole = require("../middleware/requireRole");
+const {
+  createTeamInvite,
+  listPendingInvites,
+  revokeTeamInvite,
+} = require("../services/teamAccessService");
 
 const router = express.Router();
 
 const CreateSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "operator", "billing", "viewer"]).default("operator"),
-  expiresInHours: z.number().int().min(1).max(168).optional(), // default 72h
+  role: z.enum(["owner", "admin", "operator"]).default("operator"),
+  expiresInHours: z.number().int().min(1).max(168).optional(),
 });
 
 const AcceptSchema = z.object({
@@ -21,37 +30,66 @@ const AcceptSchema = z.object({
   password: z.string().min(8),
 });
 
-// POST /api/invites (create)
-router.post("/", async (req, res) => {
+function protectedTenantAccess(req, res, next) {
+  return requireAuth(req, res, (authErr) => {
+    if (authErr) return next(authErr);
+    return requireTenant(req, res, next);
+  });
+}
+
+function requestActor(req) {
+  return {
+    id: String(req.user?.email || req.user?.sub || req.user?.id || req.user?._id || ""),
+    userId: String(req.user?.sub || req.user?.id || req.user?._id || ""),
+    email: req.user?.email || null,
+    role: req.role || (req.user?.isPlatformAdmin ? "platform-admin" : null),
+  };
+}
+
+function refreshExpiry(days = Number(process.env.REFRESH_TTL_DAYS || 30)) {
+  return new Date(Date.now() + days * 86400 * 1000);
+}
+
+async function issueRefreshToken({ userId, tenantId }) {
+  const token = crypto.randomBytes(48).toString("base64url");
+  await RefreshToken.create({
+    token,
+    user: userId,
+    tenant: tenantId,
+    expiresAt: refreshExpiry(),
+    isRevoked: false,
+  });
+  return token;
+}
+
+router.get("/", protectedTenantAccess, requireRole("owner", "admin"), async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-    const userId = req.user?.sub || req.user?.id;
-    if (!tenantId || !userId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-    const parsed = CreateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
-
-    const { email, role, expiresInHours } = parsed.data;
-    const code = crypto.randomBytes(24).toString("base64url");
-    const ttl = (expiresInHours ?? 72) * 3600 * 1000;
-
-    const inv = await Invite.create({
-      tenant: tenantId,
-      email,
-      role,
-      code,
-      expiresAt: new Date(Date.now() + ttl),
-      invitedBy: userId,
-    });
-
-    // TODO: email the invite link to user (include code)
-    res.json({ ok: true, code: inv.code, expiresAt: inv.expiresAt });
+    const invites = await listPendingInvites(req.tenantId);
+    return res.json(invites);
   } catch (e) {
-    res.status(500).json({ ok: false, error: "Invite failed" });
+    console.error("invite list failed:", e);
+    return res.status(500).json({ ok: false, error: "Failed to load invites" });
   }
 });
 
-// POST /api/invites/accept
+router.post("/", protectedTenantAccess, requireRole("owner", "admin"), async (req, res) => {
+  try {
+    const parsed = CreateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid payload" });
+
+    const invite = await createTeamInvite({
+      tenantId: req.tenantId,
+      payload: parsed.data,
+      actor: requestActor(req),
+    });
+
+    return res.status(201).json({ ok: true, invite });
+  } catch (e) {
+    console.error("invite create failed:", e);
+    return res.status(e?.statusCode || 500).json({ ok: false, error: e?.message || "Invite failed" });
+  }
+});
+
 router.post("/accept", async (req, res) => {
   try {
     const parsed = AcceptSchema.safeParse(req.body);
@@ -63,7 +101,6 @@ router.post("/accept", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid or expired invite" });
     }
 
-    // If the user exists, attach membership; else create user
     let user = await User.findOne({ email: inv.email });
     if (!user) {
       const passwordHash = await bcrypt.hash(password, 12);
@@ -74,9 +111,16 @@ router.post("/accept", async (req, res) => {
         isActive: true,
         primaryTenant: inv.tenant,
       });
+    } else {
+      if (!user.isActive) {
+        return res.status(403).json({ ok: false, error: "Invited user is disabled" });
+      }
+      const ok = await bcrypt.compare(password, user.passwordHash || "");
+      if (!ok) {
+        return res.status(401).json({ ok: false, error: "Existing user password is incorrect" });
+      }
     }
 
-    // Membership (idempotent)
     await Membership.updateOne(
       { user: user._id, tenant: inv.tenant },
       { $setOnInsert: { role: inv.role } },
@@ -86,16 +130,33 @@ router.post("/accept", async (req, res) => {
     await Invite.updateOne({ _id: inv._id }, { $set: { acceptedAt: new Date() } });
 
     const accessToken = signTenantAccessToken({ user, tenantId: inv.tenant });
-    // (Optional) Issue a refresh token if you want auto-login after accept.
+    const refreshToken = await issueRefreshToken({ userId: user._id, tenantId: inv.tenant });
 
-    res.json({
+    return res.json({
       ok: true,
-      user: { id: String(user._id), email: user.email, displayName: user.displayName },
+      user: { id: String(user._id), email: user.email, displayName: user.displayName, role: inv.role },
       ispId: String(inv.tenant),
+      role: inv.role,
       accessToken,
+      refreshToken,
     });
   } catch (e) {
-    res.status(500).json({ ok: false, error: "Accept failed" });
+    console.error("invite accept failed:", e);
+    return res.status(500).json({ ok: false, error: "Accept failed" });
+  }
+});
+
+router.delete("/:id", protectedTenantAccess, requireRole("owner", "admin"), async (req, res) => {
+  try {
+    const invite = await revokeTeamInvite({
+      tenantId: req.tenantId,
+      inviteId: req.params.id,
+      actor: requestActor(req),
+    });
+    return res.json({ ok: true, invite });
+  } catch (e) {
+    console.error("invite revoke failed:", e);
+    return res.status(e?.statusCode || 500).json({ ok: false, error: e?.message || "Failed to revoke invite" });
   }
 });
 

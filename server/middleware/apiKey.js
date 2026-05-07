@@ -13,7 +13,11 @@ async function apiKeyAuth(req, res, next) {
     const raw = req.headers['x-api-key'] || req.query.apiKey || '';
     if (!raw) return res.status(401).json({ ok: false, error: 'Missing API key' });
     const keyHash = hashKey(raw);
-    const key = await ApiKey.findOne({ keyHash, active: true }).lean();
+    const key = await ApiKey.findOne({
+      keyHash,
+      active: true,
+      $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
+    }).lean();
     if (!key) return res.status(401).json({ ok: false, error: 'Invalid API key' });
     req.apiKey = key;
     if (!req.tenantId) req.tenantId = String(key.tenantId);
@@ -25,5 +29,22 @@ async function apiKeyAuth(req, res, next) {
   }
 }
 
-module.exports = { apiKeyAuth, hashKey };
+function hasApiKeyScope(apiKey, scope) {
+  if (!apiKey || !scope) return false;
+  const scopes = Array.isArray(apiKey.scopes) ? apiKey.scopes : [];
+  return scopes.includes(scope);
+}
 
+function requireApiKeyScope(...requiredScopes) {
+  return (req, res, next) => {
+    const key = req.apiKey;
+    if (!key) return res.status(401).json({ ok: false, error: 'Missing API key context' });
+    const ok = requiredScopes.some((scope) => hasApiKeyScope(key, scope));
+    if (!ok) {
+      return res.status(403).json({ ok: false, error: 'API key scope denied' });
+    }
+    return next();
+  };
+}
+
+module.exports = { apiKeyAuth, hashKey, hasApiKeyScope, requireApiKeyScope };

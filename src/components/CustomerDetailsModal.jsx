@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { api } from "../lib/apiClient";
+import CustomerCommunicationPreferencesCard from "./CustomerCommunicationPreferencesCard";
 import CustomerPortalAccessCard from "./CustomerPortalAccessCard";
 
 export default function CustomerDetailsModal({ open, onClose, customer, onUpdated }) {
@@ -124,6 +125,8 @@ export default function CustomerDetailsModal({ open, onClose, customer, onUpdate
         </div>
 
         <CustomerPortalAccessCard customer={customer} onUpdated={onUpdated} />
+
+        <CustomerCommunicationPreferencesCard customer={customer} onUpdated={onUpdated} />
 
         {/* Health card */}
         <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>

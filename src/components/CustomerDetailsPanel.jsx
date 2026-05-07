@@ -1,6 +1,7 @@
 // src/components/CustomerDetailsPanel.jsx
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
+import CustomerCommunicationPreferencesCard from "./CustomerCommunicationPreferencesCard";
 import CustomerPortalAccessCard from "./CustomerPortalAccessCard";
 
 export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
@@ -100,6 +101,10 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
 
       <div style={{ marginBottom: 12 }}>
         <CustomerPortalAccessCard customer={customer} onUpdated={onUpdated} />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <CustomerCommunicationPreferencesCard customer={customer} onUpdated={onUpdated} />
       </div>
 
       <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>

@@ -3,11 +3,17 @@ const router = express.Router();
 const SmsSettings = require('../models/SmsSettings');
 const SmsTemplate = require('../models/SmsTemplate');
 const { renderTemplate, buildTemplateVariables } = require('../utils/template');
-const { sendSms } = require('../utils/sms');
+const { sendSms, normalizePhone } = require('../utils/sms');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const { createPayLink } = require('../utils/paylink');
 const PaymentConfig = require('../models/PaymentConfig');
+const {
+  getMessageDeliverySummary,
+  listMessageDeliveries,
+  recordMessageDelivery,
+} = require('../services/messageDeliveryService');
+const { assessSmsPermission } = require('../services/customerCommunicationPreferencesService');
 
 const FALLBACK_PAYBILL =
   process.env.MPESA_SHORTCODE ||
@@ -25,6 +31,40 @@ async function resolveTenantPaybill(tenantId) {
       ? tillNumber || config?.paybillShortcode || FALLBACK_PAYBILL
       : config?.paybillShortcode || tillNumber || FALLBACK_PAYBILL;
   return { paybillShortcode: paybillShortcode || FALLBACK_PAYBILL, tillNumber };
+}
+
+async function recordSmsAttempt({
+  tenantId,
+  to,
+  body,
+  response,
+  error,
+  templateType,
+  language,
+  customerId,
+  planId,
+  context,
+}) {
+  const providerStatus = response?.status || null;
+  const status = error ? 'failed' : providerStatus || 'sent';
+  return recordMessageDelivery({
+    tenantId,
+    channel: 'sms',
+    provider: response?.provider || null,
+    templateType,
+    language,
+    status,
+    to,
+    normalizedTo: normalizePhone(to),
+    body,
+    providerMessageId: response?.id || null,
+    providerStatus,
+    cost: response?.cost || null,
+    customerId,
+    planId,
+    errorMessage: error?.message || null,
+    context,
+  }).catch(() => null);
 }
 
 // GET settings (tenant scoped)
@@ -61,6 +101,34 @@ router.get('/templates', async (req, res) => {
   }
 });
 
+router.get('/summary', async (req, res) => {
+  try {
+    const summary = await getMessageDeliverySummary(req.tenantId, {
+      days: req.query.days,
+    });
+    res.json(summary);
+  } catch (e) {
+    console.error('sms summary error', e);
+    res.status(500).json({ error: 'Failed to load message summary' });
+  }
+});
+
+router.get('/deliveries', async (req, res) => {
+  try {
+    const rows = await listMessageDeliveries(req.tenantId, {
+      channel: req.query.channel || 'sms',
+      status: req.query.status,
+      templateType: req.query.templateType,
+      customerId: req.query.customerId,
+      limit: req.query.limit,
+    });
+    res.json(rows);
+  } catch (e) {
+    console.error('sms deliveries list error', e);
+    res.status(500).json({ error: 'Failed to list message deliveries' });
+  }
+});
+
 // Upsert a template by (type, language)
 router.post('/templates', async (req, res) => {
   try {
@@ -91,9 +159,11 @@ router.post('/preview', async (req, res) => {
 
 // Send a test SMS using a template and a sample customer/plan (or custom body)
 router.post('/send-test', async (req, res) => {
+  let audit = null;
   try {
     const { to, templateType = 'payment-link', language = 'en', body: overrideBody, variables } = req.body || {};
     if (!to) return res.status(400).json({ error: 'Missing recipient phone' });
+    audit = { to, templateType, language };
 
     const tmpl = await SmsTemplate.findOne({ tenantId: req.tenantId, type: templateType, language, active: true }).lean();
     const body = overrideBody || tmpl?.body || 'Dear Customer your internet subscription plan [Plan Name] will expire on [Expiry Date].\\nRenew early to stay connected.\\n\\nKindly make payments through our PayBill [PayBill Shortcode] your account number [Customer\'s Account Number] or click on the payment link below: [Payment Link]';
@@ -115,10 +185,29 @@ router.post('/send-test', async (req, res) => {
       tillNumber,
     });
     const rendered = renderTemplate(body, { ...baseVariables, ...(variables || {}) });
+    audit = {
+      ...audit,
+      body: rendered,
+      customerId: customer?._id || null,
+      planId: plan?._id || null,
+      context: { mode: 'test', templateType, language },
+    };
 
     const resp = await sendSms(req.tenantId, to, rendered);
-    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued' });
+    const delivery = await recordSmsAttempt({
+      tenantId: req.tenantId,
+      response: resp,
+      ...audit,
+    });
+    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', delivery });
   } catch (e) {
+    if (audit?.to) {
+      await recordSmsAttempt({
+        tenantId: req.tenantId,
+        error: e,
+        ...audit,
+      });
+    }
     console.error('sms send-test error', e);
     res.status(500).json({ error: e.message || 'Failed to send test SMS' });
   }
@@ -127,9 +216,11 @@ router.post('/send-test', async (req, res) => {
 // Send an SMS to a specific customer using a template and on-the-fly paylink
 // Body: { customerId, planId?, templateType?, language?, dueAt? }
 router.post('/send', async (req, res) => {
+  let audit = null;
   try {
     const { customerId, planId, templateType = 'payment-link', language = 'en', dueAt } = req.body || {};
     if (!customerId) return res.status(400).json({ error: 'Missing customerId' });
+    audit = { customerId, planId, templateType, language };
 
     const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId }).lean();
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
@@ -156,10 +247,62 @@ router.post('/send', async (req, res) => {
         tillNumber,
       })
     );
+    audit = {
+      ...audit,
+      to: customer.phone,
+      body: rendered,
+      customerId: customer._id,
+      planId: plan._id,
+      context: { mode: 'customer-send', templateType, language, dueAt: linkDue },
+    };
+
+    const permission = assessSmsPermission(customer, { category: templateType });
+    if (!permission.allowed) {
+      const delivery = await recordMessageDelivery({
+        tenantId: req.tenantId,
+        channel: 'sms',
+        provider: null,
+        templateType,
+        language,
+        status: 'skipped',
+        to: customer.phone,
+        normalizedTo: normalizePhone(customer.phone),
+        body: rendered,
+        customerId: customer._id,
+        planId: plan._id,
+        errorMessage: permission.reason,
+        context: {
+          mode: 'customer-send',
+          templateType,
+          language,
+          reason: permission.reason,
+        },
+      });
+      return res.json({
+        ok: true,
+        skipped: true,
+        status: 'skipped',
+        reason: permission.reason,
+        to: customer.phone,
+        delivery,
+      });
+    }
 
     const resp = await sendSms(req.tenantId, customer.phone, rendered);
-    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', to: customer.phone });
+    const delivery = await recordSmsAttempt({
+      tenantId: req.tenantId,
+      response: resp,
+      ...audit,
+    });
+    res.json({ ok: true, id: resp.id, provider: resp.provider, status: resp.status || 'queued', to: customer.phone, delivery });
   } catch (e) {
+    if (audit?.to || audit?.customerId) {
+      await recordSmsAttempt({
+        tenantId: req.tenantId,
+        error: e,
+        ...audit,
+      });
+    }
     console.error('sms send error', e);
     res.status(500).json({ error: e.message || 'Failed to send SMS' });
   }

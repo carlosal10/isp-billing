@@ -4,9 +4,9 @@ const InviteSchema = new mongoose.Schema(
   {
     tenant: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     email: { type: String, required: true, trim: true, index: true },
-    role: { type: String, enum: ["admin", "operator", "billing", "viewer"], default: "operator" },
+    role: { type: String, enum: ["owner", "admin", "operator"], default: "operator" },
     code: { type: String, required: true, unique: true, index: true }, // signed or random
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
     acceptedAt: { type: Date },
     invitedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },

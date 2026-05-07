@@ -30,7 +30,6 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "https://isp-billing-1crk.onrender.com",
-  "https://isp-billing-1-rsla.onrender.com",
 ].filter(Boolean);
 
 const io = new Server(server, {
@@ -117,6 +116,8 @@ const customerRoutes = require("./routes/Customer");
 const planRoutes = require("./routes/plans");
 const invoiceRoutes = require("./routes/Invoices");
 const financeRoutes = require("./routes/finance");
+const auditLogRoutes = require("./routes/auditLogs");
+const teamAccessRoutes = require("./routes/teamAccess");
 const nocOperationsRoutes = require("./routes/nocOperations");
 const serviceOperationsRoutes = require("./routes/serviceOperations");
 const supportOperationsRoutes = require("./routes/supportOperations");
@@ -125,7 +126,7 @@ const statsRoutes = require("./routes/Stats");
 
 // Auth (HYBRID SPLIT)
 const tenantAuthRoutes = require("./routes/tenantAuth");      // /api/auth/*
-const invitesRoutes = require("./routes/invites");            // /api/invites (tenant-protected)
+const invitesRoutes = require("./routes/invites");
 const platformAuthRoutes = require("./routes/platformAuth");  // /platform-api/auth/*
 const portalAuthRoutes = require("./routes/portalAuth");
 const customerPortalRoutes = require("./routes/customerPortal");
@@ -164,6 +165,7 @@ const healthDetailRoutes = require("./routes/health");
 const eventsRoutes = require("./routes/events");
 const jobsRoutes = require("./routes/jobs");
 const apiKeysRoutes = require("./routes/apiKeys");
+const integrationApiRoutes = require("./routes/integrationApi");
 const flagsRoutes = require("./routes/flags");
 const archiveRoutes = require("./routes/archive");
 
@@ -208,7 +210,7 @@ app.get('/pl/:token', (req, res) => {
 // ----------------- Mount APIs -----------------
 // Tenant realm auth
 app.use("/api/auth", tenantAuthRoutes);
-app.use("/api/invites", authenticate, attachTenant, invitesRoutes);
+app.use("/api/invites", invitesRoutes);
 
 // Platform-admin realm
 app.use("/platform-api/auth", platformAuthRoutes);
@@ -223,6 +225,7 @@ app.use("/api/payment/callback", paymentCallbackRoutes);
 app.use("/api/payments/callback", paymentCallbackRoutes);
 app.use("/api/payment/stripe", stripeWebhook);
 app.use("/api/mpesa/c2b", mpesaC2BRoutes);
+app.use("/api/integration", integrationApiRoutes);
 
 // Now mount generic '/api' stacks and protected APIs
 app.use("/api", authenticate, attachTenant, eventsRoutes);
@@ -236,6 +239,8 @@ app.use("/api/customers", authenticate, attachTenant, customerRoutes);
 app.use("/api/plans", authenticate, attachTenant, planRoutes);
 app.use("/api/invoices", authenticate, attachTenant, invoiceRoutes);
 app.use("/api/finance", authenticate, attachTenant, financeRoutes);
+app.use("/api/audit-logs", authenticate, attachTenant, auditLogRoutes);
+app.use("/api/team", authenticate, attachTenant, teamAccessRoutes);
 app.use("/api/noc", authenticate, attachTenant, nocOperationsRoutes);
 app.use("/api/service-ops", authenticate, attachTenant, serviceOperationsRoutes);
 app.use("/api/support", authenticate, attachTenant, supportOperationsRoutes);
