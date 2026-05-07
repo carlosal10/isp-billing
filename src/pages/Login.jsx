@@ -91,7 +91,7 @@ export default function Login() {
       try {
         const { data } = await api.get("/health");
         if (!mounted) return;
-        setApiHealth({ ok: !!data?.ok, msg: `API OK (${API_BASE})` });
+        setApiHealth({ ok: !!data?.ok, msg: `API OK` });
       } catch (e) {
         if (!mounted) return;
         setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
