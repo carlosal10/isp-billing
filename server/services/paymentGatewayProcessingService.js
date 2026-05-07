@@ -16,6 +16,7 @@ const {
   findStkCorrelation,
   markStkCorrelationCallback,
 } = require('./paymentGatewayCorrelationService');
+const { syncPaymentFinancials } = require('./billingFinanceService');
 
 function parseMpesaTimestamp(ts) {
   if (!ts) return null;
@@ -283,6 +284,11 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
         referenceDate: paidAt,
       }) || payment.expiryDate;
     await payment.save();
+    await syncPaymentFinancials({
+      paymentId: payment._id,
+      actor: { id: 'mpesa-stk' },
+      reason: 'STK callback success',
+    }).catch(() => {});
     await syncCustomerAccessFromPayments({
       tenantId: payment.tenantId,
       customerId: payment.customer?._id || payment.customer,
@@ -310,6 +316,11 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
   payment.validatedAt = new Date();
   payment.validatedBy = 'mpesa-stk';
   await payment.save();
+  await syncPaymentFinancials({
+    paymentId: payment._id,
+    actor: { id: 'mpesa-stk' },
+    reason: 'STK callback failure',
+  }).catch(() => {});
   await touchCorrelation();
 
   return finalizeGatewayEvent(
@@ -502,6 +513,11 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
   if (msisdn && !customer.phone) customer.phone = `+${msisdn}`;
 
   await payment.save();
+  await syncPaymentFinancials({
+    paymentId: payment._id,
+    actor: { id: 'mpesa-c2b' },
+    reason: 'C2B confirmation success',
+  }).catch(() => {});
   await customer.save().catch(() => {});
   await syncCustomerAccessFromPayments({
     tenantId: customer.tenantId,
@@ -648,6 +664,11 @@ async function processStripeGatewayEvent(gatewayEvent, options = {}) {
       referenceDate: payment.validatedAt,
     }) || payment.expiryDate;
   await payment.save();
+  await syncPaymentFinancials({
+    paymentId: payment._id,
+    actor: { id: 'stripe-webhook' },
+    reason: 'Stripe webhook success',
+  }).catch(() => {});
 
   await syncCustomerAccessFromPayments({
     tenantId: payment.tenantId,

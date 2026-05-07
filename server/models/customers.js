@@ -34,6 +34,26 @@ const customerSchema = new mongoose.Schema({
     ip: { type: String },
     gateway: { type: String },
     dns: { type: String }
+  },
+
+  billingProfile: {
+    invoiceLeadDays: { type: Number, default: 3 },
+    autopayEnabled: { type: Boolean, default: false },
+    preferredPaymentMethod: { type: String, default: 'mpesa' },
+    preferredPhoneNumber: { type: String, default: null },
+    stripeCustomerId: { type: String, default: null },
+    stripePaymentMethodId: { type: String, default: null },
+    graceDays: { type: Number, default: 3 },
+    retryIntervalDays: { type: Number, default: 2 },
+    maxAutopayAttempts: { type: Number, default: 3 },
+  },
+
+  portalProfile: {
+    isEnabled: { type: Boolean, default: true },
+    pinHash: { type: String, default: null },
+    lastLoginAt: { type: Date, default: null },
+    lastLoginMethod: { type: String, default: null },
+    lastSeenAt: { type: Date, default: null },
   }
 });
 

@@ -5,15 +5,18 @@ import {
   MdCable,
   MdClose,
   MdDashboard,
+  MdDns,
   MdHistory,
   MdLan,
   MdLogout,
+  MdNotificationsActive,
   MdPayments,
   MdRouter,
   MdSchedule,
   MdSecurity,
   MdSettings,
   MdSms,
+  MdSupportAgent,
   MdTerminal,
   MdViewList,
 } from "react-icons/md";
@@ -108,6 +111,21 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
             <li>
               <Link to="/jobs" onClick={toggleSidebar}>
                 <MdSchedule /> Jobs
+              </Link>
+            </li>
+            <li>
+              <Link to="/noc" onClick={toggleSidebar}>
+                <MdNotificationsActive /> NOC
+              </Link>
+            </li>
+            <li>
+              <Link to="/service-ops" onClick={toggleSidebar}>
+                <MdDns /> Service Ops
+              </Link>
+            </li>
+            <li>
+              <Link to="/support-ops" onClick={toggleSidebar}>
+                <MdSupportAgent /> Support Ops
               </Link>
             </li>
             <li>

@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const { sendSTKPush } = require('../utils/stkPush');
 const PaymentConfig = require('../models/PaymentConfig');
 const { upsertStkCorrelation } = require('../services/paymentGatewayCorrelationService');
+const { ensureCollectableInvoiceForPaymentStart } = require('../services/billingFinanceService');
 
 function normalizePhone(msisdn) {
   let s = String(msisdn).replace(/\D/g, '');
@@ -71,6 +72,12 @@ router.post('/stk', async (req, res) => {
     if (!Number.isFinite(amount) || amount < 1) {
       return res.status(400).json({ error: 'Invalid plan amount' });
     }
+    const invoice = await ensureCollectableInvoiceForPaymentStart({
+      tenantId,
+      customerId,
+      planId,
+      issueDate: new Date(),
+    }).catch(() => null);
 
     // 3) Normalize + validate MSISDN
     const msisdn = normalizePhone(phone);
@@ -82,6 +89,7 @@ router.post('/stk', async (req, res) => {
       accountNumber: info.customer?.accountNumber || 'N/A',
       phoneNumber: msisdn,
       customer: customerId,
+      invoice: invoice?._id || null,
       plan: planId,
       amount,
       method: 'mpesa',

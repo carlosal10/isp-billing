@@ -11,6 +11,7 @@ const {
   listGatewayEvents,
   getGatewayEvent,
 } = require('../services/paymentReadService');
+const { getPaymentAudit } = require('../services/financeAuditService');
 const requireRole = require('../middleware/requireRole');
 const {
   retryGatewayEvent,
@@ -23,6 +24,10 @@ const {
   softDeletePayment,
   restorePaymentRecord,
 } = require('../services/paymentWriteService');
+const {
+  ensureCollectableInvoiceForPaymentStart,
+  reversePaymentStatus,
+} = require('../services/billingFinanceService');
 const { upsertStkCorrelation } = require('../services/paymentGatewayCorrelationService');
 const { initiateSTKPush } = require('../utils/mpesa');
 const { normalizeMsisdn } = require('../utils/stkPush');
@@ -69,6 +74,12 @@ router.post('/stk', async (req, res) => {
     const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId });
     const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!customer || !plan) return res.status(404).json({ error: 'Invalid customer or plan' });
+    const invoice = await ensureCollectableInvoiceForPaymentStart({
+      tenantId: req.tenantId,
+      customerId: customer._id,
+      planId: plan._id,
+      issueDate: new Date(),
+    }).catch(() => null);
 
     const msisdn = normalizeMsisdn(phone);
     if (!msisdn) {
@@ -92,6 +103,7 @@ router.post('/stk', async (req, res) => {
       accountNumber: customer.accountNumber,
       phoneNumber: msisdn || phone,
       customer: customer._id,
+      invoice: invoice?._id || null,
       plan: plan._id,
       amount,
       method: 'mpesa',
@@ -342,12 +354,19 @@ router.post('/stripe/create', async (req, res) => {
     const customer = await Customer.findOne({ _id: customerId, tenantId: req.tenantId });
     const plan = await Plan.findOne({ _id: planId, tenantId: req.tenantId });
     if (!customer || !plan) return res.status(404).json({ error: 'Invalid customer or plan' });
+    const invoice = await ensureCollectableInvoiceForPaymentStart({
+      tenantId: req.tenantId,
+      customerId: customer._id,
+      planId: plan._id,
+      issueDate: new Date(),
+    }).catch(() => null);
 
     const payment = new Payment({
       tenantId: req.tenantId,
       accountNumber: customer.accountNumber,
       phoneNumber: customer.phone,
       customer: customer._id,
+      invoice: invoice?._id || null,
       plan: plan._id,
       amount: Number(plan.price),
       method: 'stripe',
@@ -358,6 +377,7 @@ router.post('/stripe/create', async (req, res) => {
       tenantId: String(req.tenantId),
       paymentId: String(payment._id),
       customerId: customer._id.toString(),
+      invoiceId: invoice?._id ? String(invoice._id) : '',
       planId: plan._id.toString(),
       accountNumber: customer.accountNumber ? String(customer.accountNumber) : '',
       customerEmail: customer.email ? String(customer.email) : '',
@@ -396,6 +416,63 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/refund', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const payment = await reversePaymentStatus({
+      tenantId: req.tenantId,
+      paymentId: req.params.id,
+      actor: requestActor(req),
+      reason:
+        typeof req.body?.reason === 'string'
+          ? req.body.reason.trim() || 'Refunded by operator'
+          : 'Refunded by operator',
+      nextStatus: 'Refunded',
+    });
+    return res.json({ ok: true, payment });
+  } catch (err) {
+    console.error('payment refund error:', err);
+    return res.status(err?.statusCode || 500).json({ error: err?.message || 'Failed to refund payment' });
+  }
+});
+
+router.post('/:id/reverse', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const payment = await reversePaymentStatus({
+      tenantId: req.tenantId,
+      paymentId: req.params.id,
+      actor: requestActor(req),
+      reason:
+        typeof req.body?.reason === 'string'
+          ? req.body.reason.trim() || 'Reversed by operator'
+          : 'Reversed by operator',
+      nextStatus: 'Reversed',
+    });
+    return res.json({ ok: true, payment });
+  } catch (err) {
+    console.error('payment reversal error:', err);
+    return res.status(err?.statusCode || 500).json({ error: err?.message || 'Failed to reverse payment' });
+  }
+});
+
+router.post('/:id/chargeback', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const payment = await reversePaymentStatus({
+      tenantId: req.tenantId,
+      paymentId: req.params.id,
+      actor: requestActor(req),
+      reason:
+        typeof req.body?.reason === 'string'
+          ? req.body.reason.trim() || 'Chargeback recorded'
+          : 'Chargeback recorded',
+      nextStatus: 'Chargeback',
+    });
+    return res.json({ ok: true, payment });
+  } catch (err) {
+    console.error('payment chargeback error:', err);
+    return res.status(err?.statusCode || 500).json({ error: err?.message || 'Failed to record chargeback' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const result = await softDeletePayment({
@@ -426,6 +503,19 @@ router.patch('/:id/restore', async (req, res) => {
       return res.status(err.statusCode).json({ error: err.message });
     }
     return res.status(500).json({ error: 'Failed to restore payment' });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const payment = await getPaymentAudit(req.tenantId, req.params.id);
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+    return res.json(payment);
+  } catch (err) {
+    console.error('payment detail error:', err);
+    return res.status(500).json({ error: 'Failed to fetch payment detail' });
   }
 });
 

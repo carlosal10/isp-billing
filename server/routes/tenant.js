@@ -1,7 +1,11 @@
 // routes/tenant.js
 const express = require('express');
 const Tenant = require('../models/Tenant');
-const { isValidIPv4 } = require('../utils/staticIpPool');
+const {
+  ensureLegacyStaticIpPool,
+  getLegacyStaticIpPool,
+  isValidIPv4,
+} = require('../utils/staticIpPool');
 const router = express.Router();
 
 // GET /api/tenant/me - current tenant info from req.tenantId
@@ -9,13 +13,22 @@ router.get("/me", async (req, res) => {
   if (!req.tenantId) return res.status(401).json({ ok:false, error:"Missing tenant" });
   try {
     const t = await Tenant.findById(req.tenantId).lean();
+    const legacyPoolDoc = await getLegacyStaticIpPool(req.tenantId).catch(() => null);
+    const legacyPool = legacyPoolDoc
+      ? (typeof legacyPoolDoc.toObject === 'function' ? legacyPoolDoc.toObject() : legacyPoolDoc)
+      : null;
+    const staticIpPool = Array.isArray(legacyPool?.addressList) && legacyPool.addressList.length
+      ? legacyPool.addressList
+      : Array.isArray(t?.staticIpPool)
+        ? t.staticIpPool
+        : [];
     return res.json({
       ok: true,
       id: String(req.tenantId),
       name: t?.name || "",
       subdomain: t?.subdomain ?? null,
       accountPrefix: t?.accountPrefix || "",
-      staticIpPool: Array.isArray(t?.staticIpPool) ? t.staticIpPool : []
+      staticIpPool
     });
   } catch {
     return res.status(500).json({ ok:false, error:"Failed to load tenant" });
@@ -101,7 +114,11 @@ router.put('/static/ip-pool', async (req, res) => {
       { $set: { staticIpPool: out } },
       { new: true }
     ).lean();
-    return res.json({ ok: true, staticIpPool: Array.isArray(t?.staticIpPool) ? t.staticIpPool : [] });
+    const syncedPool = await ensureLegacyStaticIpPool(req.tenantId, out).catch(() => null);
+    return res.json({
+      ok: true,
+      staticIpPool: Array.isArray(syncedPool?.addressList) ? syncedPool.addressList : Array.isArray(t?.staticIpPool) ? t.staticIpPool : [],
+    });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'Failed to save static IP pool' });
   }

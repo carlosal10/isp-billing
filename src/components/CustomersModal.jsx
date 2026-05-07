@@ -52,6 +52,18 @@ function getProfileValueForSelect(p) {
   return p?.name || p?.id || "";
 }
 
+function createInitialBillingProfile(customer = null) {
+  return {
+    invoiceLeadDays: customer?.billingProfile?.invoiceLeadDays ?? 3,
+    autopayEnabled: customer?.billingProfile?.autopayEnabled === true,
+    preferredPaymentMethod: customer?.billingProfile?.preferredPaymentMethod || "mpesa",
+    preferredPhoneNumber: customer?.billingProfile?.preferredPhoneNumber || customer?.phone || "",
+    graceDays: customer?.billingProfile?.graceDays ?? 3,
+    retryIntervalDays: customer?.billingProfile?.retryIntervalDays ?? 2,
+    maxAutopayAttempts: customer?.billingProfile?.maxAutopayAttempts ?? 3,
+  };
+}
+
 function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading }) {
   const [name, setName] = useState(customer?.name || "");
   const [email, setEmail] = useState(customer?.email || "");
@@ -72,6 +84,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [staticConfig, setStaticConfig] = useState(
     customer?.staticConfig || { ip: "", gateway: "", dns: "" }
   );
+  const [billingProfile, setBillingProfile] = useState(createInitialBillingProfile(customer));
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueOpts, setQueueOpts] = useState([]);
   const [selectedQueueIp, setSelectedQueueIp] = useState("");
@@ -90,6 +103,31 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   const [trustLists, setTrustLists] = useState(true);
 
   const [queueTried, setQueueTried] = useState(false);
+
+  useEffect(() => {
+    setName(customer?.name || "");
+    setEmail(customer?.email || "");
+    setPhone(customer?.phone || "");
+    setAddress(customer?.address || "");
+    setAccountNumber(customer?.accountNumber || "");
+    setPlan(customer?.plan?._id || "");
+    setNetworkType(customer?.connectionType || "pppoe");
+    setSelectedProfile(
+      customer?.pppoeConfig?.profile ||
+        customer?.pppoeConfig?.name ||
+        customer?.pppoeConfig?.id ||
+        ""
+    );
+    setStaticConfig(customer?.staticConfig || { ip: "", gateway: "", dns: "" });
+    setBillingProfile(createInitialBillingProfile(customer));
+    setSelectedQueueIp("");
+    setSelectedArpIp("");
+    setSelectedRouterAllIp("");
+    setUseQueueIp(false);
+    setUseArpIp(false);
+    setUseRouterAll(true);
+    setQueueTried(false);
+  }, [customer, type]);
 
   const loadQueues = useCallback(async () => {
     try {
@@ -215,6 +253,15 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       accountNumber: accountNumber || undefined,
       plan,
       connectionType: networkType,
+      billingProfile: {
+        invoiceLeadDays: Number(billingProfile.invoiceLeadDays || 0) || 0,
+        autopayEnabled: billingProfile.autopayEnabled === true,
+        preferredPaymentMethod: billingProfile.preferredPaymentMethod || "mpesa",
+        preferredPhoneNumber: billingProfile.preferredPhoneNumber || undefined,
+        graceDays: Number(billingProfile.graceDays || 0) || 0,
+        retryIntervalDays: Number(billingProfile.retryIntervalDays || 0) || 0,
+        maxAutopayAttempts: Number(billingProfile.maxAutopayAttempts || 0) || 0,
+      },
       ...(networkType === "pppoe"
         ? { pppoeConfig: { profile: profileName } }
         : { staticConfig }),
@@ -231,6 +278,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
       setNetworkType("pppoe");
       setSelectedProfile("");
       setStaticConfig({ ip: "", gateway: "", dns: "" });
+      setBillingProfile(createInitialBillingProfile(null));
     }
   };
 
@@ -250,6 +298,106 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
           </option>
         ))}
       </select>
+
+      <div className="customer-form-section">
+        <div className="customer-form-section-title">Billing Profile</div>
+        <div className="billing-config">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={billingProfile.autopayEnabled}
+              onChange={(e) =>
+                setBillingProfile((prev) => ({
+                  ...prev,
+                  autopayEnabled: e.target.checked,
+                }))
+              }
+            />
+            <span>Enable autopay</span>
+          </label>
+
+          <select
+            value={billingProfile.preferredPaymentMethod}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                preferredPaymentMethod: e.target.value,
+              }))
+            }
+          >
+            <option value="mpesa">Preferred Method: M-Pesa</option>
+            <option value="stripe">Preferred Method: Stripe</option>
+            <option value="manual">Preferred Method: Manual</option>
+          </select>
+
+          <input
+            value={billingProfile.preferredPhoneNumber}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                preferredPhoneNumber: e.target.value,
+              }))
+            }
+            placeholder="Autopay phone (optional)"
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={billingProfile.invoiceLeadDays}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                invoiceLeadDays: e.target.value,
+              }))
+            }
+            placeholder="Invoice lead days"
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={billingProfile.graceDays}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                graceDays: e.target.value,
+              }))
+            }
+            placeholder="Grace days"
+          />
+
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={billingProfile.retryIntervalDays}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                retryIntervalDays: e.target.value,
+              }))
+            }
+            placeholder="Retry interval days"
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={billingProfile.maxAutopayAttempts}
+            onChange={(e) =>
+              setBillingProfile((prev) => ({
+                ...prev,
+                maxAutopayAttempts: e.target.value,
+              }))
+            }
+            placeholder="Max autopay attempts"
+          />
+        </div>
+      </div>
 
       {type !== "Remove" && (
         <>

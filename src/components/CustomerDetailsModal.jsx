@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { api } from "../lib/apiClient";
+import CustomerPortalAccessCard from "./CustomerPortalAccessCard";
 
-export default function CustomerDetailsModal({ open, onClose, customer }) {
+export default function CustomerDetailsModal({ open, onClose, customer, onUpdated }) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -37,6 +38,7 @@ export default function CustomerDetailsModal({ open, onClose, customer }) {
   if (!open || !customer) return null;
 
   const plan = customer.plan;
+  const billingProfile = customer.billingProfile || {};
 
   const canToggle = customer.connectionType === "pppoe" && health && typeof health.disabled === "boolean";
 
@@ -116,7 +118,12 @@ export default function CustomerDetailsModal({ open, onClose, customer }) {
             {customer.connectionType === 'pppoe' && customer.pppoeConfig?.profile ? ` • ${customer.pppoeConfig.profile}` : ''}
             {customer.connectionType === 'static' && customer.staticConfig?.ip ? ` • ${customer.staticConfig.ip}` : ''}
           </div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Billing Lead</div><div style={{ fontWeight: 700 }}>{billingProfile.invoiceLeadDays ?? 3} day(s)</div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Autopay</div><div style={{ fontWeight: 700 }}>{billingProfile.autopayEnabled ? `${billingProfile.preferredPaymentMethod || 'mpesa'}${billingProfile.preferredPhoneNumber ? ` • ${billingProfile.preferredPhoneNumber}` : ''}` : 'Disabled'}</div></div>
+          <div><div style={{ color: '#64748b', fontSize: 12 }}>Collections Policy</div><div style={{ fontWeight: 700 }}>{billingProfile.graceDays ?? 3} grace • retry every {billingProfile.retryIntervalDays ?? 2} day(s) • max {billingProfile.maxAutopayAttempts ?? 3}</div></div>
         </div>
+
+        <CustomerPortalAccessCard customer={customer} onUpdated={onUpdated} />
 
         {/* Health card */}
         <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>

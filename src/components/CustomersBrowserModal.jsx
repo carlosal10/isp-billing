@@ -38,6 +38,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
     "Email": c.email ?? "-",
     "Address": c.address ?? "-",
     "Plan": c?.plan?.name ?? "-",
+    "Portal": c?.portalProfile?.isEnabled === false ? "Disabled" : "Enabled",
     "Created": formatCreated(c),
   });
 
@@ -55,7 +56,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
     const date = new Date().toISOString().slice(0, 10);
     if (tab === "all") {
       const rows = filteredAll.map(mapAllRow);
-      const headers = ["Account #", "Name", "Phone", "Email", "Address", "Plan", "Created"];
+      const headers = ["Account #", "Name", "Phone", "Email", "Address", "Plan", "Portal", "Created"];
       return { rows, headers, filename: `customers-all-${date}`, sheetName: "All" };
     } else {
       const rows = disabledCombined.map(mapDisabledRow);
@@ -195,6 +196,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                 <th>Email</th>
                 <th>Address</th>
                 <th>Plan</th>
+                <th>Portal</th>
                 <th>Created</th>
                 <th></th>
               </tr>
@@ -208,6 +210,19 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
                   <td>{c.email}</td>
                   <td>{c.address}</td>
                   <td>{c.plan?.name || "-"}</td>
+                  <td>
+                    <span
+                      style={{
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                        background: c.portalProfile?.isEnabled === false ? "#fee2e2" : "#eafaf1",
+                        color: c.portalProfile?.isEnabled === false ? "#991b1b" : "#166534",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {c.portalProfile?.isEnabled === false ? "Disabled" : "Enabled"}
+                    </span>
+                  </td>
                   <td>{formatCreated(c)}</td>
                   <td>
                     <button className="btn" onClick={() => onSelect?.(c)}>
@@ -218,7 +233,7 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
               ))}
               {filteredAll.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center" }}>
+                  <td colSpan={9} style={{ textAlign: "center" }}>
                     {loading ? "Loading…" : "No customers found"}
                   </td>
                 </tr>

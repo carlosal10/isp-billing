@@ -20,6 +20,21 @@ function loginModeCopy(mode) {
     };
   }
 
+  if (mode === "customer") {
+    return {
+      chip: "Customer Portal",
+      title: "Stay on top of your service.",
+      subtitle:
+        "Check your balance, review invoices, see support ticket progress, and stay informed about outages or maintenance that affect your connection.",
+      benefits: [
+        "Invoice and payment visibility in one place",
+        "Self-service support request tracking",
+        "Live outage and maintenance updates",
+      ],
+      submit: "Open Customer Portal",
+    };
+  }
+
   return {
     chip: "KT-SwiftBridge",
     title: "Bill smarter. Grow faster.",
@@ -37,15 +52,21 @@ function loginModeCopy(mode) {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginPlatform } = useAuth();
+  const { login, loginCustomer, loginPlatform } = useAuth();
 
+  const queryMode = new URLSearchParams(location.search).get("mode");
   const initialMode =
-    new URLSearchParams(location.search).get("mode") === "platform"
-      ? "platform"
-      : "tenant";
+    queryMode === "platform" ? "platform" : queryMode === "customer" ? "customer" : "tenant";
 
   const [mode, setMode] = useState(initialMode);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    tenantName: "",
+    accountNumber: "",
+    credential: "",
+    pin: "",
+  });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking..." });
@@ -54,11 +75,14 @@ export default function Login() {
   const copy = useMemo(() => loginModeCopy(mode), [mode]);
 
   useEffect(() => {
-    const nextMode =
-      new URLSearchParams(location.search).get("mode") === "platform"
+    const nextQueryMode = new URLSearchParams(location.search).get("mode");
+    setMode(
+      nextQueryMode === "platform"
         ? "platform"
-        : "tenant";
-    setMode(nextMode);
+        : nextQueryMode === "customer"
+          ? "customer"
+          : "tenant"
+    );
   }, [location.search]);
 
   useEffect(() => {
@@ -87,6 +111,9 @@ export default function Login() {
       if (mode === "platform") {
         await loginPlatform(form);
         navigate("/platform/gateway-events", { replace: true });
+      } else if (mode === "customer") {
+        await loginCustomer(form);
+        navigate("/portal", { replace: true });
       } else {
         await login(form);
         navigate(from, { replace: true });
@@ -103,9 +130,14 @@ export default function Login() {
     if (nextMode === mode) return;
     setErr("");
     setMode(nextMode);
-    navigate(nextMode === "platform" ? "/login?mode=platform" : "/login", {
-      replace: true,
-    });
+    navigate(
+      nextMode === "platform"
+        ? "/login?mode=platform"
+        : nextMode === "customer"
+          ? "/login?mode=customer"
+          : "/login",
+      { replace: true }
+    );
   };
 
   return (
@@ -181,13 +213,19 @@ export default function Login() {
             >
               Platform Admin
             </button>
+            <button
+              type="button"
+              className={mode === "customer" ? "active" : ""}
+              onClick={() => switchMode("customer")}
+            >
+              Customer Portal
+            </button>
           </div>
 
           <div
             className="helper-text"
             style={{
-              color:
-                apiHealth.ok ? "#16a34a" : apiHealth.ok === null ? "#6b7280" : "#ef4444",
+              color: apiHealth.ok ? "#16a34a" : apiHealth.ok === null ? "#6b7280" : "#ef4444",
             }}
             aria-live="polite"
           >
@@ -197,36 +235,92 @@ export default function Login() {
           <div className="login-mode-caption">
             {mode === "platform"
               ? "Use your platform-admin account to work the orphan payment queue."
-              : "Use your tenant account to access billing, networking, and collections."}
+              : mode === "customer"
+                ? "Use your ISP workspace, account number, and registered contact or portal PIN."
+                : "Use your tenant account to access billing, networking, and collections."}
           </div>
 
-          <label className="label" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder={mode === "platform" ? "ops@company.com" : "you@company.com"}
-            type="email"
-            required
-            autoComplete="username"
-            className="input"
-          />
+          {mode === "customer" ? (
+            <>
+              <label className="label" htmlFor="tenantName">
+                ISP Workspace
+              </label>
+              <input
+                id="tenantName"
+                value={form.tenantName}
+                onChange={(e) => setForm({ ...form, tenantName: e.target.value })}
+                placeholder="Acme Fiber"
+                required
+                className="input"
+              />
 
-          <label className="label" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="••••••••"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="input"
-          />
+              <label className="label" htmlFor="accountNumber">
+                Account Number
+              </label>
+              <input
+                id="accountNumber"
+                value={form.accountNumber}
+                onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+                placeholder="ACC-1001"
+                required
+                className="input"
+              />
+
+              <label className="label" htmlFor="credential">
+                Registered Phone Or Email
+              </label>
+              <input
+                id="credential"
+                value={form.credential}
+                onChange={(e) => setForm({ ...form, credential: e.target.value })}
+                placeholder="0712345678 or you@example.com"
+                className="input"
+              />
+
+              <label className="label" htmlFor="pin">
+                Portal PIN (Optional)
+              </label>
+              <input
+                id="pin"
+                value={form.pin}
+                onChange={(e) => setForm({ ...form, pin: e.target.value })}
+                placeholder="Use this if your ISP issued one"
+                type="password"
+                autoComplete="current-password"
+                className="input"
+              />
+            </>
+          ) : (
+            <>
+              <label className="label" htmlFor="email">
+                Email
+              </label>
+              <input
+                id="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder={mode === "platform" ? "ops@company.com" : "you@company.com"}
+                type="email"
+                required
+                autoComplete="username"
+                className="input"
+              />
+
+              <label className="label" htmlFor="password">
+                Password
+              </label>
+              <input
+                id="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                type="password"
+                required
+                autoComplete="current-password"
+                className="input"
+              />
+            </>
+          )}
 
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? "Signing in..." : copy.submit}
@@ -242,7 +336,7 @@ export default function Login() {
             <>
               <div className="form-links">
                 <Link to="/forgot-password">Forgot password?</Link>
-                <span className="sep">•</span>
+                <span className="sep">â€¢</span>
                 <Link to="/register">Create an account</Link>
               </div>
 
@@ -261,9 +355,13 @@ export default function Login() {
                 </button>
               </div>
             </>
-          ) : (
+          ) : mode === "platform" ? (
             <div className="platform-login-note">
               Platform sessions are isolated from tenant workspaces so operational actions stay deliberate and auditable.
+            </div>
+          ) : (
+            <div className="platform-login-note">
+              Customer portal sessions are limited to your own account so invoices, payments, tickets, and outages stay private.
             </div>
           )}
         </form>

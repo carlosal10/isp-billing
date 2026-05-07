@@ -20,8 +20,18 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 
 - `npm start` runs the React client
 - `npm test -- --watch=false` runs the current frontend test suite
+- `npm run test:server` runs the finance and backend unit tests
 - `npm run build` creates a production client build
 - Backend startup currently uses `server/App.js`
+
+## Billing And Finance
+
+- Payments now settle against invoices first, then customer credit balances
+- The finance core persists invoice allocations, credit notes, and ledger entries for auditability
+- Recurring billing and collections are scheduled through `server/jobs/recurringBilling.js` and `server/jobs/billingCollections.js`
+- Finance reporting endpoints are mounted under `/api/finance`
+- The Payments modal now includes invoice, finance, and reconciliation views for operators
+- Existing tenants can be backfilled into the finance core with `npm run migrate:finance:dry` and `npm run migrate:finance`
 
 ## Jobs And Scheduler
 

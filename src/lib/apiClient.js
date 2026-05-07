@@ -10,6 +10,7 @@ export const API_BASE =
     : "https://isp-billing-server.onrender.com/api");
 
 export const PLATFORM_API_BASE = API_BASE.replace(/\/api\/?$/, "/platform-api");
+export const PORTAL_API_BASE = API_BASE.replace(/\/api\/?$/, "/portal-api");
 
 // Enable cookie-based auth transport so the server can fall back to cookies
 // if Authorization header is briefly missing.
@@ -23,6 +24,7 @@ const SESSIONS_KEY = "auth.sessions.v1";
 const ACTIVE_SESSION_KEY = "auth.active.tenant";
 const LAST_TENANT_KEY = "auth.last.tenant";
 const PLATFORM_SESSION_KEY = "auth.platform.v1";
+const CUSTOMER_SESSION_KEY = "auth.customer.v1";
 const ACTIVE_MODE_KEY = "auth.active.mode";
 
 const safeParse = (value) => {
@@ -35,6 +37,7 @@ const safeParse = (value) => {
 
 const loadSessions = () => safeParse(localStorage.getItem(SESSIONS_KEY)) || {};
 const loadPlatformSession = () => safeParse(localStorage.getItem(PLATFORM_SESSION_KEY)) || null;
+const loadCustomerSession = () => safeParse(localStorage.getItem(CUSTOMER_SESSION_KEY)) || null;
 
 const getStoredActiveMode = () => {
   try {
@@ -87,9 +90,13 @@ const getActiveSession = () => {
   const activeMode = getStoredActiveMode();
   const tenantSession = getActiveTenantSession();
   const platformSession = loadPlatformSession();
+  const customerSession = loadCustomerSession();
 
   if (activeMode === "platform" && platformSession?.accessToken) {
     return { ...platformSession, mode: "platform" };
+  }
+  if (activeMode === "customer" && customerSession?.accessToken) {
+    return { ...customerSession, mode: "customer" };
   }
   if (activeMode === "tenant" && tenantSession?.accessToken) {
     return { ...tenantSession, mode: "tenant" };
@@ -99,6 +106,9 @@ const getActiveSession = () => {
   }
   if (platformSession?.accessToken) {
     return { ...platformSession, mode: "platform" };
+  }
+  if (customerSession?.accessToken) {
+    return { ...customerSession, mode: "customer" };
   }
   return null;
 };
@@ -125,6 +135,7 @@ function createClient(baseURL) {
 
 export const api = createClient(API_BASE);
 export const platformApi = createClient(PLATFORM_API_BASE);
+export const portalApi = createClient(PORTAL_API_BASE);
 
 /** ================================
  *  Pluggable accessors (wired once by AuthContext)
@@ -263,3 +274,4 @@ function attachInterceptors(client, { includeTenantHeader }) {
 
 attachInterceptors(api, { includeTenantHeader: true });
 attachInterceptors(platformApi, { includeTenantHeader: false });
+attachInterceptors(portalApi, { includeTenantHeader: false });

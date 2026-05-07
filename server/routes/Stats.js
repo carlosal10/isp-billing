@@ -14,7 +14,10 @@ router.get('/', async (req, res) => {
         const totalPlans = await Plan.countDocuments({ tenantId: req.tenantId });
 
         // Fetch pending invoices (Assuming 'status' field with 'pending' value in Invoice schema)
-        const pendingInvoices = await Invoice.countDocuments({ tenantId: req.tenantId, status: 'unpaid' });
+        const pendingInvoices = await Invoice.countDocuments({
+            tenantId: req.tenantId,
+            status: { $in: ['issued', 'partially_paid', 'overdue'] },
+        });
 
         // Return stats as JSON
         res.json({

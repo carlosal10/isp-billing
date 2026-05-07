@@ -14,8 +14,21 @@ const {
   updateCustomer,
   deleteCustomer,
 } = require("../services/customerWriteService");
+const requireRole = require("../middleware/requireRole");
+const {
+  getCustomerPortalAccess,
+  updateCustomerPortalAccess,
+} = require("../services/customerPortalAdminService");
 
 const router = express.Router();
+
+function requestActor(req) {
+  return {
+    id: String(req.user?.email || req.user?.sub || req.user?.id || req.user?._id || ''),
+    email: req.user?.email || null,
+    role: req.role || (req.user?.isPlatformAdmin ? 'platform-admin' : null),
+  };
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -58,6 +71,34 @@ router.get("/by-account/:accountNumber", async (req, res) => {
     res.status(500).json({ message: "Error retrieving customer" });
   }
 });
+
+router.get("/:id/portal-access", async (req, res) => {
+  try {
+    const access = await getCustomerPortalAccess(req.tenantId, req.params.id);
+    res.json(access);
+  } catch (err) {
+    console.error("customer portal access read failed:", err);
+    return res.status(err?.statusCode || 500).json({ message: err?.message || "Failed to load portal access" });
+  }
+});
+
+async function updatePortalAccessHandler(req, res) {
+  try {
+    const access = await updateCustomerPortalAccess({
+      tenantId: req.tenantId,
+      customerId: req.params.id,
+      payload: req.body || {},
+      actor: requestActor(req),
+    });
+    res.json({ message: "Customer portal access updated", access });
+  } catch (err) {
+    console.error("customer portal access update failed:", err);
+    return res.status(err?.statusCode || 500).json({ message: err?.message || "Failed to update portal access" });
+  }
+}
+
+router.put("/:id/portal-access", requireRole("owner", "admin"), updatePortalAccessHandler);
+router.patch("/:id/portal-access", requireRole("owner", "admin"), updatePortalAccessHandler);
 
 router.post("/", async (req, res) => {
   try {

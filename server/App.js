@@ -116,6 +116,10 @@ const attachTenant = (req, res, next) => {
 const customerRoutes = require("./routes/Customer");
 const planRoutes = require("./routes/plans");
 const invoiceRoutes = require("./routes/Invoices");
+const financeRoutes = require("./routes/finance");
+const nocOperationsRoutes = require("./routes/nocOperations");
+const serviceOperationsRoutes = require("./routes/serviceOperations");
+const supportOperationsRoutes = require("./routes/supportOperations");
 const usageLogsRoutes = require("./routes/usageLogs");
 const statsRoutes = require("./routes/Stats");
 
@@ -123,6 +127,8 @@ const statsRoutes = require("./routes/Stats");
 const tenantAuthRoutes = require("./routes/tenantAuth");      // /api/auth/*
 const invitesRoutes = require("./routes/invites");            // /api/invites (tenant-protected)
 const platformAuthRoutes = require("./routes/platformAuth");  // /platform-api/auth/*
+const portalAuthRoutes = require("./routes/portalAuth");
+const customerPortalRoutes = require("./routes/customerPortal");
 const platformGatewayEventsRoutes = require("./routes/platformGatewayEvents");
 
 // MikroTik
@@ -207,6 +213,8 @@ app.use("/api/invites", authenticate, attachTenant, invitesRoutes);
 // Platform-admin realm
 app.use("/platform-api/auth", platformAuthRoutes);
 app.use("/platform-api/gateway-events", requirePlatformAdmin, platformGatewayEventsRoutes);
+app.use("/portal-api/auth", portalAuthRoutes);
+app.use("/portal-api", customerPortalRoutes);
 
 // Public paylink endpoints (must be before any generic /api auth wrappers)
 app.use("/api/paylink", paylinkRoutes);
@@ -227,6 +235,10 @@ app.use("/api", authenticate, attachTenant, archiveRoutes);
 app.use("/api/customers", authenticate, attachTenant, customerRoutes);
 app.use("/api/plans", authenticate, attachTenant, planRoutes);
 app.use("/api/invoices", authenticate, attachTenant, invoiceRoutes);
+app.use("/api/finance", authenticate, attachTenant, financeRoutes);
+app.use("/api/noc", authenticate, attachTenant, nocOperationsRoutes);
+app.use("/api/service-ops", authenticate, attachTenant, serviceOperationsRoutes);
+app.use("/api/support", authenticate, attachTenant, supportOperationsRoutes);
 app.use("/api/usageLogs", authenticate, attachTenant, usageLogsRoutes);
 app.use("/api/stats", authenticate, attachTenant, statsRoutes);
 app.use("/api/tenant", authenticate, attachTenant, tenantRoutes);

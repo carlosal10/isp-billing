@@ -124,6 +124,39 @@ input:focus, select:focus {
   gap: 10px;
 }
 
+.billing-config {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.customer-form-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.customer-form-section-title {
+  font-weight: 800;
+  color: #0B2545;
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
+}
+
 /* Buttons */
 button {
   display: inline-flex;
@@ -214,6 +247,10 @@ form button:disabled { opacity: .65; cursor: not-allowed; }
 
   .static-config {
     grid-template-columns: 1fr; /* stack IP/GW/DNS */
+  }
+
+  .billing-config {
+    grid-template-columns: 1fr;
   }
 
   form button,

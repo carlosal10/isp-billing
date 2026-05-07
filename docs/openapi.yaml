@@ -142,6 +142,377 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: OK }
+  /payments/{id}:
+    get:
+      summary: Get a finance audit view for one payment including allocations, credits, and ledger entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /payments/{id}/refund:
+    post:
+      summary: Refund a settled payment and reverse its invoice allocations and ledger entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /payments/{id}/reverse:
+    post:
+      summary: Reverse a settled payment without marking it as refunded
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /payments/{id}/chargeback:
+    post:
+      summary: Record a chargeback against a settled payment and unwind finance state
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /invoices:
+    get:
+      summary: List tenant invoices with finance status and balances
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /invoices/{id}:
+    get:
+      summary: Get a finance audit view for one invoice including allocations, source credits, and ledger entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /invoices/issue:
+    post:
+      summary: Manually issue an invoice for a customer and plan
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+  /invoices/{id}/pay:
+    put:
+      summary: Settle an invoice via a manual validated payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /invoices/{id}/generate:
+    post:
+      summary: Generate an invoice number and mark the invoice document as generated
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /invoices/{id}/pdf:
+    get:
+      summary: Render an invoice document as HTML for browser printing or PDF export
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /finance/summary:
+    get:
+      summary: Get finance summary totals including invoiced, outstanding, credits, and collections
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /finance/invoice-aging:
+    get:
+      summary: Get open invoice aging buckets and invoice-level aging rows
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /finance/credits:
+    get:
+      summary: List customer credit notes and remaining unapplied credit balances
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /finance/ledger:
+    get:
+      summary: List recent billing ledger entries for audit and reconciliation
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /noc/summary:
+    get:
+      summary: Get active incident, maintenance, and recent resolution totals for network operations
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /noc/incidents:
+    get:
+      summary: List NOC incidents and maintenance windows with customer and asset impact
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+    post:
+      summary: Create a NOC incident or maintenance record
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden }
+  /noc/incidents/{id}:
+    put:
+      summary: Update a NOC incident, impact scope, or maintenance window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /service-ops/summary:
+    get:
+      summary: Get inventory and IPAM summary totals for service operations
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /service-ops/assets:
+    get:
+      summary: List inventory assets and their current customer linkage
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+    post:
+      summary: Create a new inventory asset
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden }
+  /service-ops/assets/{id}:
+    put:
+      summary: Update an inventory asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /service-ops/assets/{id}/assign-customer:
+    post:
+      summary: Link an inventory asset to a customer account
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /service-ops/assets/{id}/unassign-customer:
+    post:
+      summary: Remove the current customer linkage from an inventory asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /service-ops/ip-pools:
+    get:
+      summary: List IP pools and current utilization metrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+    post:
+      summary: Create a new IP pool
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden }
+  /service-ops/ip-pools/{id}:
+    put:
+      summary: Update an IP pool definition
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /service-ops/ip-pools/{id}/allocate:
+    post:
+      summary: Allocate or reserve an IP address from a pool
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Created }
+        '404': { description: Not found }
+        '409': { description: Pool exhausted or requested IP unavailable }
+  /service-ops/ip-assignments:
+    get:
+      summary: List IP assignments across customers, devices, and infrastructure
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /service-ops/ip-assignments/{id}/release:
+    post:
+      summary: Release an active IP assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /support/summary:
+    get:
+      summary: Get support ticket and work-order summary totals
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+  /support/tickets:
+    get:
+      summary: List support tickets with linked customers, assets, and work orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+    post:
+      summary: Create a support ticket with SLA timestamps and optional linkage
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden }
+  /support/tickets/{id}:
+    put:
+      summary: Update a support ticket, add notes, or change ownership and status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /support/work-orders:
+    get:
+      summary: List work orders with linked customers, assets, and support tickets
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Forbidden }
+    post:
+      summary: Create a field work order and optionally link it to a support ticket
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden }
+  /support/work-orders/{id}:
+    put:
+      summary: Update a field work order and sync related support ticket state
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
   /payments/events:
     get:
       summary: List persisted payment gateway webhook and callback events for the current tenant
@@ -284,6 +655,44 @@ paths:
       responses:
         '200': { description: OK }
         '404': { description: Not found }
+  /customers/{id}/portal-access:
+    get:
+      summary: Get admin-safe customer portal access status without exposing PIN hash material
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Customer not found }
+    put:
+      summary: Enable or disable customer portal access, set a portal PIN, or clear the PIN
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isEnabled: { type: boolean }
+                pin: { type: string, minLength: 4, maxLength: 8 }
+                clearPin: { type: boolean }
+                reason: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid request or PIN format }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
   /platform-api/gateway-events/orphans/{id}/claim:
     post:
       summary: Claim ownership of an orphaned payment gateway event in the platform queue
@@ -355,6 +764,102 @@ paths:
         '400': { description: Invalid resolution target }
         '404': { description: Not found }
         '409': { description: Queue claim conflict }
+  /portal-api/auth/login:
+    post:
+      summary: Authenticate a customer into the self-service portal using tenant name, account number, and registered contact or portal PIN
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid credentials }
+  /portal-api/auth/verify:
+    get:
+      summary: Verify a customer portal session token
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+  /portal-api/overview:
+    get:
+      summary: Get the customer portal dashboard overview including balances, service details, assets, and recent invoices
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+  /portal-api/invoices:
+    get:
+      summary: List invoices for the authenticated customer portal account
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+  /portal-api/payments:
+    get:
+      summary: List payments for the authenticated customer portal account
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+  /portal-api/payments/mpesa/stk:
+    post:
+      summary: Start an M-Pesa STK request for an authenticated customer's open invoice balance
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid phone or invoice request }
+        '401': { description: Invalid or expired token }
+        '404': { description: Invoice not found }
+        '409': { description: Invoice has no outstanding balance }
+  /portal-api/payments/{id}/status:
+    get:
+      summary: Poll payment status for a customer portal initiated payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+        '404': { description: Payment not found }
+  /portal-api/tickets:
+    get:
+      summary: List support tickets for the authenticated customer portal account
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+    post:
+      summary: Create a support request from the customer portal
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '401': { description: Invalid or expired token }
+  /portal-api/incidents:
+    get:
+      summary: List active or recent incidents affecting the authenticated customer portal account
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid or expired token }
+  /portal-api/security/pin:
+    post:
+      summary: Set or change the authenticated customer's portal PIN
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid PIN format }
+        '401': { description: Invalid or expired token }
+        '403': { description: Current PIN is incorrect }
   /paylink/stk:
     post:
       summary: Public STK paylink starter

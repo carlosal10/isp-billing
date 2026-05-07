@@ -44,6 +44,28 @@ function signPlatformAccessToken({ admin }) {
 }
 
 /**
+ * Signs an access token for customer portal sessions.
+ */
+function signCustomerPortalAccessToken({ tenant, customer }) {
+  if (!tenant || !customer) {
+    throw new Error("signCustomerPortalAccessToken: tenant and customer are required");
+  }
+  return jwt.sign(
+    {
+      sub: String(customer._id),
+      tenantId: String(tenant._id),
+      tenantName: tenant.name || null,
+      accountNumber: customer.accountNumber || null,
+      customerName: customer.name || null,
+      role: "customer",
+      aud: "customer-portal",
+    },
+    SECRET,
+    { expiresIn: "8h" }
+  );
+}
+
+/**
  * Optional helper if you need to verify a token in utilities/middleware.
  * You can keep your existing middleware if you already verify there.
  */
@@ -52,6 +74,7 @@ function verifyAccessToken(token) {
 }
 
 module.exports = {
+  signCustomerPortalAccessToken,
   signTenantAccessToken,
   signPlatformAccessToken,
   verifyAccessToken,

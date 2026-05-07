@@ -19,20 +19,25 @@ import SubscriptionPlansModal from "./components/PlanModal";
 
 import { useAuth } from "./context/AuthContext";
 import AccountSettings from "./pages/AccountSettings";
+import CustomerPortal from "./pages/CustomerPortal";
 import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 import Jobs from "./pages/Jobs";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import NocOperations from "./pages/NocOperations";
 import PayLink from "./pages/PayLink";
 import PlatformGatewayEvents from "./pages/PlatformGatewayEvents";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Routers from "./pages/Routers";
+import ServiceOperations from "./pages/ServiceOperations";
+import SupportOperations from "./pages/SupportOperations";
 
 export default function App() {
   const { isAuthed, authMode, role } = useAuth();
   const isPlatformAdmin = role === "platform-admin" || authMode === "platform";
+  const isCustomerPortal = role === "customer" || authMode === "customer";
 
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches
@@ -75,6 +80,7 @@ export default function App() {
       <Router>
         <Routes>
           <Route path="/pay" element={<PayLink />} />
+          <Route path="/portal" element={<Navigate to="/login?mode=customer" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -90,24 +96,28 @@ export default function App() {
   return (
     <Router>
       <div className={`app-container ${sidebarOpen ? "sidebar-open" : ""}`}>
-        <div
-          className="hamburger"
-          onClick={toggleSidebar}
-          role="button"
-          aria-label="Toggle sidebar"
-        >
-          <GiHamburgerMenu />
-        </div>
+        {!isCustomerPortal ? (
+          <div
+            className="hamburger"
+            onClick={toggleSidebar}
+            role="button"
+            aria-label="Toggle sidebar"
+          >
+            <GiHamburgerMenu />
+          </div>
+        ) : null}
 
-        {!isDesktop && sidebarOpen ? (
+        {!isCustomerPortal && !isDesktop && sidebarOpen ? (
           <div className="sidebar-backdrop" onClick={toggleSidebar} />
         ) : null}
 
-        <Sidebar
-          open={sidebarOpen}
-          toggleSidebar={toggleSidebar}
-          onOpenModal={openModal}
-        />
+        {!isCustomerPortal ? (
+          <Sidebar
+            open={sidebarOpen}
+            toggleSidebar={toggleSidebar}
+            onOpenModal={openModal}
+          />
+        ) : null}
 
         <div className="content-area">
           <Routes>
@@ -128,6 +138,12 @@ export default function App() {
                   element={<Navigate to="/platform/gateway-events" replace />}
                 />
               </>
+            ) : isCustomerPortal ? (
+              <>
+                <Route path="/" element={<Navigate to="/portal" replace />} />
+                <Route path="/portal" element={<CustomerPortal />} />
+                <Route path="*" element={<Navigate to="/portal" replace />} />
+              </>
             ) : (
               <>
                 <Route path="/" element={<Dashboard />} />
@@ -135,13 +151,16 @@ export default function App() {
                 <Route path="/settings" element={<AccountSettings />} />
                 <Route path="/routers" element={<Routers />} />
                 <Route path="/jobs" element={<Jobs />} />
+                <Route path="/noc" element={<NocOperations />} />
+                <Route path="/service-ops" element={<ServiceOperations />} />
+                <Route path="/support-ops" element={<SupportOperations />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </>
             )}
           </Routes>
         </div>
 
-        {!isPlatformAdmin ? (
+        {!isPlatformAdmin && !isCustomerPortal ? (
           <>
             <ClientsModal
               isOpen={activeModal === MODALS.CLIENTS}

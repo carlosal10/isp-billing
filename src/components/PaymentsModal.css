@@ -444,6 +444,33 @@
   font-size:.9rem;
 }
 
+.finance-audit-feedback{
+  margin:8px 16px 0;
+}
+
+.finance-audit-panel{
+  margin-top:8px;
+}
+
+.finance-audit-section{
+  margin-top:18px;
+}
+
+.finance-audit-section h4{
+  margin:0 0 10px;
+  color:var(--ec-primary);
+}
+
+.finance-audit-table{
+  overflow:auto;
+  border-radius:14px;
+}
+
+.finance-detail-table{
+  min-width:820px;
+  box-shadow:none;
+}
+
 .selected-customer{
   margin-top:8px;
   padding:10px 12px;

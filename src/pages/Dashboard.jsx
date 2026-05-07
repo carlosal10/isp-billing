@@ -7,6 +7,7 @@ import "./Dashboard.css";
 import StatsCards from "../components/StatsCards";
 import UsageModal from "../components/UsageModal";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
+import CustomerDetailsPanel from "../components/CustomerDetailsPanel";
 import CustomersBrowserModal from "../components/CustomersBrowserModal";
 
 import { useAuth } from "../context/AuthContext";
@@ -521,6 +522,30 @@ export default function Dashboard() {
     }
   }, [scrollToCustomers]);
 
+  const refreshCustomerAfterPortalUpdate = useCallback(async (access) => {
+    const profile = access?.portalProfile || {};
+    const mergePortalProfile = (customer) => ({
+      ...(customer || {}),
+      portalProfile: {
+        ...(customer?.portalProfile || {}),
+        ...profile,
+      },
+    });
+
+    if (access?.customerId) {
+      setInlineCustomer((current) =>
+        current?._id === access.customerId ? mergePortalProfile(current) : current
+      );
+      setCustomerModal((current) =>
+        current?.customer?._id === access.customerId
+          ? { ...current, customer: mergePortalProfile(current.customer) }
+          : current
+      );
+    }
+
+    await loadCustomers();
+  }, [loadCustomers]);
+
   /* -----------------------------------
      Data enrichment / memo
   ----------------------------------- */
@@ -909,9 +934,10 @@ export default function Dashboard() {
           {/* Inline customer details panel */}
           {inlineCustomer && (
             <div style={{ marginTop: 18 }}>
-              <CustomersBrowserModal
+              <CustomerDetailsPanel
                 customer={inlineCustomer}
                 onClose={() => setInlineCustomer(null)}
+                onUpdated={refreshCustomerAfterPortalUpdate}
               />
             </div>
           )}
@@ -1221,6 +1247,7 @@ export default function Dashboard() {
         open={customerModal.open}
         customer={customerModal.customer}
         onClose={() => setCustomerModal({ open: false, customer: null })}
+        onUpdated={refreshCustomerAfterPortalUpdate}
       />
       <CustomersBrowserModal
         open={browseOpen}

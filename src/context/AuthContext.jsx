@@ -8,13 +8,14 @@ import React, {
   useState,
 } from "react";
 import { jwtDecode } from "jwt-decode";
-import { api, platformApi, setApiAccessors } from "../lib/apiClient";
+import { api, platformApi, portalApi, setApiAccessors } from "../lib/apiClient";
 
 /** ---------- storage helpers ---------- **/
 const SESSIONS_KEY = "auth.sessions.v1";
 const ACTIVE_SESSION_KEY = "auth.active.tenant";
 const LAST_TENANT_KEY = "auth.last.tenant";
 const PLATFORM_SESSION_KEY = "auth.platform.v1";
+const CUSTOMER_SESSION_KEY = "auth.customer.v1";
 const ACTIVE_MODE_KEY = "auth.active.mode";
 
 const safeParse = (value) => {
@@ -27,6 +28,7 @@ const safeParse = (value) => {
 
 const loadSessions = () => safeParse(localStorage.getItem(SESSIONS_KEY)) || {};
 const loadPlatformSession = () => safeParse(localStorage.getItem(PLATFORM_SESSION_KEY)) || null;
+const loadCustomerSession = () => safeParse(localStorage.getItem(CUSTOMER_SESSION_KEY)) || null;
 
 const saveSessions = (sessions) => {
   try {
@@ -44,6 +46,16 @@ const savePlatformSession = (session) => {
       localStorage.setItem(PLATFORM_SESSION_KEY, JSON.stringify(session));
     } else {
       localStorage.removeItem(PLATFORM_SESSION_KEY);
+    }
+  } catch {}
+};
+
+const saveCustomerSession = (session) => {
+  try {
+    if (session?.accessToken) {
+      localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(CUSTOMER_SESSION_KEY);
     }
   } catch {}
 };
@@ -131,15 +143,27 @@ const getActivePlatformAuth = () => {
   };
 };
 
+const getActiveCustomerAuth = () => {
+  const session = loadCustomerSession();
+  if (!session?.accessToken) return null;
+  return {
+    ...session,
+    mode: "customer",
+  };
+};
+
 const getActiveAuth = () => {
   const activeMode = getStoredActiveMode();
   const tenantAuth = getActiveTenantAuth();
   const platformAuth = getActivePlatformAuth();
+  const customerAuth = getActiveCustomerAuth();
 
   if (activeMode === "platform" && platformAuth) return platformAuth;
+  if (activeMode === "customer" && customerAuth) return customerAuth;
   if (activeMode === "tenant" && tenantAuth) return tenantAuth;
   if (tenantAuth) return tenantAuth;
   if (platformAuth) return platformAuth;
+  if (customerAuth) return customerAuth;
   return null;
 };
 
@@ -181,6 +205,10 @@ const removePlatformSession = () => {
   savePlatformSession(null);
 };
 
+const removeCustomerSession = () => {
+  saveCustomerSession(null);
+};
+
 /** ---------- token utils ---------- **/
 const decodeToken = (token) => {
   try {
@@ -195,18 +223,23 @@ const userFromToken = (token) => {
   const decoded = decodeToken(token);
   if (!decoded) return null;
   const isPlatformAdmin = decoded.aud === "platform-admin";
+  const isCustomer = decoded.aud === "customer-portal";
   return {
     id: decoded.sub || decoded.userId || decoded.uid || null,
     email: decoded.email || decoded.upn || null,
     username: decoded.username || null,
     displayName:
+      decoded.customerName ||
       decoded.name ||
       decoded.username ||
       decoded.preferred_username ||
       decoded.email ||
       null,
-    role: decoded.role || (isPlatformAdmin ? "platform-admin" : null),
+    role: decoded.role || (isPlatformAdmin ? "platform-admin" : isCustomer ? "customer" : null),
     isPlatformAdmin,
+    phone: decoded.phone || null,
+    accountNumber: decoded.accountNumber || null,
+    tenantName: decoded.tenantName || null,
     isSuper: Boolean(decoded.isSuper),
   };
 };
@@ -235,6 +268,30 @@ const normalizePlatformUser = (user, token, fallback = null) => {
       fallback?.isSuper ??
       decodedUser.isSuper ??
       false,
+  };
+};
+
+const normalizeCustomerPortalUser = (user, token, fallback = null) => {
+  const decodedUser = userFromToken(token) || {};
+  const source = user || {};
+  return {
+    id: source.id || source.sub || fallback?.id || decodedUser.id || null,
+    email: source.email || fallback?.email || decodedUser.email || null,
+    phone: source.phone || fallback?.phone || decodedUser.phone || null,
+    accountNumber:
+      source.accountNumber || fallback?.accountNumber || decodedUser.accountNumber || null,
+    tenantName: source.tenantName || fallback?.tenantName || decodedUser.tenantName || null,
+    displayName:
+      source.displayName ||
+      source.name ||
+      fallback?.displayName ||
+      decodedUser.displayName ||
+      source.accountNumber ||
+      decodedUser.accountNumber ||
+      "Customer",
+    role: "customer",
+    isPlatformAdmin: false,
+    isSuper: false,
   };
 };
 
@@ -318,6 +375,16 @@ export function AuthProvider({ children }) {
         } else {
           removePlatformSession();
         }
+      } else if (resolvedMode === "customer") {
+        if (access) {
+          saveCustomerSession({
+            accessToken: access,
+            user: nextUser,
+          });
+          setActiveMode("customer");
+        } else {
+          removeCustomerSession();
+        }
       }
 
       if (resolvedMode === "tenant" && access && decoded && nextRefresh) {
@@ -378,6 +445,8 @@ export function AuthProvider({ children }) {
         if (tokenToRefresh) {
           await api.post("/auth/logout", { refreshToken: tokenToRefresh });
         }
+      } else if (active?.mode === "customer") {
+        await portalApi.post("/auth/logout").catch(() => null);
       }
     } catch {
       /* ignore network errors on logout */
@@ -431,6 +500,31 @@ export function AuthProvider({ children }) {
       const nextUser = normalizePlatformUser(data.user, data.token);
       setAuthState({
         mode: "platform",
+        access: data.token,
+        refresh: null,
+        isp: null,
+        usr: nextUser,
+      });
+      setStatus("auth");
+    },
+    [setAuthState]
+  );
+
+  const loginCustomer = useCallback(
+    async ({ tenantName, accountNumber, credential, pin }) => {
+      const { data } = await portalApi.post("/auth/login", {
+        tenantName,
+        accountNumber,
+        credential,
+        pin,
+      });
+      if (!data?.ok || !data?.token) {
+        throw new Error(data?.error || "Customer portal login failed");
+      }
+
+      const nextUser = normalizeCustomerPortalUser(data.user, data.token);
+      setAuthState({
+        mode: "customer",
         access: data.token,
         refresh: null,
         isp: null,
@@ -521,6 +615,30 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      if (saved.mode === "customer") {
+        setAuthMode("customer");
+        setAccessToken(saved.accessToken);
+        setRefreshToken(null);
+        setIspId(null);
+        setUser(saved.user ?? normalizeCustomerPortalUser(null, saved.accessToken));
+
+        try {
+          const { data } = await portalApi.get("/auth/verify");
+          if (!data?.ok) throw new Error("Customer portal session verification failed");
+          setAuthState({
+            mode: "customer",
+            access: saved.accessToken,
+            refresh: null,
+            isp: null,
+            usr: normalizeCustomerPortalUser(data.user, saved.accessToken, saved.user ?? null),
+          });
+          setStatus("auth");
+        } catch {
+          await logout();
+        }
+        return;
+      }
+
       const decoded = decodeToken(saved.accessToken);
       const hasRefresh = Boolean(saved.refreshToken);
       if (!hasRefresh) {
@@ -566,7 +684,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const isAuthed = status === "auth";
-  const role = user?.role || (authMode === "platform" ? "platform-admin" : null);
+  const role =
+    user?.role ||
+    (authMode === "platform" ? "platform-admin" : authMode === "customer" ? "customer" : null);
   const isPlatformAdmin = role === "platform-admin";
 
   const value = useMemo(
@@ -581,6 +701,7 @@ export function AuthProvider({ children }) {
       ispId,
       token: accessToken,
       login,
+      loginCustomer,
       loginPlatform,
       register,
       refresh,
@@ -593,6 +714,7 @@ export function AuthProvider({ children }) {
       isPlatformAdmin,
       ispId,
       login,
+      loginCustomer,
       loginPlatform,
       logout,
       refresh,

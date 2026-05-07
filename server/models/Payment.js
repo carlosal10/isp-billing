@@ -4,7 +4,7 @@
 const mongoose = require('mongoose');
 
 const METHOD_ENUM = ['mpesa', 'manual', 'stripe', 'paypal'];
-const STATUS_ENUM = ['Pending', 'Success', 'Validated', 'Failed', 'Refunded', 'Reversed'];
+const STATUS_ENUM = ['Pending', 'Success', 'Validated', 'Failed', 'Refunded', 'Reversed', 'Chargeback'];
 
 const EditLogSchema = new mongoose.Schema(
   {
@@ -37,6 +37,12 @@ const PaymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    invoice: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Invoice',
+      default: null,
+      index: true,
+    },
     plan: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Plan',
@@ -60,6 +66,7 @@ const PaymentSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    currency: { type: String, trim: true, uppercase: true, default: 'KES' },
   status: {
     type: String,
     enum: STATUS_ENUM,
@@ -78,6 +85,21 @@ const PaymentSchema = new mongoose.Schema(
     validatedBy: { type: String, trim: true },
     validatedAt: { type: Date, index: true },
     notes: { type: String, trim: true },
+    allocatedAmount: { type: Number, default: 0, min: 0 },
+    unappliedAmount: { type: Number, default: 0, min: 0 },
+    isFinanciallyApplied: { type: Boolean, default: false, index: true },
+    financialAppliedAt: { type: Date, default: null },
+    financeVersion: { type: Number, default: 0, min: 0 },
+    refundAmount: { type: Number, default: 0, min: 0 },
+    refundedAt: { type: Date, default: null },
+    refundedBy: { type: String, trim: true },
+    refundReason: { type: String, trim: true },
+    reversalReason: { type: String, trim: true },
+    reversedAt: { type: Date, default: null },
+    reversedBy: { type: String, trim: true },
+    chargebackAmount: { type: Number, default: 0, min: 0 },
+    chargedBackAt: { type: Date, default: null },
+    chargebackReason: { type: String, trim: true },
 
     // ---------- Edit / audit trail ----------
     editedAt: { type: Date },
@@ -111,6 +133,7 @@ PaymentSchema.pre('validate', function normalizeFields() {
   if (this.transactionId != null) this.transactionId = String(this.transactionId).trim();
   if (this.accountNumber != null) this.accountNumber = String(this.accountNumber).trim();
   if (this.phoneNumber != null) this.phoneNumber = String(this.phoneNumber).trim();
+  if (this.currency) this.currency = String(this.currency).trim().toUpperCase();
   // Clamp negative to 0 (optional); otherwise the min validator will throw.
   if (typeof this.amount === 'number' && this.amount < 0) this.amount = 0;
 });
@@ -141,6 +164,7 @@ PaymentSchema.index({ tenantId: 1, createdAt: -1 });
 
 // Customer history per tenant
 PaymentSchema.index({ tenantId: 1, customer: 1, createdAt: -1 });
+PaymentSchema.index({ tenantId: 1, invoice: 1, createdAt: -1 });
 
 // Fast filter by status/method per tenant
 PaymentSchema.index({ tenantId: 1, status: 1, method: 1, createdAt: -1 });

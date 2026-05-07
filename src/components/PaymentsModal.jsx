@@ -66,9 +66,27 @@ export default function PaymentsModal({ isOpen, onClose }) {
   const { role } = useAuth();
   const canOperateGatewayEvents =
     role === "owner" || role === "admin" || role === "platform-admin";
-  const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices" | "reconciliation"
+  const canViewFinance =
+    role === "owner" || role === "admin" || role === "platform-admin";
+  const [activeTab, setActiveTab] = useState("payments"); // "payments" | "invoices" | "finance" | "reconciliation"
   const [payments, setPayments] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [financeAging, setFinanceAging] = useState({ buckets: {}, rows: [] });
+  const [financeCredits, setFinanceCredits] = useState([]);
+  const [financeLedger, setFinanceLedger] = useState([]);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeError, setFinanceError] = useState("");
+  const [runningPaymentActionId, setRunningPaymentActionId] = useState(null);
+  const [selectedPaymentAuditId, setSelectedPaymentAuditId] = useState(null);
+  const [selectedPaymentAudit, setSelectedPaymentAudit] = useState(null);
+  const [paymentAuditLoading, setPaymentAuditLoading] = useState(false);
+  const [paymentAuditError, setPaymentAuditError] = useState("");
+  const [selectedInvoiceAuditId, setSelectedInvoiceAuditId] = useState(null);
+  const [selectedInvoiceAudit, setSelectedInvoiceAudit] = useState(null);
+  const [invoiceAuditLoading, setInvoiceAuditLoading] = useState(false);
+  const [invoiceAuditError, setInvoiceAuditError] = useState("");
   const [gatewayEvents, setGatewayEvents] = useState([]);
   const [gatewayLoading, setGatewayLoading] = useState(false);
   const [gatewayError, setGatewayError] = useState("");
@@ -120,6 +138,23 @@ export default function PaymentsModal({ isOpen, onClose }) {
   const [adjustToast, setAdjustToast] = useState(null);
   const toastTimerRef = useRef(null);
 
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState("");
+  const [invoiceResults, setInvoiceResults] = useState([]);
+  const [invoiceSearchLoading, setInvoiceSearchLoading] = useState(false);
+  const [invoiceSearchError, setInvoiceSearchError] = useState("");
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState({
+    customerId: null,
+    customerName: "",
+    accountNumber: "",
+    planId: "",
+    amount: "",
+    dueDate: "",
+    servicePeriodStart: "",
+    servicePeriodEnd: "",
+    billingReason: "manual",
+  });
+
   // ------- Edit/Delete state -------
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
@@ -128,6 +163,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   const manualDropdownRef = useRef(null);
   const adjustDropdownRef = useRef(null);
+  const invoiceDropdownRef = useRef(null);
 
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
@@ -146,6 +182,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     if (!isOpen) return;
     fetchPayments();
     fetchInvoices();
+    fetchPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -157,6 +194,9 @@ export default function PaymentsModal({ isOpen, onClose }) {
       }
       if (adjustDropdownRef.current && !adjustDropdownRef.current.contains(e.target)) {
         setAdjustResults([]);
+      }
+      if (invoiceDropdownRef.current && !invoiceDropdownRef.current.contains(e.target)) {
+        setInvoiceResults([]);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -196,6 +236,19 @@ export default function PaymentsModal({ isOpen, onClose }) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  const formatDateOnly = (value) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (!Number.isFinite(d.getTime())) return "";
+    return d.toLocaleDateString();
+  };
+
+  const formatCurrency = (value, currency = "KES") => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return "-";
+    return `${amount.toFixed(2)} ${currency || "KES"}`;
+  };
+
   const fetchPayments = async () => {
     try {
       const { data } = await api.get(`/payments`);
@@ -211,6 +264,90 @@ export default function PaymentsModal({ isOpen, onClose }) {
       setInvoices(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
+    }
+  };
+
+  const fetchPlans = async () => {
+    try {
+      const { data } = await api.get(`/plans`);
+      setPlans(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load plans:", err);
+      setPlans([]);
+    }
+  };
+
+  const openPaymentAudit = async (paymentId) => {
+    if (!paymentId) return;
+    setSelectedPaymentAuditId(paymentId);
+    setPaymentAuditLoading(true);
+    setPaymentAuditError("");
+    try {
+      const { data } = await api.get(`/payments/${paymentId}`);
+      setSelectedPaymentAudit(data || null);
+    } catch (err) {
+      console.error("Failed to load payment detail:", err);
+      setSelectedPaymentAudit(null);
+      setPaymentAuditError(getErrMsg(err, "Failed to load payment detail"));
+    } finally {
+      setPaymentAuditLoading(false);
+    }
+  };
+
+  const openInvoiceAudit = async (invoiceId) => {
+    if (!invoiceId) return;
+    setSelectedInvoiceAuditId(invoiceId);
+    setInvoiceAuditLoading(true);
+    setInvoiceAuditError("");
+    try {
+      const { data } = await api.get(`/invoices/${invoiceId}`);
+      setSelectedInvoiceAudit(data || null);
+    } catch (err) {
+      console.error("Failed to load invoice detail:", err);
+      setSelectedInvoiceAudit(null);
+      setInvoiceAuditError(getErrMsg(err, "Failed to load invoice detail"));
+    } finally {
+      setInvoiceAuditLoading(false);
+    }
+  };
+
+  const refreshSelectedAudits = async () => {
+    const requests = [];
+    if (selectedPaymentAuditId) {
+      requests.push(openPaymentAudit(selectedPaymentAuditId));
+    }
+    if (selectedInvoiceAuditId) {
+      requests.push(openInvoiceAudit(selectedInvoiceAuditId));
+    }
+    if (requests.length > 0) {
+      await Promise.all(requests);
+    }
+  };
+
+  const fetchFinanceReports = async () => {
+    if (!canViewFinance) return;
+    setFinanceLoading(true);
+    setFinanceError("");
+    try {
+      const [summaryRes, agingRes, creditsRes, ledgerRes] = await Promise.all([
+        api.get(`/finance/summary`),
+        api.get(`/finance/invoice-aging`),
+        api.get(`/finance/credits`, { params: { onlyOpen: true, limit: 20 } }),
+        api.get(`/finance/ledger`, { params: { limit: 20 } }),
+      ]);
+      setFinanceSummary(summaryRes.data || null);
+      setFinanceAging(agingRes.data || { buckets: {}, rows: [] });
+      setFinanceCredits(Array.isArray(creditsRes.data) ? creditsRes.data : []);
+      setFinanceLedger(Array.isArray(ledgerRes.data) ? ledgerRes.data : []);
+    } catch (err) {
+      console.error("Failed to load finance reports:", err);
+      setFinanceError(getErrMsg(err, "Failed to load finance reports"));
+      setFinanceSummary(null);
+      setFinanceAging({ buckets: {}, rows: [] });
+      setFinanceCredits([]);
+      setFinanceLedger([]);
+    } finally {
+      setFinanceLoading(false);
     }
   };
 
@@ -358,11 +495,44 @@ export default function PaymentsModal({ isOpen, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adjustSearchTerm]);
 
+  const searchInvoiceCustomers = async (q) => {
+    const query = q.trim();
+    if (!query) {
+      setInvoiceResults([]);
+      setInvoiceSearchError("");
+      return;
+    }
+    setInvoiceSearchLoading(true);
+    setInvoiceSearchError("");
+    try {
+      const { data } = await api.get(`/customers/search`, { params: { query } });
+      setInvoiceResults(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Invoice customer search failed:", err);
+      setInvoiceSearchError("Search failed");
+      setInvoiceResults([]);
+    } finally {
+      setInvoiceSearchLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const id = setTimeout(() => searchInvoiceCustomers(invoiceSearchTerm), 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceSearchTerm]);
+
   useEffect(() => {
     if (!isOpen || activeTab !== "reconciliation") return;
     fetchGatewayEvents(gatewayFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeTab]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "finance" || !canViewFinance) return;
+    fetchFinanceReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTab, canViewFinance]);
 
   useEffect(() => {
     if (!adjustToast) return () => {};
@@ -480,8 +650,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
       });
       setSearchTerm("");
       setCustomerResults([]);
-      fetchPayments();
-      fetchInvoices();
+      await fetchPayments();
+      await fetchInvoices();
+      if (canViewFinance) await fetchFinanceReports();
+      await refreshSelectedAudits();
     } catch (err) {
       console.error("Validation failed:", err);
       alert(getErrMsg(err, "Error validating payment"));
@@ -540,7 +712,9 @@ export default function PaymentsModal({ isOpen, onClose }) {
       });
       setAdjustSearchTerm("");
       setAdjustResults([]);
-      fetchPayments();
+      await fetchPayments();
+      if (canViewFinance) await fetchFinanceReports();
+      await refreshSelectedAudits();
     } catch (err) {
       setAdjustToast({ type: "error", message: getErrMsg(err, "Adjustment failed") });
     } finally {
@@ -552,7 +726,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
     try {
       await api.put(`/invoices/${id}/pay`);
       alert("Invoice marked as paid!");
-      fetchInvoices();
+      await fetchPayments();
+      await fetchInvoices();
+      if (canViewFinance) await fetchFinanceReports();
+      await refreshSelectedAudits();
     } catch (err) {
       console.error("Failed to mark paid:", err);
       alert(getErrMsg(err, "Error marking invoice as paid"));
@@ -563,7 +740,9 @@ export default function PaymentsModal({ isOpen, onClose }) {
     try {
       await api.post(`/invoices/${id}/generate`);
       alert("Invoice generated successfully!");
-      fetchInvoices();
+      await fetchInvoices();
+      if (canViewFinance) await fetchFinanceReports();
+      await refreshSelectedAudits();
     } catch (err) {
       console.error("Failed to generate invoice:", err);
       alert(getErrMsg(err, "Error generating invoice"));
@@ -616,6 +795,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
       });
 
       await fetchPayments();
+      await fetchInvoices();
+      if (canViewFinance) {
+        await fetchFinanceReports();
+      }
+      await refreshSelectedAudits();
       setEditOpen(false);
       setEditPayment(null);
     } catch (err) {
@@ -641,17 +825,117 @@ export default function PaymentsModal({ isOpen, onClose }) {
     try {
       await api.delete(`/payments/${confirm.id}`);
       setPayments((list) => list.filter((p) => p._id !== confirm.id));
+      if (selectedPaymentAuditId === confirm.id) {
+        setSelectedPaymentAuditId(null);
+        setSelectedPaymentAudit(null);
+        setPaymentAuditError("");
+      }
       setConfirm({ open: false, id: null, loading: false, message: "" });
-      fetchInvoices();
+      await fetchInvoices();
+      if (canViewFinance) await fetchFinanceReports();
+      await refreshSelectedAudits();
     } catch (err) {
       alert(getErrMsg(err, "Failed to delete payment"));
       setConfirm((s) => ({ ...s, loading: false }));
     }
   };
 
+  const runPaymentLifecycleAction = async (payment, action) => {
+    if (!payment?._id) return;
+    const actionLabel =
+      action === "refund"
+        ? "refund"
+        : action === "reverse"
+          ? "reverse"
+          : "chargeback";
+    const reason = window.prompt(`Reason for ${actionLabel}ing this payment?`, "");
+    if (reason === null) return;
+    setRunningPaymentActionId(`${action}:${payment._id}`);
+    try {
+      await api.post(`/payments/${payment._id}/${action}`, {
+        reason: reason.trim() || undefined,
+      });
+      await fetchPayments();
+      await fetchInvoices();
+      if (canViewFinance) {
+        await fetchFinanceReports();
+      }
+      await refreshSelectedAudits();
+    } catch (err) {
+      alert(getErrMsg(err, `Failed to ${actionLabel} payment`));
+    } finally {
+      setRunningPaymentActionId(null);
+    }
+  };
+
+  const handleInvoicePlanChange = (planId) => {
+    const selectedPlan = plans.find((plan) => plan._id === planId);
+    setInvoiceForm((prev) => ({
+      ...prev,
+      planId,
+      amount:
+        selectedPlan && selectedPlan.price !== undefined && selectedPlan.price !== null
+          ? String(selectedPlan.price)
+          : prev.amount,
+    }));
+  };
+
+  const submitInvoiceIssue = async (e) => {
+    e.preventDefault();
+    if (!invoiceForm.customerId) {
+      alert("Select a customer before issuing an invoice.");
+      return;
+    }
+    if (!invoiceForm.planId) {
+      alert("Choose a plan for the invoice.");
+      return;
+    }
+
+    setInvoiceSaving(true);
+    try {
+      await api.post(`/invoices/issue`, {
+        customerId: invoiceForm.customerId,
+        planId: invoiceForm.planId,
+        amount: invoiceForm.amount === "" ? undefined : Number(invoiceForm.amount),
+        dueDate: invoiceForm.dueDate || undefined,
+        servicePeriodStart: invoiceForm.servicePeriodStart || undefined,
+        servicePeriodEnd: invoiceForm.servicePeriodEnd || undefined,
+        billingReason: invoiceForm.billingReason || "manual",
+      });
+
+      setInvoiceForm({
+        customerId: null,
+        customerName: "",
+        accountNumber: "",
+        planId: "",
+        amount: "",
+        dueDate: "",
+        servicePeriodStart: "",
+        servicePeriodEnd: "",
+        billingReason: "manual",
+      });
+      setInvoiceSearchTerm("");
+      setInvoiceResults([]);
+      await fetchInvoices();
+      if (canViewFinance) {
+        await fetchFinanceReports();
+      }
+      await refreshSelectedAudits();
+    } catch (err) {
+      alert(getErrMsg(err, "Failed to issue invoice"));
+    } finally {
+      setInvoiceSaving(false);
+    }
+  };
+
   const hasNoSearchResults = useMemo(
     () => !loadingSearch && searchTerm.trim() && customerResults.length === 0,
     [loadingSearch, searchTerm, customerResults.length]
+  );
+
+  const hasNoInvoiceSearchResults = useMemo(
+    () => !invoiceSearchLoading && invoiceSearchTerm.trim() && invoiceResults.length === 0,
+    [invoiceSearchLoading, invoiceSearchTerm, invoiceResults.length]
   );
 
   const gatewayStatusSummary = useMemo(() => {
@@ -752,6 +1036,557 @@ export default function PaymentsModal({ isOpen, onClose }) {
     }
   };
 
+  const renderAuditMetaItem = (label, value, options = {}) => (
+    <div className="gateway-detail-item">
+      <span className="gateway-detail-label">{label}</span>
+      <span className={`gateway-detail-value${options.mono ? " mono-text" : ""}`}>
+        {value !== undefined && value !== null && value !== "" ? value : "-"}
+      </span>
+    </div>
+  );
+
+  const renderPaymentAuditPanel = () => {
+    if (paymentAuditError) {
+      return (
+        <div className="gateway-alert danger finance-audit-feedback">
+          <strong>Payment detail failed:</strong> {paymentAuditError}
+        </div>
+      );
+    }
+    if (paymentAuditLoading) {
+      return <div className="gateway-empty-panel">Loading payment detail...</div>;
+    }
+    if (!selectedPaymentAudit) {
+      return (
+        <div className="gateway-empty-panel compact">
+          Select <strong>Inspect</strong> on any payment to review allocations, credits, and ledger movement.
+        </div>
+      );
+    }
+
+    const lifecycleSummary =
+      selectedPaymentAudit.status === "Refunded"
+        ? `Refunded ${formatDateTime(selectedPaymentAudit.refundedAt) || ""}`.trim()
+        : selectedPaymentAudit.status === "Reversed"
+          ? `Reversed ${formatDateTime(selectedPaymentAudit.reversedAt) || ""}`.trim()
+          : selectedPaymentAudit.status === "Chargeback"
+            ? `Chargeback ${formatDateTime(selectedPaymentAudit.chargedBackAt) || ""}`.trim()
+            : "Active";
+
+    return (
+      <div className="gateway-event-detail finance-audit-panel">
+        <div className="gateway-event-detail-header">
+          <div>
+            <h3>Payment Audit</h3>
+            <p className="section-subtitle">
+              Inspect how this payment flowed into invoices, credits, and the ledger.
+            </p>
+          </div>
+          <div className="gateway-detail-actions">
+            {selectedPaymentAudit.invoice?._id ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={async () => {
+                  setActiveTab("invoices");
+                  await openInvoiceAudit(selectedPaymentAudit.invoice._id);
+                }}
+              >
+                Open Invoice
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => openPaymentAudit(selectedPaymentAudit._id)}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setSelectedPaymentAuditId(null);
+                setSelectedPaymentAudit(null);
+                setPaymentAuditError("");
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="gateway-detail-grid">
+          {renderAuditMetaItem("Payment ID", selectedPaymentAudit._id, { mono: true })}
+          {renderAuditMetaItem("Transaction ID", selectedPaymentAudit.transactionId, { mono: true })}
+          {renderAuditMetaItem(
+            "Customer",
+            selectedPaymentAudit.customerName
+              ? `${selectedPaymentAudit.customerName} (${selectedPaymentAudit.accountNumber || "N/A"})`
+              : selectedPaymentAudit.accountNumber || "-"
+          )}
+          {renderAuditMetaItem("Plan", selectedPaymentAudit.planName || "-")}
+          {renderAuditMetaItem(
+            "Invoice",
+            selectedPaymentAudit.invoiceNumber
+              ? `${selectedPaymentAudit.invoiceNumber} (${selectedPaymentAudit.invoice?.status || "linked"})`
+              : "Unlinked"
+          )}
+          {renderAuditMetaItem("Status", formatTokenLabel(selectedPaymentAudit.status))}
+          {renderAuditMetaItem("Amount", formatCurrency(selectedPaymentAudit.amount, selectedPaymentAudit.currency))}
+          {renderAuditMetaItem(
+            "Allocated",
+            formatCurrency(
+              selectedPaymentAudit.totals?.allocatedAmount,
+              selectedPaymentAudit.currency
+            )
+          )}
+          {renderAuditMetaItem(
+            "Unapplied",
+            formatCurrency(
+              selectedPaymentAudit.totals?.unappliedAmount,
+              selectedPaymentAudit.currency
+            )
+          )}
+          {renderAuditMetaItem(
+            "Credits Issued",
+            formatCurrency(
+              selectedPaymentAudit.totals?.creditIssued,
+              selectedPaymentAudit.currency
+            )
+          )}
+          {renderAuditMetaItem("Validated", formatDateTime(selectedPaymentAudit.validatedAt) || "-")}
+          {renderAuditMetaItem("Created", formatDateTime(selectedPaymentAudit.createdAt) || "-")}
+          {renderAuditMetaItem("Expiry", formatDateTime(selectedPaymentAudit.expiryDate) || "-")}
+          {renderAuditMetaItem("Finance Version", String(selectedPaymentAudit.financeVersion ?? 0))}
+          {renderAuditMetaItem("Lifecycle", lifecycleSummary)}
+        </div>
+
+        <section className="finance-audit-section">
+          <h4>Allocations</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Applied</th>
+                  <th>Reversed</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedPaymentAudit.allocations?.length ? (
+                  selectedPaymentAudit.allocations.map((allocation) => (
+                    <tr key={allocation._id}>
+                      <td>
+                        <strong>{allocation.invoice?.invoiceNumber || allocation.invoice?._id || "-"}</strong>
+                        <div className="muted-inline">{formatTokenLabel(allocation.invoice?.status || "unknown")}</div>
+                      </td>
+                      <td>{formatCurrency(allocation.amount, allocation.currency)}</td>
+                      <td>{formatTokenLabel(allocation.status)}</td>
+                      <td>{formatDateTime(allocation.appliedAt) || "-"}</td>
+                      <td>{formatDateTime(allocation.reversedAt) || "-"}</td>
+                      <td className="actions" style={{ textAlign: "right" }}>
+                        {allocation.invoice?._id ? (
+                          <button
+                            type="button"
+                            className="secondary table-action"
+                            onClick={async () => {
+                              setActiveTab("invoices");
+                              await openInvoiceAudit(allocation.invoice._id);
+                            }}
+                          >
+                            Inspect Invoice
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center" }}>
+                      No invoice allocations recorded for this payment.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="finance-audit-section">
+          <h4>Credit Notes</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Credit Note</th>
+                  <th>Amount</th>
+                  <th>Remaining</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Issued</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedPaymentAudit.creditNotes?.length ? (
+                  selectedPaymentAudit.creditNotes.map((note) => (
+                    <tr key={note._id}>
+                      <td>{note.creditNoteNumber || note._id}</td>
+                      <td>{formatCurrency(note.amount, note.currency)}</td>
+                      <td>{formatCurrency(note.remainingAmount, note.currency)}</td>
+                      <td>{formatTokenLabel(note.status)}</td>
+                      <td>{note.reason || "-"}</td>
+                      <td>{formatDateTime(note.issuedAt) || "-"}</td>
+                      <td className="actions" style={{ textAlign: "right" }}>
+                        {note.sourceInvoice?._id ? (
+                          <button
+                            type="button"
+                            className="secondary table-action"
+                            onClick={async () => {
+                              setActiveTab("invoices");
+                              await openInvoiceAudit(note.sourceInvoice._id);
+                            }}
+                          >
+                            Source Invoice
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center" }}>
+                      No credit notes were issued from this payment.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="finance-audit-section">
+          <h4>Ledger Entries</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Effective</th>
+                  <th>Account</th>
+                  <th>Direction</th>
+                  <th>Amount</th>
+                  <th>Source</th>
+                  <th>Batch</th>
+                  <th>Reversed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedPaymentAudit.ledgerEntries?.length ? (
+                  selectedPaymentAudit.ledgerEntries.map((entry) => (
+                    <tr key={entry._id}>
+                      <td>{formatDateTime(entry.effectiveAt) || "-"}</td>
+                      <td>{entry.account || "-"}</td>
+                      <td>{formatTokenLabel(entry.direction)}</td>
+                      <td>{formatCurrency(entry.amount, entry.currency)}</td>
+                      <td>{formatTokenLabel(entry.sourceType)}</td>
+                      <td className="mono-text">{entry.batchId || "-"}</td>
+                      <td>{formatDateTime(entry.reversedAt) || "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center" }}>
+                      No ledger entries were linked to this payment.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderInvoiceAuditPanel = () => {
+    if (invoiceAuditError) {
+      return (
+        <div className="gateway-alert danger finance-audit-feedback">
+          <strong>Invoice detail failed:</strong> {invoiceAuditError}
+        </div>
+      );
+    }
+    if (invoiceAuditLoading) {
+      return <div className="gateway-empty-panel">Loading invoice detail...</div>;
+    }
+    if (!selectedInvoiceAudit) {
+      return (
+        <div className="gateway-empty-panel compact">
+          Select <strong>Inspect</strong> on any invoice to review its line items, allocations, credits, and ledger trail.
+        </div>
+      );
+    }
+
+    const servicePeriod =
+      selectedInvoiceAudit.servicePeriodStart || selectedInvoiceAudit.servicePeriodEnd
+        ? `${formatDateOnly(selectedInvoiceAudit.servicePeriodStart) || "?"} to ${formatDateOnly(selectedInvoiceAudit.servicePeriodEnd) || "?"}`
+        : "Not set";
+
+    return (
+      <div className="gateway-event-detail finance-audit-panel">
+        <div className="gateway-event-detail-header">
+          <div>
+            <h3>Invoice Audit</h3>
+            <p className="section-subtitle">
+              Review how this invoice was issued, settled, credited, and posted to the ledger.
+            </p>
+          </div>
+          <div className="gateway-detail-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => openInvoiceAudit(selectedInvoiceAudit._id)}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setSelectedInvoiceAuditId(null);
+                setSelectedInvoiceAudit(null);
+                setInvoiceAuditError("");
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="gateway-detail-grid">
+          {renderAuditMetaItem("Invoice ID", selectedInvoiceAudit._id, { mono: true })}
+          {renderAuditMetaItem("Invoice Number", selectedInvoiceAudit.invoiceNumber, { mono: true })}
+          {renderAuditMetaItem(
+            "Customer",
+            selectedInvoiceAudit.customerName
+              ? `${selectedInvoiceAudit.customerName} (${selectedInvoiceAudit.accountNumber || "N/A"})`
+              : selectedInvoiceAudit.accountNumber || "-"
+          )}
+          {renderAuditMetaItem("Plan", selectedInvoiceAudit.planName || "-")}
+          {renderAuditMetaItem("Status", formatTokenLabel(selectedInvoiceAudit.status))}
+          {renderAuditMetaItem("Dunning", formatTokenLabel(selectedInvoiceAudit.dunningStage || "none"))}
+          {renderAuditMetaItem("Total", formatCurrency(selectedInvoiceAudit.totals?.total, selectedInvoiceAudit.currency))}
+          {renderAuditMetaItem(
+            "Paid",
+            formatCurrency(selectedInvoiceAudit.totals?.amountPaid, selectedInvoiceAudit.currency)
+          )}
+          {renderAuditMetaItem(
+            "Credited",
+            formatCurrency(selectedInvoiceAudit.totals?.amountCredited, selectedInvoiceAudit.currency)
+          )}
+          {renderAuditMetaItem(
+            "Balance",
+            formatCurrency(selectedInvoiceAudit.totals?.balanceDue, selectedInvoiceAudit.currency)
+          )}
+          {renderAuditMetaItem("Due Date", formatDateOnly(selectedInvoiceAudit.dueDate) || "-")}
+          {renderAuditMetaItem("Service Period", servicePeriod)}
+          {renderAuditMetaItem(
+            "Autopay",
+            selectedInvoiceAudit.autopayEnabled
+              ? `${formatTokenLabel(selectedInvoiceAudit.autopayStatus || "enabled")} (${selectedInvoiceAudit.autopayAttemptCount || 0} attempt(s))`
+              : "Disabled"
+          )}
+        </div>
+
+        <section className="finance-audit-section">
+          <h4>Line Items</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Kind</th>
+                  <th>Qty</th>
+                  <th>Unit Price</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedInvoiceAudit.lineItems?.length ? (
+                  selectedInvoiceAudit.lineItems.map((item, index) => (
+                    <tr key={`${selectedInvoiceAudit._id}-line-${index}`}>
+                      <td>{item.description || "-"}</td>
+                      <td>{formatTokenLabel(item.kind || "service")}</td>
+                      <td>{item.quantity ?? 0}</td>
+                      <td>{formatCurrency(item.unitPrice, selectedInvoiceAudit.currency)}</td>
+                      <td>{formatCurrency(item.amount, selectedInvoiceAudit.currency)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center" }}>
+                      No line items were stored on this invoice.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="finance-audit-section">
+          <h4>Allocations</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Reference</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Applied</th>
+                  <th>Reversed</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedInvoiceAudit.allocations?.length ? (
+                  selectedInvoiceAudit.allocations.map((allocation) => (
+                    <tr key={allocation._id}>
+                      <td>{formatTokenLabel(allocation.sourceType)}</td>
+                      <td>
+                        {allocation.payment?.transactionId || allocation.creditNote?.creditNoteNumber || allocation.payment?._id || allocation.creditNote?._id || "-"}
+                        <div className="muted-inline">
+                          {allocation.payment?.status
+                            ? `Payment ${formatTokenLabel(allocation.payment.status)}`
+                            : allocation.creditNote?.status
+                              ? `Credit ${formatTokenLabel(allocation.creditNote.status)}`
+                              : "No linked source"}
+                        </div>
+                      </td>
+                      <td>{formatCurrency(allocation.amount, allocation.currency)}</td>
+                      <td>{formatTokenLabel(allocation.status)}</td>
+                      <td>{formatDateTime(allocation.appliedAt) || "-"}</td>
+                      <td>{formatDateTime(allocation.reversedAt) || "-"}</td>
+                      <td className="actions" style={{ textAlign: "right" }}>
+                        {allocation.payment?._id ? (
+                          <button
+                            type="button"
+                            className="secondary table-action"
+                            onClick={async () => {
+                              setActiveTab("payments");
+                              await openPaymentAudit(allocation.payment._id);
+                            }}
+                          >
+                            Inspect Payment
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center" }}>
+                      No allocations have been applied to this invoice yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="finance-audit-section">
+          <h4>Source Credits</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Credit Note</th>
+                  <th>Amount</th>
+                  <th>Remaining</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Issued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedInvoiceAudit.sourceCreditNotes?.length ? (
+                  selectedInvoiceAudit.sourceCreditNotes.map((note) => (
+                    <tr key={note._id}>
+                      <td>{note.creditNoteNumber || note._id}</td>
+                      <td>{formatCurrency(note.amount, note.currency)}</td>
+                      <td>{formatCurrency(note.remainingAmount, note.currency)}</td>
+                      <td>{formatTokenLabel(note.status)}</td>
+                      <td>{note.reason || "-"}</td>
+                      <td>{formatDateTime(note.issuedAt) || "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center" }}>
+                      No credit notes originated from this invoice.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="finance-audit-section">
+          <h4>Ledger Entries</h4>
+          <div className="finance-audit-table">
+            <table className="data-table finance-detail-table">
+              <thead>
+                <tr>
+                  <th>Effective</th>
+                  <th>Account</th>
+                  <th>Direction</th>
+                  <th>Amount</th>
+                  <th>Source</th>
+                  <th>Batch</th>
+                  <th>Reversed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedInvoiceAudit.ledgerEntries?.length ? (
+                  selectedInvoiceAudit.ledgerEntries.map((entry) => (
+                    <tr key={entry._id}>
+                      <td>{formatDateTime(entry.effectiveAt) || "-"}</td>
+                      <td>{entry.account || "-"}</td>
+                      <td>{formatTokenLabel(entry.direction)}</td>
+                      <td>{formatCurrency(entry.amount, entry.currency)}</td>
+                      <td>{formatTokenLabel(entry.sourceType)}</td>
+                      <td className="mono-text">{entry.batchId || "-"}</td>
+                      <td>{formatDateTime(entry.reversedAt) || "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center" }}>
+                      No ledger entries were linked to this invoice.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -784,6 +1619,9 @@ export default function PaymentsModal({ isOpen, onClose }) {
           <button className={activeTab === "invoices" ? "active" : ""} onClick={() => setActiveTab("invoices")}>
             Invoices
           </button>
+          <button className={activeTab === "finance" ? "active" : ""} onClick={() => setActiveTab("finance")}>
+            Finance
+          </button>
           <button
             className={activeTab === "reconciliation" ? "active" : ""}
             onClick={() => setActiveTab("reconciliation")}
@@ -812,6 +1650,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   <tr>
                     <th>ID</th>
                     <th>Customer</th>
+                    <th>Invoice</th>
                     <th>Amount</th>
                     <th>Method</th>
                     <th>Status</th>
@@ -821,14 +1660,50 @@ export default function PaymentsModal({ isOpen, onClose }) {
                 </thead>
                 <tbody>
                   {payments.map((p) => (
-                    <tr key={p._id}>
+                    <tr key={p._id} className={selectedPaymentAuditId === p._id ? "is-selected" : ""}>
                       <td title={p._id}>{p._id}</td>
                       <td>{p.customerName || p.customer?.name || "-"}</td>
+                      <td>{p.invoiceNumber || p.invoice?.invoiceNumber || "-"}</td>
                       <td>{p.amount}</td>
                       <td>{p.method}</td>
                       <td>{p.status}</td>
                       <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}</td>
                       <td className="actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <button
+                          className="secondary table-action"
+                          type="button"
+                          onClick={() => openPaymentAudit(p._id)}
+                        >
+                          Inspect
+                        </button>
+                        {(p.status === "Success" || p.status === "Validated") && (
+                          <>
+                            <button
+                              className="secondary table-action"
+                              type="button"
+                              onClick={() => runPaymentLifecycleAction(p, "refund")}
+                              disabled={runningPaymentActionId === `refund:${p._id}`}
+                            >
+                              {runningPaymentActionId === `refund:${p._id}` ? "Refunding..." : "Refund"}
+                            </button>
+                            <button
+                              className="secondary table-action"
+                              type="button"
+                              onClick={() => runPaymentLifecycleAction(p, "reverse")}
+                              disabled={runningPaymentActionId === `reverse:${p._id}`}
+                            >
+                              {runningPaymentActionId === `reverse:${p._id}` ? "Reversing..." : "Reverse"}
+                            </button>
+                            <button
+                              className="secondary table-action"
+                              type="button"
+                              onClick={() => runPaymentLifecycleAction(p, "chargeback")}
+                              disabled={runningPaymentActionId === `chargeback:${p._id}`}
+                            >
+                              {runningPaymentActionId === `chargeback:${p._id}` ? "Posting..." : "Chargeback"}
+                            </button>
+                          </>
+                        )}
                         <button className="btn-icon" title="Edit" onClick={() => openEdit(p)}>
                           <MdEdit />
                         </button>
@@ -844,7 +1719,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                   ))}
                   {payments.length === 0 && (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: "center" }}>
+                      <td colSpan={8} style={{ textAlign: "center" }}>
                         No payments yet.
                       </td>
                     </tr>
@@ -852,6 +1727,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                 </tbody>
               </table>
             </div>
+            {renderPaymentAuditPanel()}
 
             {!!adjustToast && (
               <div className={`payments-toast ${adjustToast.type}`} role="status" aria-live="polite">
@@ -1049,36 +1925,199 @@ export default function PaymentsModal({ isOpen, onClose }) {
         {activeTab === "invoices" && (
           <>
             <h2>Invoices</h2>
+            <h3>Issue Invoice</h3>
+            <form onSubmit={submitInvoiceIssue} className="stacked-form" ref={invoiceDropdownRef}>
+              <div className="field">
+                <input
+                  type="text"
+                  placeholder="Search customer by name or account number"
+                  value={invoiceSearchTerm}
+                  onChange={(e) => setInvoiceSearchTerm(e.target.value)}
+                  autoComplete="off"
+                />
+                {invoiceSearchLoading && <div className="help-text">Searching...</div>}
+                {invoiceSearchError && <div className="error-text">{invoiceSearchError}</div>}
+
+                {invoiceResults.length > 0 && (
+                  <ul className="search-dropdown">
+                    {invoiceResults.map((customer) => (
+                      <li
+                        key={`invoice-${customer._id}`}
+                        onClick={() => {
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            customerId: customer._id,
+                            customerName: customer.name || "",
+                            accountNumber: customer.accountNumber || "",
+                            planId: customer.plan?._id || "",
+                            amount:
+                              customer.plan?.price !== undefined && customer.plan?.price !== null
+                                ? String(customer.plan.price)
+                                : prev.amount,
+                          }));
+                          setInvoiceSearchTerm(`${customer.name} (${customer.accountNumber})`);
+                          setInvoiceResults([]);
+                          setInvoiceSearchError("");
+                        }}
+                        title={`${customer.name} - ${customer.accountNumber}`}
+                      >
+                        {customer.name} - {customer.accountNumber}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {hasNoInvoiceSearchResults && <div className="search-empty">No matching customers</div>}
+
+                {invoiceForm.customerId && (
+                  <div className="selected-customer">
+                    <span>
+                      {invoiceForm.customerName || "Selected customer"} ({invoiceForm.accountNumber || "N/A"})
+                    </span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setInvoiceForm({
+                          customerId: null,
+                          customerName: "",
+                          accountNumber: "",
+                          planId: "",
+                          amount: "",
+                          dueDate: "",
+                          servicePeriodStart: "",
+                          servicePeriodEnd: "",
+                          billingReason: "manual",
+                        });
+                        setInvoiceSearchTerm("");
+                        setInvoiceResults([]);
+                        setInvoiceSearchError("");
+                      }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="field">
+                <select
+                  value={invoiceForm.planId}
+                  onChange={(e) => handleInvoicePlanChange(e.target.value)}
+                >
+                  <option value="">Select plan</option>
+                  {plans.map((plan) => (
+                    <option key={plan._id} value={plan._id}>
+                      {plan.name} - KES {Number(plan.price || 0).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount (optional override)"
+                  value={invoiceForm.amount}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
+                />
+              </div>
+
+              <div className="field">
+                <input
+                  type="date"
+                  value={invoiceForm.dueDate}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                />
+                <p className="help-text">Due date for collections and aging.</p>
+              </div>
+
+              <div className="field">
+                <input
+                  type="date"
+                  value={invoiceForm.servicePeriodStart}
+                  onChange={(e) =>
+                    setInvoiceForm((prev) => ({ ...prev, servicePeriodStart: e.target.value }))
+                  }
+                />
+                <p className="help-text">Optional service period start.</p>
+              </div>
+
+              <div className="field">
+                <input
+                  type="date"
+                  value={invoiceForm.servicePeriodEnd}
+                  onChange={(e) =>
+                    setInvoiceForm((prev) => ({ ...prev, servicePeriodEnd: e.target.value }))
+                  }
+                />
+                <p className="help-text">Optional service period end.</p>
+              </div>
+
+              <div className="field">
+                <select
+                  value={invoiceForm.billingReason}
+                  onChange={(e) =>
+                    setInvoiceForm((prev) => ({ ...prev, billingReason: e.target.value }))
+                  }
+                >
+                  <option value="manual">Manual</option>
+                  <option value="renewal">Renewal</option>
+                  <option value="proration">Proration</option>
+                  <option value="adjustment">Adjustment</option>
+                  <option value="migration">Migration</option>
+                </select>
+              </div>
+
+              <button type="submit" className="primary" disabled={invoiceSaving}>
+                {invoiceSaving ? "Issuing..." : "Issue Invoice"}
+              </button>
+            </form>
             <div className="table-wrapper">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th>Invoice</th>
                     <th>Customer</th>
-                    <th>Amount</th>
+                    <th>Total</th>
+                    <th>Paid</th>
+                    <th>Credit</th>
+                    <th>Balance</th>
                     <th>Status</th>
+                    <th>Dunning</th>
                     <th>Due Date</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
-                    <tr key={inv._id}>
-                      <td>{inv._id}</td>
+                    <tr key={inv._id} className={selectedInvoiceAuditId === inv._id ? "is-selected" : ""}>
+                      <td>{inv.invoiceNumber || inv._id}</td>
                       <td>{inv.customerName || inv.customer?.name || "-"}</td>
-                      <td>{inv.amount}</td>
+                      <td>{Number(inv.total ?? inv.amount ?? 0).toFixed(2)}</td>
+                      <td>{Number(inv.amountPaid ?? 0).toFixed(2)}</td>
+                      <td>{Number(inv.amountCredited ?? 0).toFixed(2)}</td>
+                      <td>{Number(inv.balanceDue ?? inv.amountDue ?? 0).toFixed(2)}</td>
                       <td>{inv.status}</td>
+                      <td>{inv.dunningStage || "-"}</td>
                       <td>{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "-"}</td>
                       <td className="actions">
-                        <button onClick={() => markInvoicePaid(inv._id)}>Mark Paid</button>
-                        <button onClick={() => generateInvoice(inv._id)}>Generate</button>
+                        <button type="button" className="secondary table-action" onClick={() => openInvoiceAudit(inv._id)}>
+                          Inspect
+                        </button>
+                        {Number(inv.balanceDue ?? inv.amountDue ?? 0) > 0 && (
+                          <button onClick={() => markInvoicePaid(inv._id)}>Settle</button>
+                        )}
+                        {!inv.generated && <button onClick={() => generateInvoice(inv._id)}>Generate</button>}
                         <button onClick={() => viewInvoicePDF(inv._id)}>View PDF</button>
                       </td>
                     </tr>
                   ))}
                   {invoices.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: "center" }}>
+                      <td colSpan={10} style={{ textAlign: "center" }}>
                         No invoices yet.
                       </td>
                     </tr>
@@ -1086,6 +2125,178 @@ export default function PaymentsModal({ isOpen, onClose }) {
                 </tbody>
               </table>
             </div>
+            {renderInvoiceAuditPanel()}
+          </>
+        )}
+
+        {activeTab === "finance" && (
+          <>
+            <div className="payments-header">
+              <div>
+                <h2>Finance</h2>
+                <p className="section-subtitle">
+                  Review invoice aging, unapplied credits, and recent ledger movement from the finance core.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={fetchFinanceReports}
+                disabled={financeLoading || !canViewFinance}
+              >
+                {financeLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+
+            {!canViewFinance ? (
+              <div className="gateway-empty-panel">Finance reporting is restricted to owner and admin roles.</div>
+            ) : (
+              <>
+                {financeError ? (
+                  <div className="gateway-alert danger">
+                    <strong>Finance load failed:</strong> {financeError}
+                  </div>
+                ) : null}
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                    gap: 12,
+                    marginBottom: 18,
+                  }}
+                >
+                  {[
+                    ["Invoiced", financeSummary?.totalInvoiced],
+                    ["Outstanding", financeSummary?.totalOutstanding],
+                    ["Overdue", financeSummary?.overdueOutstanding],
+                    ["Credits", financeSummary?.unappliedCredits],
+                    ["Collected", financeSummary?.collectedCash],
+                    ["Refunded", financeSummary?.refundedCash],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      style={{
+                        border: "1px solid rgba(148, 163, 184, 0.25)",
+                        borderRadius: 14,
+                        padding: "14px 16px",
+                        background: "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      <div className="muted-inline">{label}</div>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                        KES {Number(value || 0).toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <h3>Invoice Aging</h3>
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Invoice</th>
+                        <th>Customer</th>
+                        <th>Status</th>
+                        <th>Bucket</th>
+                        <th>Days</th>
+                        <th>Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(financeAging.rows || []).slice(0, 12).map((row) => (
+                        <tr key={row._id}>
+                          <td>{row.invoiceNumber || row._id}</td>
+                          <td>{row.customerName || "-"}</td>
+                          <td>{row.status}</td>
+                          <td>{row.bucket}</td>
+                          <td>{row.daysOverdue}</td>
+                          <td>KES {Number(row.balanceDue || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      {(financeAging.rows || []).length === 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: "center" }}>
+                            No open invoice aging items.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Customer Credits</h3>
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Credit Note</th>
+                        <th>Customer</th>
+                        <th>Reason</th>
+                        <th>Amount</th>
+                        <th>Remaining</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financeCredits.map((note) => (
+                        <tr key={note._id}>
+                          <td>{note.creditNoteNumber || note._id}</td>
+                          <td>{note.customerName || "-"}</td>
+                          <td>{note.reason || "-"}</td>
+                          <td>KES {Number(note.amount || 0).toFixed(2)}</td>
+                          <td>KES {Number(note.remainingAmount || 0).toFixed(2)}</td>
+                          <td>{note.status}</td>
+                        </tr>
+                      ))}
+                      {financeCredits.length === 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: "center" }}>
+                            No open customer credits.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Recent Ledger</h3>
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>When</th>
+                        <th>Batch</th>
+                        <th>Source</th>
+                        <th>Account</th>
+                        <th>Direction</th>
+                        <th>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financeLedger.map((entry) => (
+                        <tr key={entry._id}>
+                          <td>{entry.effectiveAt ? new Date(entry.effectiveAt).toLocaleString() : "-"}</td>
+                          <td title={entry.batchId}>{entry.batchId}</td>
+                          <td>{entry.sourceType}</td>
+                          <td>{entry.account}</td>
+                          <td>{entry.direction}</td>
+                          <td>KES {Number(entry.amount || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      {financeLedger.length === 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: "center" }}>
+                            No ledger entries yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -1565,6 +2776,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
                     <option value="Failed">Failed</option>
                     <option value="Refunded">Refunded</option>
                     <option value="Reversed">Reversed</option>
+                    <option value="Chargeback">Chargeback</option>
                   </select>
                 </div>
                 <div className="field">

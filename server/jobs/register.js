@@ -8,6 +8,8 @@ function registerJobs() {
 
   require('./exports');
   require('./historyRetention');
+  require('./recurringBilling');
+  require('./billingCollections');
   require('./smsReminders');
 
   if (String(process.env.LEGACY_ENFORCEMENT_JOBS || 'false').toLowerCase() === 'true') {

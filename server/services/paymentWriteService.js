@@ -10,6 +10,7 @@ const {
   syncCustomerAccessFromPayments,
   syncCustomerNetworkState,
 } = require("./customerAccessService");
+const { syncPaymentFinancials } = require("./billingFinanceService");
 
 function serviceError(statusCode, message, extras = {}) {
   const err = new Error(message);
@@ -94,6 +95,13 @@ async function manualValidatePayment({ tenantId, payload }) {
       }
       throw e;
     }
+    await syncPaymentFinancials({
+      paymentId: payment._id,
+      actor: { id: validatedBy || "Manual Entry" },
+      reason: "Manual payment validation",
+    }).catch((e) => {
+      console.warn(`[${debugId}] finance sync failed:`, e?.message || e);
+    });
 
     await syncCustomerAccessFromPayments({
       tenantId,
@@ -166,6 +174,13 @@ async function manualValidatePayment({ tenantId, payload }) {
     }
     throw e;
   }
+  await syncPaymentFinancials({
+    paymentId: doc._id,
+    actor: { id: validatedBy || "Manual Entry" },
+    reason: "Manual payment creation",
+  }).catch((e) => {
+    console.warn(`[${debugId}] finance sync failed:`, e?.message || e);
+  });
 
   await syncCustomerAccessFromPayments({
     tenantId,
@@ -388,6 +403,13 @@ async function updatePaymentRecord({ tenantId, paymentId, payload }) {
     (key) => changes[key]
   );
   if (impactful && payment.customer) {
+    await syncPaymentFinancials({
+      paymentId: payment._id,
+      actor: { id: editedBy || "Admin Panel" },
+      reason: "Payment record updated",
+    }).catch((err) => {
+      console.warn(`[payments:update] finance sync failed:`, err?.message || err);
+    });
     await syncCustomerAccessFromPayments({
       tenantId,
       customerId: payment.customer,
@@ -410,6 +432,13 @@ async function softDeletePayment({ tenantId, paymentId, payload }) {
   payment.deleteReason = reason || "Removed via UI";
 
   await payment.save();
+  await syncPaymentFinancials({
+    paymentId: payment._id,
+    actor: { id: deletedBy || "Admin Panel" },
+    reason: reason || "Payment deleted",
+  }).catch((err) => {
+    console.warn(`[payments:delete] finance sync failed:`, err?.message || err);
+  });
   if (payment.customer) {
     await syncCustomerAccessFromPayments({
       tenantId,
@@ -432,6 +461,13 @@ async function restorePaymentRecord({ tenantId, paymentId }) {
   payment.deleteReason = undefined;
 
   await payment.save();
+  await syncPaymentFinancials({
+    paymentId: payment._id,
+    actor: { id: "Admin Panel" },
+    reason: "Payment restored",
+  }).catch((err) => {
+    console.warn(`[payments:restore] finance sync failed:`, err?.message || err);
+  });
   if (payment.customer) {
     await syncCustomerAccessFromPayments({
       tenantId,

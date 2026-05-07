@@ -13,6 +13,7 @@ const SEARCH_CUSTOMER_FIELDS = {
 
 async function listCustomers(tenantId) {
   return Customer.find({ tenantId })
+    .select({ 'portalProfile.pinHash': 0 })
     .populate("plan", CUSTOMER_PLAN_FIELDS)
     .lean();
 }
@@ -42,12 +43,14 @@ async function searchCustomers(tenantId, query) {
 
 async function findCustomerById(tenantId, customerId) {
   return Customer.findOne({ _id: customerId, tenantId })
+    .select({ 'portalProfile.pinHash': 0 })
     .populate("plan", CUSTOMER_PLAN_FIELDS)
     .lean();
 }
 
 async function findCustomerByAccount(tenantId, accountNumber) {
   return Customer.findOne({ accountNumber, tenantId })
+    .select({ 'portalProfile.pinHash': 0 })
     .populate("plan", CUSTOMER_PLAN_FIELDS)
     .lean();
 }

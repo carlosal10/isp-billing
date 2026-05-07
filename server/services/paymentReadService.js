@@ -32,6 +32,7 @@ async function searchPayments(tenantId, query) {
     .sort({ createdAt: -1 })
     .limit(50)
     .populate("customer", "name accountNumber")
+    .populate("invoice", "invoiceNumber status balanceDue")
     .populate("plan", "name")
     .lean();
 
@@ -42,6 +43,7 @@ async function searchPayments(tenantId, query) {
     amount: payment.amount,
     method: payment.method,
     status: payment.status,
+    invoiceNumber: payment.invoice?.invoiceNumber || null,
     createdAt: payment.createdAt,
   }));
 }
@@ -56,6 +58,7 @@ async function listPayments(tenantId, options = {}) {
     .sort({ createdAt: -1 })
     .limit(limit)
     .populate("customer", "name accountNumber connectionType")
+    .populate("invoice", "invoiceNumber status total balanceDue dueDate")
     .populate("plan", "name price duration durationDays")
     .lean();
 
@@ -63,6 +66,7 @@ async function listPayments(tenantId, options = {}) {
     ...payment,
     customerName: payment.customer?.name || null,
     accountNumber: payment.accountNumber || payment.customer?.accountNumber || null,
+    invoiceNumber: payment.invoice?.invoiceNumber || null,
   }));
 }
 

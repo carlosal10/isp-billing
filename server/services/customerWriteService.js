@@ -8,9 +8,10 @@ const { sanitizeAliases } = require("./customerHelpers");
 const { deriveAccountCode, deriveFullAddressCode } = require("../utils/accountNumber");
 const {
   allocateFromPool,
-  releaseIp,
+  ensureCustomerIpAssignment,
   isValidIPv4,
   isIpInPool,
+  releaseCustomerIpAssignment,
 } = require("../utils/staticIpPool");
 const { applyStaticFirewall } = require("../utils/staticSecurity");
 const { sendCommand } = require("../utils/mikrotikConnectionManager");
@@ -22,6 +23,7 @@ const {
 const { createPayLink } = require("../utils/paylink");
 const { renderTemplate, formatDateISO } = require("../utils/template");
 const { sendSms } = require("../utils/sms");
+const { createProrationAdjustmentForPlanChange } = require("./billingFinanceService");
 
 function serviceError(statusCode, message) {
   const err = new Error(message);
@@ -160,6 +162,7 @@ async function createCustomer({
     pppoeConfig,
     staticConfig,
     accountAliases,
+    billingProfile,
   } = payload || {};
 
   const plan = await resolvePlan(tenantId, planId);
@@ -203,6 +206,7 @@ async function createCustomer({
         : undefined,
     staticConfig: connectionType === "static" ? nextStaticConfig : undefined,
     accountAliases: sanitizeAliases(accountAliases, accountNumber),
+    billingProfile: billingProfile || undefined,
   });
 
   const saved = await customer.save();
@@ -236,6 +240,17 @@ async function createCustomer({
   }
 
   if (connectionType === "static" && saved.staticConfig?.ip) {
+    try {
+      await ensureCustomerIpAssignment({
+        tenantId,
+        customerId: saved._id,
+        ipAddress: saved.staticConfig.ip,
+        note: "Static customer create",
+      });
+    } catch (assignmentError) {
+      console.warn("Static IP assignment sync failed:", assignmentError?.message || assignmentError);
+    }
+
     try {
       await AuditLog.create({
         userId: requestMeta.auth?.id || null,
@@ -280,6 +295,7 @@ function buildAllowedUpdateFields(payload) {
     staticConfig,
     accountNumber,
     accountAliases,
+    billingProfile,
   } = payload || {};
 
   const allowed = {
@@ -294,6 +310,7 @@ function buildAllowedUpdateFields(payload) {
     staticConfig,
     accountNumber,
     accountAliases,
+    billingProfile,
   };
 
   Object.keys(allowed).forEach((key) => {
@@ -303,20 +320,15 @@ function buildAllowedUpdateFields(payload) {
   return allowed;
 }
 
-async function maybeReleasePreviousStaticIp(customer, requestedConnectionType, requestedIp) {
-  if (!customer || customer.connectionType !== "static") return;
+function shouldReleasePreviousStaticIp(customer, requestedConnectionType, requestedIp) {
+  if (!customer || customer.connectionType !== "static") return false;
 
   const newConnectionType = requestedConnectionType || customer.connectionType;
   const nextIp = requestedIp ? String(requestedIp).trim() : null;
   const changingToNonStatic = newConnectionType !== "static";
   const changingIp = nextIp && nextIp !== customer.staticConfig?.ip;
 
-  if (!changingToNonStatic && !changingIp) return;
-
-  const tenantDoc = await Tenant.findById(customer.tenantId).lean();
-  if (tenantDoc) {
-    await releaseIp(tenantDoc, customer.staticConfig.ip);
-  }
+  return Boolean(changingToNonStatic || changingIp);
 }
 
 async function renameRouterArtifactsIfNeeded({
@@ -434,13 +446,20 @@ async function prepareStaticIpForUpdate({
   allowed,
   prevStaticIp,
 }) {
-  const nextStaticConfig = { ...(allowed.staticConfig || {}) };
+  const nextStaticConfig = {
+    ...(customer.staticConfig || {}),
+    ...(allowed.staticConfig || {}),
+  };
   let newIp = nextStaticConfig.ip ? String(nextStaticConfig.ip).trim() : "";
 
   if (!newIp) {
-    newIp = await allocateFromPool(tenantId);
-    if (!newIp) {
-      throw serviceError(400, "No available static IP in tenant pool");
+    if (prevStaticIp) {
+      newIp = prevStaticIp;
+    } else {
+      newIp = await allocateFromPool(tenantId);
+      if (!newIp) {
+        throw serviceError(400, "No available static IP in tenant pool");
+      }
     }
     nextStaticConfig.ip = newIp;
   }
@@ -483,7 +502,7 @@ async function updateCustomer({
     throw serviceError(400, "Invalid connection type");
   }
 
-  await maybeReleasePreviousStaticIp(
+  const releasePreviousStaticIp = shouldReleasePreviousStaticIp(
     customer,
     payload?.connectionType,
     payload?.staticConfig?.ip
@@ -527,25 +546,33 @@ async function updateCustomer({
   }
 
   if (nextConnectionType === "pppoe") {
-    if (!allowed.pppoeConfig?.profile) {
+    const nextPppoeConfig = {
+      ...(customer.pppoeConfig || {}),
+      ...(allowed.pppoeConfig || {}),
+    };
+
+    if (!nextPppoeConfig?.profile) {
       throw serviceError(400, "PPPoE profile required");
     }
 
     customer.staticConfig = undefined;
     customer.pppoeConfig = {
-      profile: allowed.pppoeConfig.profile,
-      localAddress: allowed.pppoeConfig.localAddress || null,
+      profile: nextPppoeConfig.profile,
+      localAddress: nextPppoeConfig.localAddress || null,
       rateLimit: `${plan.speed}M/0M`,
     };
 
     await updatePppoeSecret({
       tenantId,
       customer,
-      allowed,
+      allowed: {
+        ...allowed,
+        pppoeConfig: nextPppoeConfig,
+      },
       nextAccount,
       nextName,
     });
-  } else if (nextConnectionType === "static" && allowed.connectionType) {
+  } else if (nextConnectionType === "static") {
     customer.pppoeConfig = undefined;
     customer.staticConfig = await prepareStaticIpForUpdate({
       tenantId,
@@ -563,8 +590,40 @@ async function updateCustomer({
   customer.status = allowed.status ?? customer.status;
   customer.plan = selectedPlanId;
   customer.accountNumber = nextAccount;
+  if (allowed.billingProfile !== undefined) {
+    customer.billingProfile = {
+      ...(customer.billingProfile || {}),
+      ...(allowed.billingProfile || {}),
+    };
+  }
 
   const updated = await customer.save();
+
+  if (releasePreviousStaticIp && prevStaticIp) {
+    try {
+      await releaseCustomerIpAssignment({
+        tenantId,
+        customerId: updated._id,
+        ipAddress: prevStaticIp,
+        reason: "Static IP changed on customer update",
+      });
+    } catch (releaseErr) {
+      console.warn("Static IP release sync failed:", releaseErr?.message || releaseErr);
+    }
+  }
+
+  if (updated.connectionType === "static" && updated.staticConfig?.ip) {
+    try {
+      await ensureCustomerIpAssignment({
+        tenantId,
+        customerId: updated._id,
+        ipAddress: updated.staticConfig.ip,
+        note: "Static customer update",
+      });
+    } catch (assignmentErr) {
+      console.warn("Static IP assignment update sync failed:", assignmentErr?.message || assignmentErr);
+    }
+  }
 
   try {
     await updateCustomerQueue(updated, plan);
@@ -576,6 +635,17 @@ async function updateCustomer({
     const newPlanId = updated.plan ? String(updated.plan) : "";
     const planChanged = newPlanId && newPlanId !== originalPlanId;
     if (planChanged) {
+      try {
+        await createProrationAdjustmentForPlanChange({
+          tenantId,
+          customerId: updated._id,
+          oldPlanId: originalPlanId || null,
+          newPlanId: updated.plan,
+          currentExpiryDate: updated.expiryDate || null,
+        });
+      } catch (financeErr) {
+        console.warn("Proration adjustment failed:", financeErr?.message || financeErr);
+      }
       await maybeSendPaylinkSms({
         tenantId,
         customer: updated,
@@ -598,10 +668,14 @@ async function deleteCustomer({
   if (!customer) throw serviceError(404, "Customer not found");
 
   if (customer.connectionType === "static") {
-    const tenantDoc = await Tenant.findById(customer.tenantId).lean();
-    if (tenantDoc) {
-      await releaseIp(tenantDoc, customer.staticConfig.ip);
-    }
+    await releaseCustomerIpAssignment({
+      tenantId,
+      customerId: customer._id,
+      ipAddress: customer.staticConfig?.ip || null,
+      reason: "Customer deleted",
+    }).catch((err) => {
+      console.warn("Static IP release after customer delete failed:", err?.message || err);
+    });
   }
 
   if (customer.connectionType === "pppoe") {

@@ -44,9 +44,14 @@ export default function Landing() {
         <div className="brand" aria-label="KT-SwiftBridge">
           KT-SwiftBridge
         </div>
-        <Link className="nav-login" to="/login">
-          Login
-        </Link>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <Link className="nav-login" to="/login?mode=customer">
+            Customer Portal
+          </Link>
+          <Link className="nav-login" to="/login">
+            Login
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
@@ -75,9 +80,9 @@ export default function Landing() {
               <Link to="/login" className="cta">
                 Login to Continue
               </Link>
-              <a href="#features" className="cta ghost">
-                See Features
-              </a>
+              <Link to="/login?mode=customer" className="cta ghost">
+                Open Customer Portal
+              </Link>
             </div>
             <div className="trust-row">
               <span className="trust-dot" /> Trusted by growing ISPs
@@ -125,4 +130,3 @@ export default function Landing() {
     </div>
   );
 }
-
