@@ -188,8 +188,9 @@
   color: #fff;
   display: flex;
   align-items: center;
-  background-size: cover;
-  background-position: center;
+  background-size: auto, auto, auto, clamp(220px, 42vw, 520px) auto;
+  background-position: center, center, center, right 12% center;
+  background-repeat: no-repeat;
   grid-area: left;
 }
 .login-left-inner{ width: min(620px, 92%); padding: 28px 0 32px; margin-left: clamp(16px, 6vw, 48px); }
