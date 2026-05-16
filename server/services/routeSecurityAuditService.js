@@ -50,6 +50,15 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
     reason: 'Customer portal data routes require portal authentication.',
   },
   {
+    file: 'server/routes/Customer.js',
+    requiredSnippets: [
+      '"/:id/privacy/export", requireRole("owner", "admin")',
+      '"/:id/privacy/anonymization-plan", requireRole("owner", "admin")',
+      '"/:id/privacy/anonymize", requireRole("owner", "admin")',
+    ],
+    reason: 'Customer privacy export and anonymization actions must be owner/admin only.',
+  },
+  {
     file: 'server/routes/finance.js',
     requiredSnippets: ["requireRole('owner', 'admin')"],
     reason: 'Finance reports must be owner/admin only.',

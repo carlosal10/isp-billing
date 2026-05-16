@@ -135,7 +135,7 @@ export default function Register() {
             </p>
           </div>
 
-          <div className="form-grid register-grid register-grid-top">
+          <div className="register-stack">
             <div className="field">
               <label htmlFor="tenantName">Tenant / ISP name</label>
               <input
@@ -161,9 +161,7 @@ export default function Register() {
                 autoComplete="name"
               />
             </div>
-          </div>
 
-          <div className="form-grid register-grid">
             <div className="field">
               <label htmlFor="email">Email</label>
               <input
@@ -215,9 +213,7 @@ export default function Register() {
                 </span>
               </div>
             </div>
-          </div>
 
-          <div className="form-grid register-grid register-grid-bottom">
             <div className="field register-confirm-field">
               <label htmlFor="confirm">Confirm password</label>
               <input

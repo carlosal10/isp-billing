@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  maybeMaskPhone,
   normalizeDeliveryStatus,
   parseLimit,
   redactContext,
@@ -60,4 +61,22 @@ test('serializeMessageDelivery exposes only a body preview and safe context', ()
   assert.equal(serialized.customer.accountNumber, 'ACC-001');
   assert.equal(serialized.context.token, '[REDACTED]');
   assert.equal(Object.hasOwn(serialized, 'body'), false);
+});
+
+test('serializeMessageDelivery can mask phone numbers for privacy-safe views', () => {
+  const serialized = serializeMessageDelivery(
+    {
+      _id: 'delivery-1',
+      to: '+254700000000',
+      normalizedTo: '+254700000000',
+      customer: { _id: 'customer-1', name: 'Ada ISP', phone: '+254711222333' },
+      context: {},
+    },
+    { privacyMode: 'masked' }
+  );
+
+  assert.equal(maybeMaskPhone('+254700000000', { privacyMode: 'masked' }), '+254******000');
+  assert.equal(serialized.to, '+254******000');
+  assert.equal(serialized.normalizedTo, '+254******000');
+  assert.equal(serialized.customer.phone, '+254******333');
 });

@@ -1,21 +1,11 @@
 'use strict';
 
 const MessageDelivery = require('../models/MessageDelivery');
+const { maskPhone, redactObject } = require('./privacyService');
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
-const SENSITIVE_CONTEXT_KEYS = [
-  'apiKey',
-  'authToken',
-  'body',
-  'key',
-  'password',
-  'payload',
-  'pin',
-  'raw',
-  'secret',
-  'token',
-];
+const MESSAGE_CONTEXT_KEY_PATTERN = /(api[-_]?key|auth[-_]?token|body|key|password|payload|pin|raw|secret|token)/i;
 
 function toId(value) {
   if (!value) return null;
@@ -51,23 +41,29 @@ function normalizeDeliveryStatus(value) {
 }
 
 function redactContext(value, depth = 0) {
-  if (depth > 4) return '[MaxDepth]';
-  if (value == null) return value;
-  if (Array.isArray(value)) return value.slice(0, 20).map((item) => redactContext(item, depth + 1));
-  if (typeof value !== 'object') return value;
-
-  return Object.entries(value).reduce((acc, [key, item]) => {
-    const lower = String(key).toLowerCase();
-    if (SENSITIVE_CONTEXT_KEYS.some((needle) => lower.includes(needle))) {
-      acc[key] = '[REDACTED]';
-    } else {
-      acc[key] = redactContext(item, depth + 1);
-    }
-    return acc;
-  }, {});
+  return redactObject(
+    value,
+    {
+      maxDepth: 4,
+      maxArrayLength: 20,
+      maxDepthLabel: '[MaxDepth]',
+      redactedLabel: '[REDACTED]',
+      sensitiveKeyPattern: MESSAGE_CONTEXT_KEY_PATTERN,
+    },
+    depth
+  );
 }
 
-function serializeMessageDelivery(delivery) {
+function shouldMaskDelivery(options = {}) {
+  return options.privacyMode === 'masked' || options.maskSensitive === true;
+}
+
+function maybeMaskPhone(value, options = {}) {
+  if (!value) return null;
+  return shouldMaskDelivery(options) ? maskPhone(value) : value;
+}
+
+function serializeMessageDelivery(delivery, options = {}) {
   const doc = toPlain(delivery);
   if (!doc) return null;
   return {
@@ -78,8 +74,8 @@ function serializeMessageDelivery(delivery) {
     templateType: doc.templateType || null,
     language: doc.language || 'en',
     status: doc.status || 'queued',
-    to: doc.to || null,
-    normalizedTo: doc.normalizedTo || null,
+    to: maybeMaskPhone(doc.to, options),
+    normalizedTo: maybeMaskPhone(doc.normalizedTo, options),
     subject: doc.subject || null,
     bodyPreview: doc.bodyPreview || null,
     bodyLength: doc.bodyLength || 0,
@@ -91,7 +87,7 @@ function serializeMessageDelivery(delivery) {
           id: toId(doc.customer._id || doc.customer),
           name: doc.customer.name || null,
           accountNumber: doc.customer.accountNumber || null,
-          phone: doc.customer.phone || null,
+          phone: maybeMaskPhone(doc.customer.phone, options),
         }
       : null,
     plan: doc.plan
@@ -173,7 +169,7 @@ async function listMessageDeliveries(tenantId, options = {}) {
     .populate('plan', 'name price')
     .lean();
 
-  return rows.map(serializeMessageDelivery);
+  return rows.map((row) => serializeMessageDelivery(row, options));
 }
 
 async function getMessageDeliverySummary(tenantId, options = {}) {
@@ -217,13 +213,14 @@ async function getMessageDeliverySummary(tenantId, options = {}) {
       channel: row._id?.channel || 'sms',
       count: row.count,
     })),
-    recentFailures: recentFailures.map(serializeMessageDelivery),
+    recentFailures: recentFailures.map((row) => serializeMessageDelivery(row, options)),
   };
 }
 
 module.exports = {
   getMessageDeliverySummary,
   listMessageDeliveries,
+  maybeMaskPhone,
   normalizeDeliveryStatus,
   parseLimit,
   recordMessageDelivery,

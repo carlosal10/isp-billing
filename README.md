@@ -26,6 +26,8 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 - `npm run env:check` validates deployment-critical environment variables without printing secrets
 - `npm run api:contract:audit` checks OpenAPI path coverage against Express route mounts
 - `npm run security:routes:audit` checks route access classification and sensitive route-module guards
+- `npm run privacy:policy:audit` checks privacy retention controls and sensitive-data policy bounds
+- `npm run privacy:retention:plan` previews privacy retention cleanup; `npm run privacy:retention` executes it
 - `npm run migrate:status` shows the database migration registry state
 - `npm run db:indexes:audit` checks declared Mongoose indexes against MongoDB
 - `npm run backup:mongo:plan` previews a MongoDB backup command
@@ -34,6 +36,8 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 - `/metrics` exposes guarded process-local HTTP metrics for production monitoring
 - The API handles `SIGTERM`/`SIGINT` with graceful shutdown for HTTP, MongoDB, and MikroTik connection pools
 - Deployment topology and release steps are documented in `docs/runbooks/deployment.md`
+- Privacy redaction, masking, and retention policy controls are documented in `docs/runbooks/privacy-compliance.md`
+- Customer privacy exports and anonymization plans are available to owner/admin users under `/api/customers/:id/privacy/*`
 
 ## Billing And Finance
 
@@ -58,6 +62,7 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 - `JOB_RUN_RETENTION_DAYS`: retention window for persisted job runs, default `90`
 - `JOB_ACTION_RETENTION_DAYS`: retention window for scheduler action logs, default `180`
 - `JOB_HISTORY_RETENTION_CRON`: cron expression for the history retention job, default `15 3 * * *`
+- `PRIVACY_RETENTION_CRON`: cron expression for privacy data retention, default `45 3 * * *`
 
 ## Repository Status
 

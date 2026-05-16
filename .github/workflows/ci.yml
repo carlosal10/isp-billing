@@ -41,6 +41,8 @@ jobs:
         run: npm run api:contract:audit
       - name: Validate route security classification
         run: npm run security:routes:audit
+      - name: Validate privacy policy controls
+        run: npm run privacy:policy:audit
       - name: Syntax-check operational scripts
         run: |
           node --check server/App.js
@@ -48,6 +50,8 @@ jobs:
           node --check server/scripts/audit-indexes.js
           node --check server/scripts/audit-api-contract.js
           node --check server/scripts/audit-route-security.js
+          node --check server/scripts/audit-privacy-policy.js
+          node --check server/scripts/run-privacy-retention.js
           node --check server/scripts/backup-mongo.js
           node --check server/scripts/restore-mongo.js
       - name: Run server tests

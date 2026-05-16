@@ -8,6 +8,7 @@ function registerJobs() {
 
   require('./exports');
   require('./historyRetention');
+  require('./privacyRetention');
   require('./recurringBilling');
   require('./billingCollections');
   require('./smsReminders');

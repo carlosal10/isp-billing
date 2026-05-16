@@ -71,6 +71,14 @@ const customerSchema = new mongoose.Schema({
     },
     updatedAt: { type: Date, default: null },
     updatedBy: { type: String, default: null },
+  },
+
+  privacyProfile: {
+    isAnonymized: { type: Boolean, default: false, index: true },
+    anonymizedAt: { type: Date, default: null },
+    anonymizedBy: { type: String, default: null },
+    anonymizationReason: { type: String, default: null },
+    originalCustomerId: { type: String, default: null },
   }
 });
 

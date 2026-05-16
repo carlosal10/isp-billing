@@ -81,6 +81,15 @@ function requestActor(req) {
   };
 }
 
+function requestedPrivacyMode(query = {}) {
+  const explicitMode = String(query.privacyMode || '').toLowerCase();
+  const wantsMasking =
+    explicitMode === 'masked' ||
+    String(query.mask || '').toLowerCase() === 'true' ||
+    String(query.maskSensitive || '').toLowerCase() === 'true';
+  return wantsMasking ? 'masked' : undefined;
+}
+
 // GET settings (tenant scoped)
 router.get('/settings', async (req, res) => {
   try {
@@ -119,6 +128,7 @@ router.get('/summary', async (req, res) => {
   try {
     const summary = await getMessageDeliverySummary(req.tenantId, {
       days: req.query.days,
+      privacyMode: requestedPrivacyMode(req.query),
     });
     res.json(summary);
   } catch (e) {
@@ -135,6 +145,7 @@ router.get('/deliveries', async (req, res) => {
       templateType: req.query.templateType,
       customerId: req.query.customerId,
       limit: req.query.limit,
+      privacyMode: requestedPrivacyMode(req.query),
     });
     res.json(rows);
   } catch (e) {

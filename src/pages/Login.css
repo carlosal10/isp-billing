@@ -14,10 +14,10 @@
 
 /* Registration often has two columns; give it extra room */
 .register-form {
-  max-width: 760px;
+  max-width: 560px;
   display: grid;
-  gap: 20px;
-  padding: 34px 36px;
+  gap: 18px;
+  padding: 36px 34px;
 }
 
 /* Field wrapper ensures consistent spacing and label/input alignment */
@@ -338,36 +338,22 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  min-height: 32px;
-  padding: 7px 12px;
-  border: 1px solid #dbe4ef;
-  border-radius: 999px;
-  background: #f8fafc;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.88rem;
   font-weight: 700;
 }
 
-.register-health.ok {
-  color: #166534;
-  background: #ecfdf5;
-  border-color: #bbf7d0;
-}
+.register-health.ok { color: #166534; }
 
-.register-health.err {
-  color: #b91c1c;
-  background: #fff1f2;
-  border-color: #fecdd3;
-}
+.register-health.err { color: #b91c1c; }
 
-.register-grid {
-  gap: 18px 20px;
-}
-
-.register-grid-top {
-  margin-top: 2px;
-}
-
-.register-grid-bottom {
-  grid-template-columns: minmax(0, 1fr);
+.register-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .register-actions {
@@ -380,7 +366,7 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
 
 .register-password-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: stretch;
 }
@@ -390,8 +376,8 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
 }
 
 .register-password-toggle {
-  width: auto !important;
-  min-width: 88px;
+  width: 100% !important;
+  min-width: 0;
   padding: 0 16px !important;
   white-space: nowrap;
 }
@@ -411,7 +397,7 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
   display: inline-grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
-  width: 92px;
+  width: 104px;
 }
 
 .register-strength-bar {
@@ -426,16 +412,9 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
 
 @media (max-width: 780px) {
   .register-form {
+    max-width: 100%;
     padding: 24px 22px;
-    gap: 18px;
-  }
-
-  .register-password-input {
-    grid-template-columns: 1fr;
-  }
-
-  .register-password-toggle {
-    width: 100% !important;
+    gap: 16px;
   }
 
   .register-strength-bars {

@@ -1,11 +1,10 @@
 'use strict';
 
 const AuditLog = require('../models/AuditLog');
+const { redactObject } = require('./privacyService');
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 250;
-const REDACTED = '[redacted]';
-const SENSITIVE_KEY_PATTERN = /(password|passcode|token|secret|authorization|cookie|pin|pinhash|apikey|api_key|privatekey|private_key)/i;
 
 function clampNumber(value, fallback, min, max) {
   const parsed = Number(value);
@@ -86,23 +85,7 @@ function buildAuditLogFilter(tenantId, normalized = {}) {
 }
 
 function redactPayload(value, depth = 0) {
-  if (value == null) return value;
-  if (depth > 6) return '[max-depth]';
-  if (Array.isArray(value)) {
-    return value.slice(0, 100).map((entry) => redactPayload(entry, depth + 1));
-  }
-  if (value instanceof Date) return value;
-  if (typeof value !== 'object') return value;
-
-  const safe = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
-      safe[key] = REDACTED;
-    } else {
-      safe[key] = redactPayload(entry, depth + 1);
-    }
-  }
-  return safe;
+  return redactObject(value, { maxDepth: 6, maxArrayLength: 100 }, depth);
 }
 
 function serializeAuditLog(entry = {}) {

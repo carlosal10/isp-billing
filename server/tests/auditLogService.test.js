@@ -41,12 +41,14 @@ test('redactPayload removes sensitive nested values', () => {
     nested: {
       authorization: 'Bearer secret',
       accountNumber: 'AC-1',
+      consumerSecret: 'mpesa-secret',
       pinHash: 'hash',
     },
   });
 
   assert.equal(redacted.token, '[redacted]');
   assert.equal(redacted.nested.authorization, '[redacted]');
+  assert.equal(redacted.nested.consumerSecret, '[redacted]');
   assert.equal(redacted.nested.pinHash, '[redacted]');
   assert.equal(redacted.nested.accountNumber, 'AC-1');
 });

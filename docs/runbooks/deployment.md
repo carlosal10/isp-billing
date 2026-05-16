@@ -14,6 +14,7 @@ npm ci
 npm run env:check
 npm run api:contract:audit
 npm run security:routes:audit
+npm run privacy:policy:audit
 npm run test:server
 CI=true npm test -- --watch=false
 npm run build
@@ -23,6 +24,7 @@ For database-affecting releases, also run:
 
 ```powershell
 npm run backup:mongo:plan -- --label pre-release
+npm run privacy:retention:plan
 npm run migrate:status
 npm run db:indexes:audit
 ```
@@ -50,7 +52,7 @@ Keep `SERVE_CLIENT=false` when the frontend is deployed as a separate static ser
 
 ## GitHub Actions
 
-- `CI`: validates env contract, syntax-checks operational scripts, runs backend tests, runs frontend tests, and builds the client.
+- `CI`: validates env, API, route-security, and privacy-policy contracts; syntax-checks operational scripts; runs backend tests; runs frontend tests; and builds the client.
 - `CodeQL Advanced`: scans JavaScript and GitHub Actions.
 - `Deploy Client To GitHub Pages`: publishes the built `build/` directory only.
 - `Render Deploy Hook`: runs CI-equivalent checks and triggers Render only if `RENDER_DEPLOY_HOOK_URL` is configured.
@@ -62,6 +64,10 @@ Keep `SERVE_CLIENT=false` when the frontend is deployed as a separate static ser
 ## Route Security Gate
 
 `npm run security:routes:audit` classifies every literal Express mount in `server/App.js` as public, tenant-authenticated, user-authenticated, platform-admin, metrics-token, provider-callback, API-key, or route-managed auth. It also checks sensitive route modules for expected role/API-key/portal guard snippets. New public or route-managed surfaces should be added deliberately to `server/services/routeSecurityAuditService.js` with a reason.
+
+## Privacy Policy Gate
+
+`npm run privacy:policy:audit` validates retention controls for audit logs, message deliveries, gateway events, platform gateway-event actions, and scheduler history. Missing values use safe defaults and emit warnings; invalid or out-of-bounds values fail the release gate. `npm run privacy:retention:plan` previews cleanup eligibility before any write-mode retention run.
 
 ## Release Sequence
 
