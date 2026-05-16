@@ -569,8 +569,10 @@ async function shutdown() {
   await Promise.allSettled(closers);
 }
 
-process.on("SIGINT", () => shutdown().finally(()=> process.exit(0)));
-process.on("SIGTERM", () => shutdown().finally(()=> process.exit(0)));
+if (String(process.env.MIKROTIK_MANAGER_SIGNAL_HANDLERS || 'false').toLowerCase() === 'true') {
+  process.on("SIGINT", () => shutdown().finally(()=> process.exit(0)));
+  process.on("SIGTERM", () => shutdown().finally(()=> process.exit(0)));
+}
 
 const recentExceptions = [];
 const EXCEPTION_WINDOW_MS = 60_000;

@@ -1,9 +1,47 @@
 services:
   - type: web
+    name: isp-billing-api
+    env: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start:server
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_CLIENT
+        value: "false"
+      - key: JOBS_ENABLED
+        value: "true"
+      - key: SHUTDOWN_TIMEOUT_MS
+        value: "10000"
+      - key: METRICS_TOKEN
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: CLIENT_ORIGINS
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: MPESA_ENV
+        value: sandbox
+      - key: MPESA_CALLBACK_URL
+        sync: false
+
+  - type: web
     name: isp-billing-client
     env: static
-    buildCommand: npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: build
+    autoDeploy: false
+    envVars:
+      - key: REACT_APP_API_URL
+        sync: false
     routes:
       - type: rewrite
         source: /*

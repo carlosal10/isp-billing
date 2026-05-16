@@ -5,6 +5,11 @@ info:
 servers:
   - url: https://your-host/api
 paths:
+  /health:
+    get:
+      summary: Public API liveness check
+      responses:
+        '200': { description: OK }
   /health/detail:
     get:
       summary: Health details
@@ -12,6 +17,18 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: OK }
+  /ready:
+    get:
+      summary: Public readiness check for database connectivity and graceful shutdown state
+      responses:
+        '200': { description: Ready }
+        '503': { description: Not ready }
+  /metrics:
+    get:
+      summary: Prometheus-style process-local HTTP metrics
+      responses:
+        '200': { description: Metrics text exposition }
+        '404': { description: Hidden when metrics token is missing or invalid }
   /jobs/definitions:
     get:
       summary: List registered scheduler jobs with live state and latest run metadata
@@ -413,6 +430,58 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
+  /plans:
+    get:
+      summary: List tenant service plans
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create a tenant service plan
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid plan payload }
+  /plans/{id}:
+    get:
+      summary: Get a tenant service plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Plan not found }
+    put:
+      summary: Update a tenant service plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid plan payload }
+        '404': { description: Plan not found }
+    delete:
+      summary: Delete a tenant service plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Plan not found }
   /payments/manual:
     post:
       summary: Create/validate manual payment (supports backdating)
@@ -602,6 +671,14 @@ paths:
       responses:
         '200': { description: OK }
         '404': { description: Not found }
+  /ops-health/summary:
+    get:
+      summary: Get a tenant operations health score with module status, risk counts, and prioritized issues
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { description: Owner or admin role required }
   /service-ops/summary:
     get:
       summary: Get inventory and IPAM summary totals for service operations
@@ -944,6 +1021,12 @@ paths:
         '403': { description: Forbidden }
         '404': { description: Not found }
         '409': { description: Resolve not allowed for current event status }
+  /payments/callback:
+    post:
+      summary: Public M-Pesa STK callback receiver
+      responses:
+        '200': { description: Callback acknowledged }
+        '400': { description: Invalid callback format }
   /platform-api/gateway-events/orphans:
     get:
       summary: List orphaned payment gateway events without tenant assignment

@@ -29,7 +29,7 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking…" });
+  const [apiHealth, setApiHealth] = useState({ ok: null, msg: "checking..." });
 
   useEffect(() => {
     let mounted = true;
@@ -42,7 +42,9 @@ export default function Register() {
         setApiHealth({ ok: false, msg: e?.message || "API unreachable" });
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const pwScore = useMemo(() => scorePassword(form.password), [form.password]);
@@ -81,7 +83,6 @@ export default function Register() {
 
   return (
     <main className="login-shell" aria-label="Register">
-      {/* Left: Brand + Pitch (same as Login for visual consistency) */}
       <section
         className="login-left"
         aria-labelledby="register-title"
@@ -118,21 +119,23 @@ export default function Register() {
         <div className="login-ambient" aria-hidden="true" />
       </section>
 
-      {/* Right: Register form */}
       <section className="login-right">
         <form onSubmit={submit} className="login-form register-form" aria-label="Create account">
           <div
-            className="helper-text"
-            style={{ color: apiHealth.ok ? "#16a34a" : apiHealth.ok === null ? "#6b7280" : "#ef4444" }}
+            className={`helper-text register-health ${apiHealth.ok ? "ok" : apiHealth.ok === false ? "err" : ""}`}
             aria-live="polite"
           >
             {apiHealth.msg}
           </div>
 
-          <h2 style={{ margin: 0, color: "#0B2545" }}>Create your account</h2>
+          <div className="register-head">
+            <h2 className="register-title">Create your account</h2>
+            <p className="register-subtitle">
+              Set up your tenant workspace and admin login details.
+            </p>
+          </div>
 
-          {/* Row 1 */}
-          <div className="form-grid" style={{ marginTop: 12 }}>
+          <div className="form-grid register-grid register-grid-top">
             <div className="field">
               <label htmlFor="tenantName">Tenant / ISP name</label>
               <input
@@ -160,8 +163,7 @@ export default function Register() {
             </div>
           </div>
 
-          {/* Row 2 */}
-          <div className="form-grid">
+          <div className="form-grid register-grid">
             <div className="field">
               <label htmlFor="email">Email</label>
               <input
@@ -176,9 +178,9 @@ export default function Register() {
               />
             </div>
 
-            <div className="field">
+            <div className="field register-password-field">
               <label htmlFor="password">Password (min 8 chars)</label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="register-password-input">
                 <input
                   id="password"
                   className="input"
@@ -188,34 +190,35 @@ export default function Register() {
                   onChange={onChange("password")}
                   required
                   autoComplete="new-password"
-                  style={{ flex: 1 }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw((v) => !v)}
                   aria-label={showPw ? "Hide password" : "Show password"}
-                  className="btn-ghost"
-                  style={{ width: "auto", padding: "10px 12px" }}
+                  className="btn-ghost register-password-toggle"
                 >
                   {showPw ? "Hide" : "Show"}
                 </button>
               </div>
-              <div className="password-meta" aria-label="password strength">
-                Strength:
-                <span style={{ marginLeft: 8 }}>
-                  {"■".repeat(pwScore)}
-                  {"□".repeat(5 - pwScore)}
+              <div className="password-meta register-password-meta" aria-label="password strength">
+                <span className="register-strength-label">Strength</span>
+                <span className="register-strength-bars" aria-hidden="true">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <span
+                      key={i}
+                      className={`register-strength-bar ${i < pwScore ? "active" : ""}`}
+                    />
+                  ))}
                 </span>
-                <span style={{ marginLeft: 8 }}>
+                <span className="register-strength-text">
                   {pwScore <= 2 ? "weak" : pwScore <= 3 ? "good" : "strong"}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Row 3 */}
-          <div className="form-grid">
-            <div className="field">
+          <div className="form-grid register-grid register-grid-bottom">
+            <div className="field register-confirm-field">
               <label htmlFor="confirm">Confirm password</label>
               <input
                 id="confirm"
@@ -228,10 +231,8 @@ export default function Register() {
                 autoComplete="new-password"
               />
             </div>
-            <div className="field">{/* spacer to keep grid balanced */}</div>
           </div>
 
-          {/* Inline validation */}
           {!emailValid && form.email.length > 0 && (
             <div className="alert error">Enter a valid email address.</div>
           )}
@@ -239,9 +240,9 @@ export default function Register() {
             <div className="alert error">Passwords do not match.</div>
           )}
 
-          <div className="form-actions">
+          <div className="form-actions register-actions">
             <button type="submit" disabled={!canSubmit} className="btn-primary">
-              {busy ? "Creating…" : "Create account"}
+              {busy ? "Creating..." : "Create account"}
             </button>
 
             {err && (

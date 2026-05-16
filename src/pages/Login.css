@@ -13,7 +13,12 @@
 }
 
 /* Registration often has two columns; give it extra room */
-.register-form { max-width: 760px; }
+.register-form {
+  max-width: 760px;
+  display: grid;
+  gap: 20px;
+  padding: 34px 36px;
+}
 
 /* Field wrapper ensures consistent spacing and label/input alignment */
 .field {
@@ -307,4 +312,134 @@ form.space-y-3 button{ height:46px; border-radius:6px; font-weight:800; }
   }
   .login-left { grid-area: upper; }
   .login-right { grid-area: lower; }
+}
+
+.register-head {
+  display: grid;
+  gap: 8px;
+}
+
+.register-title {
+  margin: 0;
+  color: #0b2545;
+  font-size: clamp(1.9rem, 2.8vw, 2.4rem);
+  line-height: 1.08;
+  font-weight: 900;
+}
+
+.register-subtitle {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
+.register-health {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 32px;
+  padding: 7px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.register-health.ok {
+  color: #166534;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.register-health.err {
+  color: #b91c1c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.register-grid {
+  gap: 18px 20px;
+}
+
+.register-grid-top {
+  margin-top: 2px;
+}
+
+.register-grid-bottom {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.register-actions {
+  margin-top: 4px;
+}
+
+.register-password-field {
+  gap: 8px;
+}
+
+.register-password-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.register-password-input .input {
+  min-width: 0;
+}
+
+.register-password-toggle {
+  width: auto !important;
+  min-width: 88px;
+  padding: 0 16px !important;
+  white-space: nowrap;
+}
+
+.register-password-meta {
+  min-height: 24px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.register-strength-label,
+.register-strength-text {
+  font-weight: 700;
+}
+
+.register-strength-bars {
+  display: inline-grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  width: 92px;
+}
+
+.register-strength-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #dbe4ef;
+}
+
+.register-strength-bar.active {
+  background: linear-gradient(90deg, #f1c40f, #e63946);
+}
+
+@media (max-width: 780px) {
+  .register-form {
+    padding: 24px 22px;
+    gap: 18px;
+  }
+
+  .register-password-input {
+    grid-template-columns: 1fr;
+  }
+
+  .register-password-toggle {
+    width: 100% !important;
+  }
+
+  .register-strength-bars {
+    width: 100%;
+    max-width: 112px;
+  }
 }

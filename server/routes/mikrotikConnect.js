@@ -14,6 +14,10 @@ const {
 const MikroTikConnection = require("../models/MikrotikConnection");
 const RouterEvent = require("../models/RouterEvent");
 
+function isMacAddress(value) {
+  return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
+}
+
 // ------------------------------ Validation schemas ------------------------------
 const ConnectBody = z.object({
   host: z.string().min(3).max(256),
@@ -130,6 +134,12 @@ router.post("/", async (req, res) => {
 
     const body = parsed.data;
     const host = String(body.host).trim();
+    if (isMacAddress(host)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Router host must be an IP address or hostname, not a MAC address."
+      });
+    }
     const port = Number(body.port) || (body.tls ? 8729 : 8728);
     const user = String(body.user).trim();
     const password = String(body.password);

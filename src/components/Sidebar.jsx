@@ -135,6 +135,11 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
               </Link>
             </li>
             <li>
+              <Link to="/operations-health" onClick={toggleSidebar}>
+                <MdSecurity /> Operations Health
+              </Link>
+            </li>
+            <li>
               <Link to="/noc" onClick={toggleSidebar}>
                 <MdNotificationsActive /> NOC
               </Link>

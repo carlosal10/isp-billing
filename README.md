@@ -22,7 +22,18 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 - `npm test -- --watch=false` runs the current frontend test suite
 - `npm run test:server` runs the finance and backend unit tests
 - `npm run build` creates a production client build
-- Backend startup currently uses `server/App.js`
+- `npm run start:server` starts the Express/Socket.IO API from `server/App.js`
+- `npm run env:check` validates deployment-critical environment variables without printing secrets
+- `npm run api:contract:audit` checks OpenAPI path coverage against Express route mounts
+- `npm run security:routes:audit` checks route access classification and sensitive route-module guards
+- `npm run migrate:status` shows the database migration registry state
+- `npm run db:indexes:audit` checks declared Mongoose indexes against MongoDB
+- `npm run backup:mongo:plan` previews a MongoDB backup command
+- `npm run backup:mongo` writes a MongoDB archive backup; see `docs/runbooks/backup-restore.md`
+- API responses include `X-Request-ID` for support correlation and baseline security headers for browser hardening
+- `/metrics` exposes guarded process-local HTTP metrics for production monitoring
+- The API handles `SIGTERM`/`SIGINT` with graceful shutdown for HTTP, MongoDB, and MikroTik connection pools
+- Deployment topology and release steps are documented in `docs/runbooks/deployment.md`
 
 ## Billing And Finance
 

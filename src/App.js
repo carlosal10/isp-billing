@@ -30,6 +30,7 @@ import Jobs from "./pages/Jobs";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NocOperations from "./pages/NocOperations";
+import OperationsHealth from "./pages/OperationsHealth";
 import PayLink from "./pages/PayLink";
 import PlatformGatewayEvents from "./pages/PlatformGatewayEvents";
 import Register from "./pages/Register";
@@ -162,6 +163,7 @@ export default function App() {
                 <Route path="/audit-logs" element={<AuditLogs />} />
                 <Route path="/api-keys" element={<ApiKeys />} />
                 <Route path="/communications" element={<Communications />} />
+                <Route path="/operations-health" element={<OperationsHealth />} />
                 <Route path="/team-access" element={<TeamAccess />} />
                 <Route path="/noc" element={<NocOperations />} />
                 <Route path="/service-ops" element={<ServiceOperations />} />

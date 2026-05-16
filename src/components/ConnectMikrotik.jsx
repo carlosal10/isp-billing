@@ -12,6 +12,10 @@ function loadAuth() {
   }
 }
 
+function isMacAddress(value) {
+  return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
+}
+
 function verificationReason(reason) {
   if (reason === "auth") {
     return "authentication failed. Check the username, password, and RouterOS API permissions.";
@@ -56,6 +60,10 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
   const onSubmit = async (e) => {
     e.preventDefault();
     setMsg("");
+    if (isMacAddress(form.host)) {
+      setMsg("Failed: Router host must be an IP address or hostname, not a MAC address.");
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await api.post(
@@ -122,7 +130,13 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
           </label>
           <label>
             Router IP:
-            <input id="host" value={form.host} onChange={onChange} required />
+            <input
+              id="host"
+              value={form.host}
+              onChange={onChange}
+              placeholder="192.168.88.1 or router.example.com"
+              required
+            />
           </label>
           <label>
             Port:

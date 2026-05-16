@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server Tests
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      MONGO_URI: mongodb://127.0.0.1:27017/isp_billing_ci
+      JWT_SECRET: ci-jwt-secret-with-enough-length
+      MPESA_ENV: sandbox
+      CLIENT_URL: http://localhost:3000
+      PUBLIC_BASE_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Validate environment contract
+        run: npm run env:check
+      - name: Validate API contract coverage
+        run: npm run api:contract:audit
+      - name: Validate route security classification
+        run: npm run security:routes:audit
+      - name: Syntax-check operational scripts
+        run: |
+          node --check server/App.js
+          node --check server/scripts/run-migrations.js
+          node --check server/scripts/audit-indexes.js
+          node --check server/scripts/audit-api-contract.js
+          node --check server/scripts/audit-route-security.js
+          node --check server/scripts/backup-mongo.js
+          node --check server/scripts/restore-mongo.js
+      - name: Run server tests
+        run: npm run test:server
+      - name: Validate backup dry-run
+        run: npm run backup:mongo:plan -- --label ci
+
+  client:
+    name: Client Build
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      REACT_APP_API_URL: http://localhost:5000/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Run client CI
+        run: npm run ci:client

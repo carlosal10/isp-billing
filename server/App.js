@@ -15,6 +15,12 @@ const requireAuth = require("./middleware/requireAuth");
 const requireTenant = require("./middleware/requireTenant");
 const requirePlatformAdmin = require("./middleware/requirePlatformAdmin");
 const { isPublicRequestPath } = require("./middleware/publicPaths");
+const { requestContext } = require("./middleware/requestContext");
+const { securityHeaders } = require("./middleware/securityHeaders");
+const {
+  requestMetricsMiddleware,
+  requireMetricsAccess,
+} = require("./middleware/requestMetrics");
 
 const app = express();
 
@@ -48,13 +54,16 @@ const io = new Server(server, {
       return cb(new Error("CORS blocked (WS): " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "x-isp-server"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "x-isp-server", "X-Request-ID"],
     credentials: true,
   },
 });
 
 // ----------------- Middleware -----------------
 app.set("trust proxy", 1);
+app.use(requestContext());
+app.use(securityHeaders());
+app.use(requestMetricsMiddleware());
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -67,7 +76,8 @@ app.use(
       return cb(new Error("CORS blocked: " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id","X-Requested-With", "x-isp-server", "X-API-KEY","Accept"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id","X-Requested-With", "x-isp-server", "X-API-KEY","Accept", "X-Request-ID"],
+    exposedHeaders: ["X-Request-ID"],
     credentials: true,
     optionsSuccessStatus: 204,
   })
@@ -85,7 +95,7 @@ app.use((req, res, next) => {
     const hasAtCookie = !!(req.cookies && req.cookies.at);
     const isp = req.headers["x-isp-id"] || null;
     console.log(
-      `[${req.method}] ${res.statusCode} ${req.originalUrl} ${dur}ms`,
+      `[${req.id}] [${req.method}] ${res.statusCode} ${req.originalUrl} ${dur}ms`,
       { sawAuth, hasAtCookie, isp }
     );
   });
@@ -127,6 +137,7 @@ const financeRoutes = require("./routes/finance");
 const auditLogRoutes = require("./routes/auditLogs");
 const teamAccessRoutes = require("./routes/teamAccess");
 const nocOperationsRoutes = require("./routes/nocOperations");
+const opsHealthRoutes = require("./routes/opsHealth");
 const serviceOperationsRoutes = require("./routes/serviceOperations");
 const supportOperationsRoutes = require("./routes/supportOperations");
 const usageLogsRoutes = require("./routes/usageLogs");
@@ -176,6 +187,17 @@ const apiKeysRoutes = require("./routes/apiKeys");
 const integrationApiRoutes = require("./routes/integrationApi");
 const flagsRoutes = require("./routes/flags");
 const archiveRoutes = require("./routes/archive");
+const {
+  buildLiveness,
+  buildReadiness,
+  readinessStatusCode,
+} = require("./services/runtimeHealthService");
+const {
+  renderPrometheusMetrics,
+  requestMetrics,
+} = require("./services/requestMetricsService");
+const { createProcessLifecycle } = require("./services/processLifecycleService");
+const { shutdown: shutdownMikrotikPool } = require("./utils/mikrotikConnectionManager");
 
 // Debug
 const debugRoutes = require("./routes/debug");
@@ -183,12 +205,32 @@ const tenantRoutes = require("./routes/tenant");
 const accountRoutes = require("./routes/account");
 const fs = require('fs');
 
+const lifecycle = createProcessLifecycle({
+  server,
+  mongooseInstance: mongoose,
+  shutdownTasks: [
+    {
+      name: 'mikrotik-connection-pool',
+      run: shutdownMikrotikPool,
+    },
+  ],
+  timeoutMs: process.env.SHUTDOWN_TIMEOUT_MS,
+  logger: console,
+});
 
 // ----------------- Health -----------------
-app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
+app.get("/api/health", (req, res) => res.json(buildLiveness()));
 app.use("/api/health", authenticate, attachTenant, healthDetailRoutes);
 // Simple unauthenticated health endpoint (useful for external probes and CORS preflight)
-app.get("/health", (req, res) => res.json({ ok: true, version: "1.0.0" }));
+app.get("/health", (req, res) => res.json(buildLiveness()));
+app.get("/ready", (req, res) => {
+  const report = buildReadiness({ mongooseInstance: mongoose, lifecycleState: lifecycle.state });
+  res.status(readinessStatusCode(report)).json(report);
+});
+app.get("/metrics", requireMetricsAccess(), (req, res) => {
+  res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  res.send(renderPrometheusMetrics(requestMetrics.snapshot()));
+});
 // Serve OpenAPI (raw yaml)
 app.get('/api/docs/openapi.yaml', (req, res) => {
   try {
@@ -250,6 +292,7 @@ app.use("/api/finance", authenticate, attachTenant, financeRoutes);
 app.use("/api/audit-logs", authenticate, attachTenant, auditLogRoutes);
 app.use("/api/team", authenticate, attachTenant, teamAccessRoutes);
 app.use("/api/noc", authenticate, attachTenant, nocOperationsRoutes);
+app.use("/api/ops-health", authenticate, attachTenant, opsHealthRoutes);
 app.use("/api/service-ops", authenticate, attachTenant, serviceOperationsRoutes);
 app.use("/api/support", authenticate, attachTenant, supportOperationsRoutes);
 app.use("/api/usageLogs", authenticate, attachTenant, usageLogsRoutes);
@@ -347,15 +390,20 @@ io.of("/terminal").on("connection", (socket) => {
 
 // ----------------- 404 & Error -----------------
 app.use((req, res) =>
-  res.status(404).json({ ok: false, error: `Route not found: ${req.originalUrl}` })
+  res.status(404).json({
+    ok: false,
+    error: `Route not found: ${req.originalUrl}`,
+    requestId: req.id || null,
+  })
 );
 app.use((err, req, res, next) => {
-  console.error("🔥 Error:", err);
-  res.status(500).json({ ok: false, error: "Internal server error" });
+  console.error("🔥 Error:", { requestId: req.id || null, error: err });
+  res.status(500).json({ ok: false, error: "Internal server error", requestId: req.id || null });
 });
 // ----------------- Start -----------------
 const PORT = process.env.PORT || 5000;
 // IMPORTANT: use server.listen so Socket.IO works
 server.listen(PORT, () => console.log(`🚀 HTTP+WS server on http://localhost:${PORT}`));
+lifecycle.installSignalHandlers();
 
 module.exports = app;

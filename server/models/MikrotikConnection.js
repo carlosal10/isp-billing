@@ -1,6 +1,10 @@
 // models/MikroTikConnection.js
 const mongoose = require("mongoose");
 
+function isMacAddress(value) {
+  return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
+}
+
 const MikroTikConnectionSchema = new mongoose.Schema(
   {
     tenant: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
@@ -24,7 +28,7 @@ const MikroTikConnectionSchema = new mongoose.Schema(
 
 // Basic host+port sanity
 MikroTikConnectionSchema.path("host").validate(function (v) {
-  return typeof v === "string" && v.length >= 3;
+  return typeof v === "string" && v.length >= 3 && !isMacAddress(v);
 }, "Invalid host");
 
 // Unique name per tenant (ignore docs missing name during migration)
