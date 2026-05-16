@@ -347,6 +347,40 @@ tbody tr:last-child td,
   border-radius: var(--radius-card) !important;
 }
 
+.tool-page-shell {
+  width: min(1380px, 100%);
+  margin: 0 auto;
+}
+
+.tool-page-card,
+.tool-page-panel {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-card) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+.tool-page-card {
+  padding: 24px;
+}
+
+.tool-page-card.compact {
+  max-width: 760px;
+}
+
+.tool-page-shell .modal-content,
+.tool-page-shell .ps-modal,
+.tool-page-shell .mikrotik-modal {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  height: auto !important;
+  margin: 0 auto !important;
+  overflow: visible !important;
+}
+
 .modal-drag-bar {
   height: 18px;
   background: linear-gradient(180deg, #f8fafc, #eef3f8) !important;

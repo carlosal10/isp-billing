@@ -185,3 +185,9 @@
 /* Nice motion */
 .mikrotik-modal { animation: modalIn .18s ease; }
 @keyframes modalIn { from { transform: translateY(6px); opacity: .85; } to { transform: translateY(0); opacity: 1; } }
+
+.mikrotik-page {
+  max-width: 720px !important;
+  padding: 24px !important;
+  overflow: visible !important;
+}

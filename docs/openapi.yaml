@@ -1201,6 +1201,76 @@ paths:
         '400': { description: Invalid preference payload }
         '403': { description: Owner or admin role required }
         '404': { description: Customer not found }
+  /customers/{id}/privacy/export:
+    get:
+      summary: Export a customer privacy bundle with masked output by default
+      description: Owner/admin endpoint for customer data disclosure workflows. Use privacyMode=full only for verified disclosure requests.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: privacyMode
+          schema:
+            type: string
+            enum: [masked, full]
+            default: masked
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 500 }
+      responses:
+        '200': { description: Privacy export bundle }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
+  /customers/{id}/privacy/anonymization-plan:
+    get:
+      summary: Preview customer anonymization impact and confirmation phrase
+      description: Returns related-record counts, warnings, planned retention behavior, and the exact confirmation phrase required before anonymization.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Anonymization plan }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
+  /customers/{id}/privacy/anonymize:
+    post:
+      summary: Anonymize direct customer identifiers while retaining commercial records
+      description: Clears customer PII, disables portal/contact paths, pseudonymizes the account number, scrubs linked message/support/work-order free text, and preserves finance/audit history.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation]
+              properties:
+                confirmation:
+                  type: string
+                  description: Exact confirmation phrase from the anonymization-plan endpoint.
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        '200': { description: Customer anonymized }
+        '400': { description: Confirmation phrase missing or invalid }
+        '403': { description: Owner or admin role required }
+        '404': { description: Customer not found }
+        '409': { description: Customer already anonymized }
   /platform-api/gateway-events/orphans/{id}/claim:
     post:
       summary: Claim ownership of an orphaned payment gateway event in the platform queue

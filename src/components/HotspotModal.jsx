@@ -8,7 +8,8 @@ import "./HotspotModal.css";
 import { api } from "../lib/apiClient";
 import useDragResize from "../hooks/useDragResize";
 
-export default function HotspotModal({ isOpen, onClose }) {
+export default function HotspotModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -25,7 +26,7 @@ export default function HotspotModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 620,
@@ -35,10 +36,10 @@ export default function HotspotModal({ isOpen, onClose }) {
   const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     setMsg("");
     loadPlans();
-  }, [isOpen]);
+  }, [visible]);
 
   async function loadPlans() {
     try {
@@ -112,11 +113,10 @@ export default function HotspotModal({ isOpen, onClose }) {
     }
   }
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div className="modal-overlay">
-      <div ref={containerRef} className="modal-content draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`modal-content ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -133,9 +133,11 @@ export default function HotspotModal({ isOpen, onClose }) {
             ))}
           </>
         )}
-        <span className="close" onClick={onClose} data-modal-no-drag>
-          <FaTimes />
-        </span>
+        {!standalone ? (
+          <span className="close" onClick={onClose} data-modal-no-drag>
+            <FaTimes />
+          </span>
+        ) : null}
 
         <h2>Configure Hotspot Plan</h2>
         {msg && <p className="status-msg">{msg}</p>}
@@ -260,6 +262,7 @@ export default function HotspotModal({ isOpen, onClose }) {
           </table>
         </div>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
 }

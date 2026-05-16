@@ -5,7 +5,8 @@ import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
 import useDragResize from "../hooks/useDragResize";
 
-export default function SmsSettingsModal({ isOpen, onClose }) {
+export default function SmsSettingsModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [tab, setTab] = useState("settings"); // settings | templates | paylink
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -64,7 +65,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 780,
@@ -106,12 +107,12 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     setMsg("");
     setSendMsg("");
     setCreated({ url: "", token: "", shortUrl: "", shortPath: "" });
     loadAll();
-  }, [isOpen, loadAll]);
+  }, [visible, loadAll]);
 
   function mergeTemplates(base, fromServer) {
     const key = (x) => `${x.type}:${x.language}`;
@@ -234,14 +235,10 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
     }
   }, []);
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div
-      className="ps-overlay"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
-    >
-      <div ref={containerRef} className="ps-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -259,9 +256,11 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
           </>
         )}
         {/* Close */}
-        <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
-          <FaTimes size={18} />
-        </button>
+        {!standalone ? (
+          <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
+            <FaTimes size={18} />
+          </button>
+        ) : null}
 
         {/* Header */}
         <header className="ps-head">
@@ -860,6 +859,7 @@ export default function SmsSettingsModal({ isOpen, onClose }) {
           )}
         </div>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>{content}</div>;
 }

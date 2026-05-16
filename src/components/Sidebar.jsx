@@ -23,12 +23,10 @@ import {
 } from "react-icons/md";
 import { FaUsers, FaWifi } from "react-icons/fa";
 import { RiLinksLine } from "react-icons/ri";
-
-import MODALS from "../constants/modals";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
 
-export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
+export default function Sidebar({ open, toggleSidebar }) {
   const navigate = useNavigate();
   const { authMode, ispId, isPlatformAdmin, logout, user } = useAuth();
   const [tenantName, setTenantName] = useState("ISP Billing");
@@ -155,59 +153,59 @@ export default function Sidebar({ open, toggleSidebar, onOpenModal }) {
               </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.STATIC_SETUP)}>
+              <Link to="/static-ip" onClick={toggleSidebar}>
                 <MdSecurity /> Setup Static-IP
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.SMS_SETTINGS)}>
+              <Link to="/sms-paylinks" onClick={toggleSidebar}>
                 <MdSms /> SMS & Paylinks
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.CLIENTS)}>
+              <Link to="/customers" onClick={toggleSidebar}>
                 <FaUsers /> Manage Clients
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.PLANS)}>
+              <Link to="/plans" onClick={toggleSidebar}>
                 <MdViewList /> Create Plans
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.PPPOE)}>
+              <Link to="/pppoe" onClick={toggleSidebar}>
                 <MdLan /> Configure PPPoE
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.HOTSPOT)}>
+              <Link to="/hotspot" onClick={toggleSidebar}>
                 <FaWifi /> Manage Hotspot
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.PAYMENTS)}>
+              <Link to="/payments" onClick={toggleSidebar}>
                 <MdPayments /> Manage Payments
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.PAYMENT_INTEGRATION)}>
+              <Link to="/payment-settings" onClick={toggleSidebar}>
                 <RiLinksLine /> Link Payment Account
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.MIKROTIK)}>
+              <Link to="/mikrotik/connect" onClick={toggleSidebar}>
                 <MdCable /> Connect To Mikrotik
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.MIKROTIK_TERMINAL)}>
+              <Link to="/mikrotik/terminal" onClick={toggleSidebar}>
                 <MdTerminal /> Mikrotik Terminal
-              </button>
+              </Link>
             </li>
             <li>
-              <button onClick={() => onOpenModal(MODALS.USAGE)}>
+              <Link to="/usage-logs" onClick={toggleSidebar}>
                 <MdHistory /> Usage Logs
-              </button>
+              </Link>
             </li>
             <li>
               <Link to="/settings" onClick={toggleSidebar}>

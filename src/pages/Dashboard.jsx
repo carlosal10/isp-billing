@@ -525,6 +525,17 @@ export default function Dashboard() {
   const refreshCustomerAfterPortalUpdate = useCallback(async (access) => {
     const profile = access?.portalProfile || {};
     const communicationPreferences = access?.communicationPreferences || null;
+    let reloadedCustomer = null;
+
+    if (access?.reloadCustomer && access?.customerId) {
+      try {
+        const { data } = await api.get(`/customers/by-id/${access.customerId}`);
+        reloadedCustomer = data || null;
+      } catch (err) {
+        setToast({ type: "error", message: err?.message || "Failed to reload customer" });
+      }
+    }
+
     const mergePortalProfile = (customer) => ({
       ...(customer || {}),
       portalProfile: {
@@ -543,11 +554,13 @@ export default function Dashboard() {
 
     if (access?.customerId) {
       setInlineCustomer((current) =>
-        current?._id === access.customerId ? mergePortalProfile(current) : current
+        current?._id === access.customerId
+          ? reloadedCustomer || mergePortalProfile(current)
+          : current
       );
       setCustomerModal((current) =>
         current?.customer?._id === access.customerId
-          ? { ...current, customer: mergePortalProfile(current.customer) }
+          ? { ...current, customer: reloadedCustomer || mergePortalProfile(current.customer) }
           : current
       );
     }

@@ -45,7 +45,8 @@ function pick(obj, keys) {
   return out;
 }
 
-export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
+export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispId, standalone = false }) {
+  const visible = standalone || isOpen;
   const { ispId: ctxIspId } = useAuth();
   const effectiveIspId = ispId || ctxIspId || null;
 
@@ -86,11 +87,11 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     setMsg("");
     loadProvider(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, activeTab]);
+  }, [visible, activeTab]);
 
   function onChange(provider, field, value) {
     setFormData((prev) => ({
@@ -155,7 +156,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
       }
 
       setMsg("✓ Settings saved");
-      onClose && onClose();
+      if (!standalone) onClose && onClose();
     } catch (e) {
       console.error("Save payment config failed:", e?.__debug || e);
       setMsg(`Failed to save settings${e?.message ? `: ${e.message}` : ""}`);
@@ -164,7 +165,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     }
   }
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
   // Compute visible fields for MPesa based on selected pay method
   const mpesaMode = formData.mpesa.payMethod === "buygoods" ? "buygoods" : "paybill";
@@ -173,12 +174,13 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
     ...(mpesaMode === "paybill" ? M_PESA_PAYBILL_FIELDS : M_PESA_BUYGOODS_FIELDS),
   ];
 
-  return (
-    <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="ps-modal">
-        <button onClick={onClose} className="ps-close" aria-label="Close">
-          <FaTimes size={18} />
-        </button>
+  const content = (
+      <div className={`ps-modal ${standalone ? "tool-page-card" : ""}`}>
+        {!standalone ? (
+          <button onClick={onClose} className="ps-close" aria-label="Close">
+            <FaTimes size={18} />
+          </button>
+        ) : null}
 
         <header className="ps-head">
           <div className="ps-chip">Payments</div>
@@ -269,6 +271,7 @@ export default function PaymentIntegrationsModal({ isOpen, onClose, ispId }) {
           </button>
         </form>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>{content}</div>;
 }

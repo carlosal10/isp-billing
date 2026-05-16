@@ -92,4 +92,15 @@
   .usage-panel th, .usage-panel td { padding: 0.5rem; }
 }
 
+.tool-page-panel.usage-panel {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  max-height: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+}
+
 

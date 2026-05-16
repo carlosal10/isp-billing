@@ -8,7 +8,8 @@ import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PlanModal.css";
 import useDragResize from "../hooks/useDragResize";
 
-export default function PlanModal({ isOpen, onClose }) {
+export default function PlanModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -26,7 +27,7 @@ export default function PlanModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 640,
@@ -36,8 +37,8 @@ export default function PlanModal({ isOpen, onClose }) {
   const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   useEffect(() => {
-    if (isOpen) fetchPlans();
-  }, [isOpen]);
+    if (visible) fetchPlans();
+  }, [visible]);
 
   const fetchPlans = async () => {
     try {
@@ -136,11 +137,10 @@ export default function PlanModal({ isOpen, onClose }) {
     }
   };
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div className="modal-overlay">
-      <div ref={containerRef} className="modal-content plan-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`modal-content plan-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
@@ -155,7 +155,7 @@ export default function PlanModal({ isOpen, onClose }) {
             ))}
           </>
         )}
-        <span className="close" onClick={onClose} data-modal-no-drag><FaTimes /></span>
+        {!standalone ? <span className="close" onClick={onClose} data-modal-no-drag><FaTimes /></span> : null}
         <h2>Manage Plans</h2>
         {msg && <p className="status-msg">{msg}</p>}
 
@@ -298,6 +298,7 @@ export default function PlanModal({ isOpen, onClose }) {
           </ul>
         )}
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
 }

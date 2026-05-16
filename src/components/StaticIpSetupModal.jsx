@@ -7,7 +7,8 @@ import "./PppoeModal.css"; // keeps your base modal tokens if any
 import "./StaticIpSetupModal.css";
 import useDragResize from "../hooks/useDragResize";
 
-export default function StaticIpSetupModal({ isOpen, onClose }) {
+export default function StaticIpSetupModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [segments, setSegments] = useState([]); // from /static/detect
   const [segment, setSegment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 880,
@@ -94,11 +95,11 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
   }, [loadDetect, loadUnknown, loadCustomers]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     setMsg("");
     setPreview(null);
     refreshAll();
-  }, [isOpen, refreshAll]);
+  }, [visible, refreshAll]);
 
   const byIp = useMemo(() => {
     const lists = snapshot?.lists || {};
@@ -115,7 +116,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
     return { allow, block, arpMap, qSet };
   }, [snapshot]);
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
   async function doPreviewBootstrap() {
     setLoading(true);
@@ -251,9 +252,8 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
     }
   }
 
-  return (
-    <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div ref={containerRef} className="ps-modal staticip-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`ps-modal staticip-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
@@ -269,9 +269,11 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
           </>
         )}
         {/* Close */}
-        <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
-          <FaTimes size={18} />
-        </button>
+        {!standalone ? (
+          <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
+            <FaTimes size={18} />
+          </button>
+        ) : null}
 
         {/* Header */}
         <header className="ps-head">
@@ -551,6 +553,7 @@ export default function StaticIpSetupModal({ isOpen, onClose }) {
           </div>
         </div>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>{content}</div>;
 }

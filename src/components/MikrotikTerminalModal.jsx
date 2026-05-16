@@ -5,14 +5,15 @@ import { api } from "../lib/apiClient";
 import { useServer } from "../context/ServerContext";
 import useDragResize from "../hooks/useDragResize";
 
-export default function MikrotikTerminalModal({ isOpen, onClose }) {
+export default function MikrotikTerminalModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [cmd, setCmd] = useState("/system/resource/print");
   const [out, setOut] = useState([]);
   const { servers, selected, setSelected, reload } = useServer();
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 680,
@@ -21,7 +22,7 @@ export default function MikrotikTerminalModal({ isOpen, onClose }) {
   });
   const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
   const run = async () => {
     setOut((o) => [...o, `> ${cmd}`]);
@@ -44,12 +45,8 @@ export default function MikrotikTerminalModal({ isOpen, onClose }) {
     }
   };
 
-  return (
-    <div
-      className="ps-overlay"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
-    >
-      <div ref={containerRef} className="ps-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -67,9 +64,11 @@ export default function MikrotikTerminalModal({ isOpen, onClose }) {
           </>
         )}
         {/* Close */}
-        <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
-          <FaTimes size={18} />
-        </button>
+        {!standalone ? (
+          <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
+            <FaTimes size={18} />
+          </button>
+        ) : null}
 
         {/* Header */}
         <header className="ps-head">
@@ -132,6 +131,7 @@ export default function MikrotikTerminalModal({ isOpen, onClose }) {
           </div>
         </div>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="ps-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>{content}</div>;
 }

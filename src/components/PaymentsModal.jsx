@@ -62,7 +62,8 @@ function formatJsonBlock(value) {
   }
 }
 
-export default function PaymentsModal({ isOpen, onClose }) {
+export default function PaymentsModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const { role } = useAuth();
   const canOperateGatewayEvents =
     role === "owner" || role === "admin" || role === "platform-admin";
@@ -168,7 +169,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 720,
@@ -179,12 +180,12 @@ export default function PaymentsModal({ isOpen, onClose }) {
 
   // fetch on open
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     fetchPayments();
     fetchInvoices();
     fetchPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [visible]);
 
   // close dropdowns on outside click
   useEffect(() => {
@@ -207,7 +208,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    if (!isOpen) {
+    if (!visible) {
       // clear defensive inline styles when modal closed
       el.style.display = "";
       el.style.flexDirection = "";
@@ -219,7 +220,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
     el.style.flexDirection = "column";
     el.style.boxSizing = "border-box";
     // note: hook may still write inline width/height/position; this complements it.
-  }, [isOpen]);
+  }, [visible]);
 
   // ---------- API helpers ----------
   const getErrMsg = (err, fallback = "Request failed") =>
@@ -523,16 +524,16 @@ export default function PaymentsModal({ isOpen, onClose }) {
   }, [invoiceSearchTerm]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "reconciliation") return;
+    if (!visible || activeTab !== "reconciliation") return;
     fetchGatewayEvents(gatewayFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, activeTab]);
+  }, [visible, activeTab]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "finance" || !canViewFinance) return;
+    if (!visible || activeTab !== "finance" || !canViewFinance) return;
     fetchFinanceReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, activeTab, canViewFinance]);
+  }, [visible, activeTab, canViewFinance]);
 
   useEffect(() => {
     if (!adjustToast) return () => {};
@@ -1587,11 +1588,10 @@ export default function PaymentsModal({ isOpen, onClose }) {
     );
   };
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div className="modal-overlay">
-      <div ref={containerRef} className="modal-content large draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`modal-content large ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -1607,9 +1607,11 @@ export default function PaymentsModal({ isOpen, onClose }) {
           </>
         )}
 
-        <span className="close" onClick={onClose} role="button" aria-label="Close" data-modal-no-drag>
-          <FaTimes />
-        </span>
+        {!standalone ? (
+          <span className="close" onClick={onClose} role="button" aria-label="Close" data-modal-no-drag>
+            <FaTimes />
+          </span>
+        ) : null}
 
         {/* Tabs */}
         <div className="tabs" data-modal-no-drag>
@@ -2837,6 +2839,7 @@ export default function PaymentsModal({ isOpen, onClose }) {
           </div>
         )}
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
 }

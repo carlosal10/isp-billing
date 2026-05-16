@@ -29,7 +29,7 @@ function verificationReason(reason) {
   return "the router could not be verified.";
 }
 
-export default function ConnectMikrotikModal({ isOpen, onClose }) {
+export default function ConnectMikrotikModal({ isOpen = false, onClose, standalone = false }) {
   const [form, setForm] = useState({
     name: "default",
     primary: true,
@@ -50,7 +50,8 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
     return `sending headers -> Authorization: ${token ? "yes" : "no"}, x-isp-id: ${ispId || "(none)"}`;
   }, [token, ispId]);
 
-  if (!isOpen) return null;
+  const visible = standalone || isOpen;
+  if (!visible) return null;
 
   const onChange = (e) => {
     const { id, type, value, checked } = e.target;
@@ -95,11 +96,13 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
       }
 
       setMsg(`Connected: ${data.identity || "ok"}`);
-      setTimeout(() => {
-        try {
-          onClose && onClose();
-        } catch {}
-      }, 800);
+      if (!standalone) {
+        setTimeout(() => {
+          try {
+            onClose && onClose();
+          } catch {}
+        }, 800);
+      }
     } catch (err) {
       const debug = err?.__debug || {};
       const isTimeout = debug.code === "ECONNABORTED" || /timeout/i.test(err?.message || debug.message || "");
@@ -115,12 +118,13 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
     }
   };
 
-  return (
-    <div className="mikrotik-overlay">
-      <div className="mikrotik-modal">
-        <button onClick={onClose} className="close-btn">
-          <FaTimes size={20} />
-        </button>
+  const content = (
+      <div className={`mikrotik-modal ${standalone ? "tool-page-card compact mikrotik-page" : ""}`}>
+        {!standalone ? (
+          <button onClick={onClose} className="close-btn">
+            <FaTimes size={20} />
+          </button>
+        ) : null}
         <h2 className="modal-title">Connect To MikroTik</h2>
 
         <form onSubmit={onSubmit} className="modal-form">
@@ -167,6 +171,7 @@ export default function ConnectMikrotikModal({ isOpen, onClose }) {
         <div className="response-msg" style={{ opacity: 0.8, fontSize: 12 }}>{debugSent}</div>
         {msg && <div className="response-msg">{msg}</div>}
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="mikrotik-overlay">{content}</div>;
 }

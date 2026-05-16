@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { api } from "../lib/apiClient";
 import CustomerCommunicationPreferencesCard from "./CustomerCommunicationPreferencesCard";
+import CustomerPrivacyCard from "./CustomerPrivacyCard";
 import CustomerPortalAccessCard from "./CustomerPortalAccessCard";
 
 export default function CustomerDetailsModal({ open, onClose, customer, onUpdated }) {
@@ -12,9 +13,11 @@ export default function CustomerDetailsModal({ open, onClose, customer, onUpdate
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open || !customer?.accountNumber) {
+    const isAnonymized = customer?.status === "anonymized" || customer?.privacyProfile?.isAnonymized === true;
+    if (!open || !customer?.accountNumber || isAnonymized) {
       setHealth(null);
       setError(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;
@@ -34,14 +37,15 @@ export default function CustomerDetailsModal({ open, onClose, customer, onUpdate
     return () => {
       cancelled = true;
     };
-  }, [open, customer?.accountNumber]);
+  }, [open, customer?.accountNumber, customer?.privacyProfile?.isAnonymized, customer?.status]);
 
   if (!open || !customer) return null;
 
   const plan = customer.plan;
   const billingProfile = customer.billingProfile || {};
+  const isAnonymized = customer.status === "anonymized" || customer.privacyProfile?.isAnonymized === true;
 
-  const canToggle = customer.connectionType === "pppoe" && health && typeof health.disabled === "boolean";
+  const canToggle = !isAnonymized && customer.connectionType === "pppoe" && health && typeof health.disabled === "boolean";
 
   const doEnable = async () => {
     if (!customer?.accountNumber) return;
@@ -128,12 +132,15 @@ export default function CustomerDetailsModal({ open, onClose, customer, onUpdate
 
         <CustomerCommunicationPreferencesCard customer={customer} onUpdated={onUpdated} />
 
+        <CustomerPrivacyCard customer={customer} onUpdated={onUpdated} />
+
         {/* Health card */}
         <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>
           <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Router Health</div>
+          {isAnonymized && <div style={{ color: '#64748b' }}>Router checks are disabled for anonymized customer records.</div>}
           {loading && <div>Loading health…</div>}
           {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
-          {!!health && (
+          {!isAnonymized && !!health && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
               <div><div style={{ color: '#64748b', fontSize: 12 }}>Status</div><div style={{ fontWeight: 700 }}>{health.status || (health.disabled ? 'inactive' : 'active')}</div></div>
               {health.online !== null && (

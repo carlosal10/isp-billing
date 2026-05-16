@@ -8,7 +8,8 @@ import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PppoeModal.css";
 import useDragResize from "../hooks/useDragResize";
 
-export default function PppoeModal({ isOpen, onClose }) {
+export default function PppoeModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [msg, setMsg] = useState("");
@@ -29,7 +30,7 @@ const [loading, setLoading] = useState(false);
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 560,
@@ -40,7 +41,7 @@ const [loading, setLoading] = useState(false);
 
   // Load PPPoE profiles from backend (protected route)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     let mounted = true;
     (async () => {
       setLoadingProfiles(true);
@@ -60,9 +61,9 @@ const [loading, setLoading] = useState(false);
       }
     })();
     return () => { mounted = false; };
-  }, [isOpen]);
+  }, [visible]);
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
   // ---- helpers ----
   const showOk = (t) => setMsg(`✅ ${t}`);
@@ -123,9 +124,8 @@ const [loading, setLoading] = useState(false);
     }
   };
 
-  return (
-    <div className="modal-overlay">
-      <div ref={containerRef} className="modal-content draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`modal-content ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
@@ -140,9 +140,11 @@ const [loading, setLoading] = useState(false);
             ))}
           </>
         )}
-        <span className="close" onClick={onClose} data-modal-no-drag>
-          <FaTimes />
-        </span>
+        {!standalone ? (
+          <span className="close" onClick={onClose} data-modal-no-drag>
+            <FaTimes />
+          </span>
+        ) : null}
 
         <h2>Manage PPPoE Users</h2>
         {msg && <p className="status-msg">{msg}</p>}
@@ -225,6 +227,7 @@ const [loading, setLoading] = useState(false);
           </button>
         </form>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
 }

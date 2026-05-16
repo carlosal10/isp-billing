@@ -22,7 +22,8 @@ const Card = ({ children, className }) => (
 const CardContent = ({ children, className = "" }) => <div className={`card-content ${className}`}>{children}</div>;
 
 // Converted from modal overlay to bottom panel that's part of the page
-const UsageModal = ({ isOpen, onClose }) => {
+const UsageModal = ({ isOpen = false, onClose, standalone = false }) => {
+  const visible = standalone || isOpen;
   const [usageTrends, setUsageTrends] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
   const [usageLogs, setUsageLogs] = useState([]);
@@ -58,10 +59,10 @@ const UsageModal = ({ isOpen, onClose }) => {
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (visible) {
       fetchData();
     }
-  }, [isOpen, fetchData]);
+  }, [visible, fetchData]);
 
   // Prepare chart data
   const usageTrendsData = {
@@ -87,15 +88,17 @@ const UsageModal = ({ isOpen, onClose }) => {
     ],
   };
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div className="usage-panel open">
+  const content = (
+    <div className={`usage-panel open ${standalone ? "tool-page-panel" : ""}`}>
       <div className="usage-panel-header">
         <h2>Usage Logs & Reports</h2>
-        <button onClick={onClose} aria-label="Close usage panel" className="icon-button">
-          <FaTimes size={18} />
-        </button>
+        {!standalone ? (
+          <button onClick={onClose} aria-label="Close usage panel" className="icon-button">
+            <FaTimes size={18} />
+          </button>
+        ) : null}
       </div>
 
       {statusMsg && (
@@ -179,6 +182,8 @@ const UsageModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : content;
 };
 
 export default UsageModal;

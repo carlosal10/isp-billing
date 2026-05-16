@@ -557,7 +557,8 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
   );
 }
 
-export default function CustomersModal({ isOpen, onClose }) {
+export default function CustomersModal({ isOpen = false, onClose, standalone = false }) {
+  const visible = standalone || isOpen;
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [customers, setCustomers] = useState([]);
@@ -578,7 +579,7 @@ export default function CustomersModal({ isOpen, onClose }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 780,
@@ -639,11 +640,11 @@ export default function CustomersModal({ isOpen, onClose }) {
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible) return;
     setMessage("");
     Promise.all([loadCustomers(), loadPlans(), loadProfiles()]).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [visible]);
 
   const sendRequest = async (url, method, body, successMsg) => {
     setLoading(true);
@@ -664,11 +665,10 @@ export default function CustomersModal({ isOpen, onClose }) {
     }
   };
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div className="modal-overlay">
-      <div ref={containerRef} className="modal-content customers-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`modal-content customers-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -685,9 +685,11 @@ export default function CustomersModal({ isOpen, onClose }) {
             ))}
           </>
         )}
-        <span className="close" onClick={onClose} data-modal-no-drag>
-          <FaTimes />
-        </span>
+        {!standalone ? (
+          <span className="close" onClick={onClose} data-modal-no-drag>
+            <FaTimes />
+          </span>
+        ) : null}
         <h2>Manage Customers</h2>
         {message && <p className="status-msg">{message}</p>}
 
@@ -914,6 +916,7 @@ export default function CustomersModal({ isOpen, onClose }) {
           )}
         </div>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
 }

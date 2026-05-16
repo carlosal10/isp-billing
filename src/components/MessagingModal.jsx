@@ -164,7 +164,8 @@ function formatSpeed(value) {
   return `${Number.isInteger(num) ? num : Number(num.toFixed(2))} Mbps`;
 }
 
-export default function MessagingModal({ isOpen, onClose, defaults }) {
+export default function MessagingModal({ isOpen = false, onClose, defaults, standalone = false }) {
+  const visible = standalone || isOpen;
   const seed = defaults || {};
   const templateSeed = prepareTemplateVariables(seed);
   const [channel, setChannel] = useState("sms");
@@ -178,7 +179,7 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
   const containerRef = useRef(null);
   const dragHandleRef = useRef(null);
   const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen,
+    isOpen: visible && !standalone,
     containerRef,
     handleRef: dragHandleRef,
     minWidth: 540,
@@ -188,11 +189,11 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
   const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!visible || standalone) return;
     const onEsc = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
-  }, [isOpen, onClose]);
+  }, [visible, onClose, standalone]);
 
   const smsInfo = useMemo(() => countSmsSegments(message || ""), [message]);
 
@@ -233,16 +234,10 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
     }
   }
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  return (
-    <div
-      className="ps-overlay"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-    >
-      <div ref={containerRef} className="ps-modal draggable-modal">
+  const content = (
+      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
         {isDraggingEnabled && (
           <>
             <div className="modal-drag-bar" ref={dragHandleRef}>
@@ -260,9 +255,11 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
           </>
         )}
         {/* Close */}
-        <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
-          <FaTimes size={18} />
-        </button>
+        {!standalone ? (
+          <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
+            <FaTimes size={18} />
+          </button>
+        ) : null}
 
         {/* Header */}
         <header className="ps-head">
@@ -404,6 +401,7 @@ export default function MessagingModal({ isOpen, onClose, defaults }) {
           </div>
         </form>
       </div>
-    </div>
   );
+
+  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="ps-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>{content}</div>;
 }
