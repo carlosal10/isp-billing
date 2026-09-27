@@ -1,12 +1,11 @@
 const express = require("express");
-const crypto = require("crypto");
 const { z } = require("zod");
 const Invite = require("../models/Invite");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
-const RefreshToken = require("../models/RefreshToken");
 const bcrypt = require("bcryptjs");
 const { signTenantAccessToken } = require("../utils/jwt");
+const { issueRefreshToken } = require('../services/refreshTokenService');
 const requireAuth = require("../middleware/requireAuth");
 const requireTenant = require("../middleware/requireTenant");
 const requireRole = require("../middleware/requireRole");
@@ -44,22 +43,6 @@ function requestActor(req) {
     email: req.user?.email || null,
     role: req.role || (req.user?.isPlatformAdmin ? "platform-admin" : null),
   };
-}
-
-function refreshExpiry(days = Number(process.env.REFRESH_TTL_DAYS || 30)) {
-  return new Date(Date.now() + days * 86400 * 1000);
-}
-
-async function issueRefreshToken({ userId, tenantId }) {
-  const token = crypto.randomBytes(48).toString("base64url");
-  await RefreshToken.create({
-    token,
-    user: userId,
-    tenant: tenantId,
-    expiresAt: refreshExpiry(),
-    isRevoked: false,
-  });
-  return token;
 }
 
 router.get("/", protectedTenantAccess, requireRole("owner", "admin"), async (req, res) => {

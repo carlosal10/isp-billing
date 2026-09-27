@@ -10,15 +10,16 @@ const PROVIDERS = [
   { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
 ];
 
-function TextInput({ value, onChange, placeholder, type = "text" }) {
+function TextInput({ value, onChange, placeholder, type = "text", required = true }) {
   return (
     <input
       type={type}
+      autoComplete={type === "password" ? "new-password" : undefined}
       placeholder={placeholder}
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
       className="ps-input"
-      required
+      required={required}
     />
   );
 }
@@ -34,6 +35,32 @@ const M_PESA_COMMON_FIELDS = [
 
 const M_PESA_PAYBILL_FIELDS = ["paybillShortcode", "paybillPasskey"];
 const M_PESA_BUYGOODS_FIELDS = ["buyGoodsTill", "buyGoodsPasskey"];
+const CREDENTIAL_FIELDS = new Set([
+  "consumerKey",
+  "consumerSecret",
+  "paybillPasskey",
+  "buyGoodsPasskey",
+  "secretKey",
+  "clientId",
+  "clientSecret",
+]);
+
+const EMPTY_PROVIDER_STATE = {
+  mpesa: {
+    consumerKey: "",
+    consumerSecret: "",
+    payMethod: "paybill",
+    environment: "sandbox",
+    businessName: "",
+    paybillShortcode: "",
+    paybillPasskey: "",
+    buyGoodsTill: "",
+    buyGoodsPasskey: "",
+    credentials: {},
+  },
+  stripe: { publishableKey: "", secretKey: "", credentials: {} },
+  paypal: { clientId: "", clientSecret: "", credentials: {} },
+};
 
 function labelize(field) {
   return field.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
@@ -54,27 +81,7 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const [formData, setFormData] = useState({
-    mpesa: {
-      consumerKey: "",
-      consumerSecret: "",
-      payMethod: "paybill",
-      environment: "sandbox",
-      businessName: "",
-      paybillShortcode: "",
-      paybillPasskey: "",
-      buyGoodsTill: "",
-      buyGoodsPasskey: "",
-    },
-    stripe: {
-      publishableKey: "",
-      secretKey: "",
-    },
-    paypal: {
-      clientId: "",
-      clientSecret: "",
-    },
-  });
+  const [formData, setFormData] = useState(EMPTY_PROVIDER_STATE);
 
   const fields = {
     mpesa: [
@@ -100,9 +107,9 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
     }));
   }
 
-  async function loadProvider(provider) {
+  async function loadProvider(provider, { keepMessage = false } = {}) {
     setLoading(true);
-    setMsg("");
+    if (!keepMessage) setMsg("");
     try {
       let data;
       try {
@@ -115,7 +122,11 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
       if (data && typeof data === "object") {
         setFormData((prev) => ({
           ...prev,
-          [provider]: { ...prev[provider], ...data },
+          [provider]: {
+            ...EMPTY_PROVIDER_STATE[provider],
+            ...data,
+            credentials: { ...(data.credentials || {}) },
+          },
         }));
       }
     } catch (e) {
@@ -145,16 +156,30 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
         settings = pick(settings, activeList); // prune inactive fields out of payload
       }
 
+      let response;
       try {
-        await api.post(`/payment-config/${provider}`, settings, {
+        response = await api.post(`/payment-config/${provider}`, settings, {
           headers: { "Content-Type": "application/json" },
         });
       } catch (e1) {
-        await api.post(`/payment-config`, { provider, settings }, {
+        response = await api.post(`/payment-config`, { provider, settings }, {
           headers: { "Content-Type": "application/json" },
         });
       }
 
+      const safeSettings = response?.data?.settings;
+      if (safeSettings) {
+        setFormData((prev) => ({
+          ...prev,
+          [provider]: {
+            ...EMPTY_PROVIDER_STATE[provider],
+            ...safeSettings,
+            credentials: { ...(safeSettings.credentials || {}) },
+          },
+        }));
+      } else {
+        await loadProvider(provider, { keepMessage: true });
+      }
       setMsg("✓ Settings saved");
       if (!standalone) onClose && onClose();
     } catch (e) {
@@ -238,12 +263,14 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
                 {mpesaVisibleFields
                   .filter((f) => !["payMethod", "environment"].includes(f)) // already rendered above
                   .map((field) => {
-                    const type = /secret|passkey/i.test(field) ? "password" : "text";
+                    const credential = CREDENTIAL_FIELDS.has(field);
+                    const configured = Boolean(formData.mpesa.credentials?.[field]);
                     return (
                       <TextInput
                         key={field}
-                        placeholder={labelize(field)}
-                        type={type}
+                        placeholder={configured ? `${labelize(field)} configured — enter to replace` : labelize(field)}
+                        type={credential ? "password" : "text"}
+                        required={credential ? !configured : true}
                         value={formData.mpesa[field]}
                         onChange={(val) => onChange("mpesa", field, val)}
                       />
@@ -252,12 +279,14 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
               </>
             ) : (
               fields[activeTab].map((field) => {
-                const type = /secret/i.test(field) ? "password" : "text";
+                const credential = CREDENTIAL_FIELDS.has(field);
+                const configured = Boolean(formData[activeTab].credentials?.[field]);
                 return (
                   <TextInput
                     key={field}
-                    placeholder={labelize(field)}
-                    type={type}
+                    placeholder={configured ? `${labelize(field)} configured — enter to replace` : labelize(field)}
+                    type={credential ? "password" : "text"}
+                    required={credential ? !configured : true}
                     value={formData[activeTab][field]}
                     onChange={(val) => onChange(activeTab, field, val)}
                   />

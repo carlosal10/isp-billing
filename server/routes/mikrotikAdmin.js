@@ -44,7 +44,7 @@ async function guardRole(req, res, next) {
   try {
     const userId = req.user?.sub;
     const tenantId = req.tenantId;
-    let role = req.user?.role ?? (req.user?.isAdmin ? "admin" : null);
+    let role = req.role ?? req.user?.role ?? (req.user?.isAdmin ? "admin" : null);
     if (!role && userId && tenantId) {
       const m = await Membership.findOne({ user: userId, tenant: tenantId }).lean();
       role = m?.role || null; // owner | admin | operator

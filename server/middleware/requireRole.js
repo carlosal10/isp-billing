@@ -25,17 +25,8 @@ module.exports = function requireRole(...roles) {
       if (!userId) return res.status(401).json({ ok: false, error: "Unauthorized (no user)" });
       if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized (no tenant)" });
 
-      // Optional platform override
-      if (req.user?.isPlatformAdmin === true) {
-        req.role = "platform-admin";
-        // You can restrict this override if you need:
-        // if (!required.includes('owner')) return next();
-        return next();
-      }
-
-      // Look up membership
-      const m = await Membership.findOne({ user: userId, tenant: tenantId })
-        .select({ role: 1 }) // only role
+      const m = req.membership || await Membership.findOne({ user: userId, tenant: tenantId })
+        .select({ role: 1 })
         .lean();
 
       if (!m) return res.status(403).json({ ok: false, error: "No membership in tenant" });

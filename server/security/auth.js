@@ -3,7 +3,7 @@ const requireTenant = require("../middleware/requireTenant");
 const {
   signTenantAccessToken,
   signPlatformAccessToken,
-  verifyAccessToken,
+  verifyTenantAccessToken,
 } = require("../utils/jwt");
 
 function signAccessToken({ user, tenantId }) {
@@ -18,7 +18,7 @@ module.exports = {
   signAccessToken,
   signTenantAccessToken,
   signPlatformAccessToken,
-  verifyAccessToken,
+  verifyAccessToken: verifyTenantAccessToken,
   refreshExpiry,
   requireAuth,
   requireTenant,

@@ -20,14 +20,17 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+          className="ui-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <motion.div
             ref={containerRef}
-            className="bg-white rounded-2xl shadow-xl p-6 relative draggable-modal"
+            className="ui-modal-surface draggable-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={title || "Dialog"}
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -49,7 +52,7 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-3 right-3 text-gray-500 hover:text-black"
+              className="ui-modal-close"
               aria-label="Close"
               data-modal-no-drag
             >
@@ -57,7 +60,7 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
             </button>
 
             {/* Title */}
-            {title && <h2 className="text-xl font-semibold mb-4">{title}</h2>}
+            {title && <h2 className="ui-modal-title">{title}</h2>}
 
             {/* Content */}
             {children}

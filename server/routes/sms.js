@@ -16,6 +16,10 @@ const {
 } = require('../services/messageDeliveryService');
 const { assessSmsPermission } = require('../services/customerCommunicationPreferencesService');
 const {
+  sanitizeSmsSettingsInput,
+  serializeSmsSettings,
+} = require('../services/configurationSanitizer');
+const {
   listCampaigns,
   previewCampaign,
   sendCampaign,
@@ -93,8 +97,9 @@ function requestedPrivacyMode(query = {}) {
 // GET settings (tenant scoped)
 router.get('/settings', async (req, res) => {
   try {
+    if (!req.tenantId) return res.status(401).json({ error: 'Missing tenant context' });
     const doc = await SmsSettings.findOne({ tenantId: req.tenantId }).lean();
-    res.json(doc || {});
+    res.json(serializeSmsSettings(doc));
   } catch (e) {
     console.error('sms settings get error', e);
     res.status(500).json({ error: 'Failed to load SMS settings' });
@@ -102,11 +107,15 @@ router.get('/settings', async (req, res) => {
 });
 
 // POST upsert settings
-router.post('/settings', async (req, res) => {
+router.post('/settings', requireRole('owner', 'admin'), async (req, res) => {
   try {
-    const update = { ...req.body, tenantId: req.tenantId };
-    const doc = await SmsSettings.findOneAndUpdate({ tenantId: req.tenantId }, update, { upsert: true, new: true, setDefaultsOnInsert: true });
-    res.json({ ok: true, settings: doc });
+    const update = sanitizeSmsSettingsInput(req.body || {});
+    const doc = await SmsSettings.findOneAndUpdate(
+      { tenantId: req.tenantId },
+      { $set: update, $setOnInsert: { tenantId: req.tenantId } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json({ ok: true, settings: serializeSmsSettings(doc) });
   } catch (e) {
     console.error('sms settings save error', e);
     res.status(500).json({ error: 'Failed to save SMS settings' });

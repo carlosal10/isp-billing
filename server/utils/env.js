@@ -1,5 +1,8 @@
 const SECRET_KEYS = new Set([
   'JWT_SECRET',
+  'PLATFORM_BOOTSTRAP_TOKEN',
+  'DATA_ENCRYPTION_KEY',
+  'DATA_ENCRYPTION_KEYS',
   'MPESA_CONSUMER_SECRET',
   'MPESA_PASSKEY',
   'STRIPE_SECRET_KEY',
@@ -56,6 +59,22 @@ function getEnvReport(env = process.env) {
     findings.push(issue('warning', 'JWT_SECRET', 'Production JWT_SECRET should be at least 32 characters.'));
   }
 
+  if (production && hasValue(normalized.PLATFORM_BOOTSTRAP_TOKEN) && String(normalized.PLATFORM_BOOTSTRAP_TOKEN).length < 32) {
+    findings.push(issue('error', 'PLATFORM_BOOTSTRAP_TOKEN', 'PLATFORM_BOOTSTRAP_TOKEN must be at least 32 characters in production.'));
+  }
+
+  const hasEncryptionKey = hasValue(normalized.DATA_ENCRYPTION_KEY) || hasValue(normalized.DATA_ENCRYPTION_KEYS);
+  if (production && !hasEncryptionKey) {
+    findings.push(issue('error', 'DATA_ENCRYPTION_KEY', 'A data-encryption keyring is required in production.'));
+  } else if (hasEncryptionKey) {
+    try {
+      const { getEncryptionKeyring } = require('../security/fieldEncryption');
+      getEncryptionKeyring(normalized);
+    } catch (error) {
+      findings.push(issue('error', 'DATA_ENCRYPTION_KEY', error?.message || 'Invalid data-encryption keyring.'));
+    }
+  }
+
   if (hasValue(normalized.MPESA_ENV) && !['sandbox', 'production'].includes(normalized.MPESA_ENV)) {
     findings.push(issue('error', 'MPESA_ENV', 'MPESA_ENV must be sandbox or production when provided.'));
   }
@@ -80,6 +99,10 @@ function getEnvReport(env = process.env) {
     sanitized: {
       MONGO_URI: sanitizedValue('MONGO_URI', normalized.MONGO_URI),
       JWT_SECRET: sanitizedValue('JWT_SECRET', normalized.JWT_SECRET),
+      PLATFORM_BOOTSTRAP_TOKEN: sanitizedValue('PLATFORM_BOOTSTRAP_TOKEN', normalized.PLATFORM_BOOTSTRAP_TOKEN),
+      DATA_ENCRYPTION_KEY: sanitizedValue('DATA_ENCRYPTION_KEY', normalized.DATA_ENCRYPTION_KEY),
+      DATA_ENCRYPTION_KEYS: sanitizedValue('DATA_ENCRYPTION_KEYS', normalized.DATA_ENCRYPTION_KEYS),
+      DATA_ENCRYPTION_ACTIVE_KEY_ID: sanitizedValue('DATA_ENCRYPTION_ACTIVE_KEY_ID', normalized.DATA_ENCRYPTION_ACTIVE_KEY_ID),
       MPESA_ENV: sanitizedValue('MPESA_ENV', normalized.MPESA_ENV),
       CLIENT_URL: sanitizedValue('CLIENT_URL', normalized.CLIENT_URL),
       PUBLIC_BASE_URL: sanitizedValue('PUBLIC_BASE_URL', normalized.PUBLIC_BASE_URL),

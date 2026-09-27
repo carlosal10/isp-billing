@@ -5,8 +5,11 @@ const {
   isAllowed,
   parseCli,
   redactCommand,
+  sanitizeTerminalResult,
+  sanitizeTerminalWords,
   sendCommand: sendTerminalCommand,
 } = require("../services/terminal");
+const requireRole = require("../middleware/requireRole");
 
 const router = express.Router();
 
@@ -25,7 +28,7 @@ const Body = z.object({
   serverId: z.string().optional(),
 });
 
-router.post("/exec", limiter, async (req, res) => {
+router.post("/exec", limiter, requireRole("owner", "admin"), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) {
@@ -49,7 +52,12 @@ router.post("/exec", limiter, async (req, res) => {
     const serverId = bodyServer || headerServer || req.query?.serverId || null;
     const result = await sendTerminalCommand(tenantId, path, words, { timeoutMs, serverId });
 
-    return res.json({ ok: true, path, words, result });
+    return res.json({
+      ok: true,
+      path,
+      words: sanitizeTerminalWords(words),
+      result: sanitizeTerminalResult(result),
+    });
   } catch (err) {
     const msg = err?.message || "RouterOS exec failed";
     const isUpstream = /timeout|expired|auth|EHOSTUNREACH|ECONNREFUSED|network/i.test(msg);

@@ -11,6 +11,7 @@ const router = express.Router();
 const { z } = require('zod');
 const MikroTikConnection = require('../models/MikrotikConnection');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
+const requireRole = require('../middleware/requireRole');
 
 const CreateBody = z.object({
   name: z.string().min(1).max(60),
@@ -68,7 +69,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST / - create server
-router.post('/', async (req, res) => {
+router.post('/', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
@@ -116,7 +117,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /:id - update server
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
@@ -169,7 +170,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /:id - delete server
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });

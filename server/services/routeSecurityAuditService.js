@@ -35,6 +35,56 @@ const ROUTE_SECURITY_POLICIES = Object.freeze({
 
 const ROUTE_MODULE_POLICIES = Object.freeze([
   {
+    file: 'server/middleware/requireAuth.js',
+    requiredSnippets: ['verifyTenantAccessToken', 'req.authRealm = "tenant-staff"'],
+    reason: 'Tenant API authentication must accept tenant-staff access tokens only.',
+  },
+  {
+    file: 'server/middleware/requireTenant.js',
+    requiredSnippets: ['Tenant header does not match access token', 'No membership in tenant'],
+    reason: 'Tenant context must come from the token and require a current membership.',
+  },
+  {
+    file: 'server/security/tenantSocketAuth.js',
+    requiredSnippets: ['verifyTenantAccessToken', 'Tenant does not match access token', 'Tenant membership required'],
+    reason: 'Terminal websocket authentication must enforce realm, tenant, and membership.',
+  },
+  {
+    file: 'server/routes/platformAuth.js',
+    requiredSnippets: [
+      'router.post("/register", registrationLimiter, authorizePlatformRegistration',
+      'router.post("/login", loginLimiter',
+      'router.get("/verify", requirePlatformAdmin',
+      'req.platformBootstrap === true ? true',
+    ],
+    reason: 'Platform registration must be bootstrap- or super-admin-authorized and verification must enforce its realm.',
+  },
+  {
+    file: 'server/routes/tenantAuth.js',
+    requiredSnippets: [
+      'router.post("/register", registrationLimiter',
+      'router.post("/login", loginLimiter',
+      'router.post("/refresh", refreshLimiter',
+      'router.get("/me", requireAuth, requireTenant',
+    ],
+    reason: 'Tenant session introspection must enforce the tenant realm and current membership.',
+  },
+  {
+    file: 'server/services/refreshTokenService.js',
+    requiredSnippets: [
+      "createHash('sha256')",
+      'isRevoked: { $ne: true }',
+      'expiresAt: { $gt: now }',
+      'revokedAt: now',
+    ],
+    reason: 'Refresh tokens must be consumed atomically, expire predictably, and record revocation.',
+  },
+  {
+    file: 'server/services/customerPortalIdentity.js',
+    requiredSnippets: ['resolvePortalLoginMethod', "return (await comparePin(String(pin), pinHash)) ? 'pin' : null"],
+    reason: 'A configured customer portal PIN must not fall back to contact-value authentication.',
+  },
+  {
     file: 'server/routes/apiKeys.js',
     requiredSnippets: ["router.use(requireRole('owner', 'admin'))"],
     reason: 'API key management must be owner/admin only.',
@@ -46,8 +96,18 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
   },
   {
     file: 'server/routes/customerPortal.js',
-    requiredSnippets: ['router.use(requirePortalAuth)'],
-    reason: 'Customer portal data routes require portal authentication.',
+    requiredSnippets: ['router.use(requirePortalAuth)', "router.post('/payments/mpesa/stk', paymentInitiationLimiter"],
+    reason: 'Customer portal data routes require portal authentication and payment initiation limits.',
+  },
+  {
+    file: 'server/routes/portalAuth.js',
+    requiredSnippets: ["router.post('/login', loginLimiter", "router.get('/verify', requirePortalAuth"],
+    reason: 'Portal sign-in must be rate-limited and portal verification must enforce its token realm.',
+  },
+  {
+    file: 'server/routes/paylink.js',
+    requiredSnippets: ["router.post('/stk', paymentInitiationLimiter"],
+    reason: 'Public paylink payment initiation must be rate-limited.',
   },
   {
     file: 'server/routes/Customer.js',
@@ -79,6 +139,45 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
     reason: 'Invoice mutation endpoints must be owner/admin only.',
   },
   {
+    file: 'server/routes/paymentConfig.js',
+    requiredSnippets: ["router.use(requireRole('owner', 'admin'))", 'serializePaymentConfig'],
+    reason: 'Payment credentials must be owner/admin-managed and redacted from responses.',
+  },
+  {
+    file: 'server/models/PaymentConfig.js',
+    requiredSnippets: ["set: encryptField", "PaymentConfigSchema.index({ ispId: 1, provider: 1 }, { unique: true })"],
+    reason: 'Payment-provider credentials must be encrypted before persistence and unique per tenant/provider.',
+  },
+  {
+    file: 'server/models/MikroTikConnection.js',
+    requiredSnippets: ['password: { type: String, required: true, set: encryptField }'],
+    reason: 'Router passwords must be encrypted before persistence.',
+  },
+  {
+    file: 'server/models/SmsSettings.js',
+    requiredSnippets: ['set: encryptField'],
+    reason: 'SMS-provider credentials must be encrypted before persistence.',
+  },
+  {
+    file: 'server/routes/mpesaSettings.js',
+    requiredSnippets: ["router.use(requireRole('owner', 'admin'))", 'return req.tenantId', 'serializePaymentConfig'],
+    reason: 'Legacy M-Pesa settings must use trusted tenant context, role guards, and redacted responses.',
+  },
+  {
+    file: 'server/routes/mikrotikServers.js',
+    requiredSnippets: [
+      "router.post('/', requireRole('owner', 'admin')",
+      "router.put('/:id', requireRole('owner', 'admin')",
+      "router.delete('/:id', requireRole('owner', 'admin')",
+    ],
+    reason: 'Router credential and inventory mutations must be owner/admin only.',
+  },
+  {
+    file: 'server/routes/mikrotikConnect.js',
+    requiredSnippets: ["router.post(\"/\", requireRole('owner', 'admin')"],
+    reason: 'Router connection credentials may be changed by owners/admins only.',
+  },
+  {
     file: 'server/routes/jobs.js',
     requiredSnippets: ["requireRole('owner', 'admin')"],
     reason: 'Scheduler controls must be owner/admin only.',
@@ -95,8 +194,15 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
   },
   {
     file: 'server/routes/payment.js',
-    requiredSnippets: ["requireRole('owner', 'admin')"],
-    reason: 'Payment reversals, retries, and settlement mutations must be owner/admin only.',
+    requiredSnippets: [
+      "router.post('/manual', requireRole('owner', 'admin')",
+      "router.post('/adjust', requireRole('owner', 'admin')",
+      "router.put('/:id', requireRole('owner', 'admin')",
+      "router.delete('/:id', requireRole('owner', 'admin')",
+      "router.patch('/:id/restore', requireRole('owner', 'admin')",
+      'paymentInitiationLimiter',
+    ],
+    reason: 'Payment record mutations must be owner/admin only and payment starts must be rate-limited.',
   },
   {
     file: 'server/routes/platformGatewayEvents.js',
@@ -110,8 +216,12 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
   },
   {
     file: 'server/routes/sms.js',
-    requiredSnippets: ["requireRole('owner', 'admin')"],
-    reason: 'SMS campaigns must be owner/admin only.',
+    requiredSnippets: [
+      "router.post('/settings', requireRole('owner', 'admin')",
+      "requireRole('owner', 'admin')",
+      'serializeSmsSettings',
+    ],
+    reason: 'SMS credentials and campaigns must be owner/admin-managed, with credentials redacted from responses.',
   },
   {
     file: 'server/routes/supportOperations.js',

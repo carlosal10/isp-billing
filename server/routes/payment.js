@@ -31,6 +31,7 @@ const {
 const { upsertStkCorrelation } = require('../services/paymentGatewayCorrelationService');
 const { initiateSTKPush } = require('../utils/mpesa');
 const { normalizeMsisdn } = require('../utils/stkPush');
+const { paymentInitiationLimiter } = require('../middleware/riskRateLimits');
 
 const router = express.Router();
 
@@ -64,7 +65,7 @@ async function logGatewayAction(req, action, payload = {}) {
   }).catch(() => null);
 }
 
-router.post('/stk', async (req, res) => {
+router.post('/stk', paymentInitiationLimiter, async (req, res) => {
   const { customerId, amount, phone, planId, callbackURL } = req.body || {};
   if (!customerId || !amount || !phone || !planId) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -84,8 +85,7 @@ router.post('/stk', async (req, res) => {
     const msisdn = normalizeMsisdn(phone);
     if (!msisdn) {
       console.warn('[payments:/stk] invalid phone format from client', {
-        tenantId: String(req.tenantId),
-        raw: String(phone),
+        requestId: req.id || null,
       });
     }
 
@@ -319,7 +319,7 @@ router.post('/events/:id/resolve', requireRole('owner', 'admin'), async (req, re
   }
 });
 
-router.post('/manual', async (req, res) => {
+router.post('/manual', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const result = await manualValidatePayment({ tenantId: req.tenantId, payload: req.body });
     return res.json(result);
@@ -332,7 +332,7 @@ router.post('/manual', async (req, res) => {
   }
 });
 
-router.post('/adjust', async (req, res) => {
+router.post('/adjust', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const result = await adjustPayment({ tenantId: req.tenantId, payload: req.body });
     return res.json(result);
@@ -345,7 +345,7 @@ router.post('/adjust', async (req, res) => {
   }
 });
 
-router.post('/stripe/create', async (req, res) => {
+router.post('/stripe/create', paymentInitiationLimiter, async (req, res) => {
   const { customerId, planId } = req.body || {};
   if (!customerId || !planId) return res.status(400).json({ error: 'Missing customerId or planId' });
 
@@ -399,7 +399,7 @@ router.post('/stripe/create', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const result = await updatePaymentRecord({
       tenantId: req.tenantId,
@@ -473,7 +473,7 @@ router.post('/:id/chargeback', requireRole('owner', 'admin'), async (req, res) =
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const result = await softDeletePayment({
       tenantId: req.tenantId,
@@ -490,7 +490,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-router.patch('/:id/restore', async (req, res) => {
+router.patch('/:id/restore', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const result = await restorePaymentRecord({
       tenantId: req.tenantId,

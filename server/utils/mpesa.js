@@ -1,6 +1,7 @@
 // utils/mpesa.js
 const axios = require('axios');
 const PaymentConfig = require('../models/PaymentConfig');
+const { decryptPaymentConfig } = require('../security/fieldEncryption');
 
 // Lightweight masking helpers for logging (avoid leaking secrets)
 function maskMid(s, keep = 3) {
@@ -78,8 +79,9 @@ async function getAccessToken({ consumerKey, consumerSecret, environment }) {
  */
 async function initiateSTKPush({ ispId, amount, phone, accountReference, callbackURL }) {
   // Load per-tenant config
-  const cfg = await PaymentConfig.findOne({ ispId, provider: 'mpesa' }).lean();
-  if (!cfg) throw new Error('M-Pesa configuration not found');
+  const storedConfig = await PaymentConfig.findOne({ ispId, provider: 'mpesa' }).lean();
+  if (!storedConfig) throw new Error('M-Pesa configuration not found');
+  const cfg = decryptPaymentConfig(storedConfig);
 
   const payMethod   = (cfg.payMethod || 'paybill').toLowerCase();   // 'paybill' | 'buygoods'
   const environment = cfg.environment || process.env.MPESA_ENV || 'sandbox';
@@ -146,15 +148,12 @@ async function initiateSTKPush({ ispId, amount, phone, accountReference, callbac
       timeout: 10000,
     });
     console.log('[mpesa:initiateSTKPush] response', {
-      MerchantRequestID: data?.MerchantRequestID,
-      CheckoutRequestID: data?.CheckoutRequestID,
       ResponseCode: data?.ResponseCode,
-      ResponseDescription: data?.ResponseDescription,
-      CustomerMessage: data?.CustomerMessage,
+      hasMerchantRequestId: Boolean(data?.MerchantRequestID),
+      hasCheckoutRequestId: Boolean(data?.CheckoutRequestID),
     });
     return data;
   } catch (err) {
-    // Bubble up Daraja’s error body so callers/logs see the exact cause
     const daraja = err.response?.data;
     const message = daraja?.errorMessage || err.message || 'STK push failed';
     const e = new Error(message);
@@ -163,7 +162,6 @@ async function initiateSTKPush({ ispId, amount, phone, accountReference, callbac
     console.error('[mpesa:initiateSTKPush] error', {
       message: e.message,
       status: e.darajaStatus,
-      daraja: e.darajaResponse,
     });
     throw e;
   }

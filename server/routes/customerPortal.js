@@ -2,6 +2,7 @@
 
 const express = require('express');
 const requirePortalAuth = require('../middleware/requirePortalAuth');
+const { paymentInitiationLimiter } = require('../middleware/riskRateLimits');
 const {
   createPortalTicket,
   getPortalOverview,
@@ -62,7 +63,7 @@ router.get('/payments/:id/status', async (req, res) => {
   }
 });
 
-router.post('/payments/mpesa/stk', async (req, res) => {
+router.post('/payments/mpesa/stk', paymentInitiationLimiter, async (req, res) => {
   try {
     const result = await initiatePortalMpesaPayment(req.tenantId, req.portalCustomerId, req.body || {});
     return res.status(201).json(result);
@@ -71,7 +72,6 @@ router.post('/payments/mpesa/stk', async (req, res) => {
     return res.status(err?.statusCode || 500).json({
       error: err?.message || 'Failed to initiate M-Pesa payment',
       darajaStatus: err?.darajaStatus || err?.response?.status || null,
-      darajaResponse: err?.darajaResponse || err?.response?.data || null,
     });
   }
 });

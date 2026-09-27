@@ -1,5 +1,6 @@
 // src/components/StatsCards.jsx
 import useStats from "../hooks/useStats";
+import { MdGroups, MdPayments, MdSpeed } from "react-icons/md";
 import "./StatsCards.css";
 
 /**
@@ -31,20 +32,49 @@ export default function StatsCards({
   const busy = usingProps ? !!loading : !!hookLoading;
 
   const items = [
-    { key: "activePlans", label: "Active Plans", value: data.activePlans ?? 0 },
-    { key: "pendingInvoices", label: "Pending Invoices", value: data.pendingInvoices ?? 0 },
+    {
+      key: "totalCustomers",
+      label: "Customers",
+      value: data.totalCustomers ?? 0,
+      detail: "Subscriber records",
+      icon: MdGroups,
+      tone: "blue",
+    },
+    {
+      key: "activePlans",
+      label: "Active plans",
+      value: data.activePlans ?? 0,
+      detail: "Commercial offers",
+      icon: MdSpeed,
+      tone: "green",
+    },
+    {
+      key: "pendingInvoices",
+      label: "Pending invoices",
+      value: data.pendingInvoices ?? 0,
+      detail: "Awaiting settlement",
+      icon: MdPayments,
+      tone: "amber",
+    },
   ];
 
   return (
     <div className="stats-cards" role="list" aria-busy={busy}>
-      {items.map((it) => (
-        <div className="stat-card" role="listitem" key={it.key}>
-          <div className="stat-label">{it.label}</div>
-          <div className={`stat-value ${busy ? "is-loading" : ""}`}>
-            {busy ? "..." : it.value}
+      {items.map((it) => {
+        const Icon = it.icon;
+        return (
+          <div className={`stat-card tone-${it.tone}`} role="listitem" key={it.key}>
+            <div className="stat-card-topline">
+              <div className="stat-label">{it.label}</div>
+              <span className="stat-icon" aria-hidden="true"><Icon /></span>
+            </div>
+            <div className={`stat-value ${busy ? "is-loading" : ""}`}>
+              {busy ? "..." : Number(it.value).toLocaleString()}
+            </div>
+            <div className="stat-detail">{it.detail}</div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {!usingProps && error && (
         <div className="stat-error" role="alert">

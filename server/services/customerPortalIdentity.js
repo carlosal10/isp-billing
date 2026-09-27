@@ -27,8 +27,23 @@ function matchesCustomerCredential(customer, credential) {
   return false;
 }
 
+async function resolvePortalLoginMethod(
+  customer,
+  { credential, pin } = {},
+  { comparePin } = {}
+) {
+  const pinHash = String(customer?.portalProfile?.pinHash || '').trim();
+  if (pinHash) {
+    if (!pin || typeof comparePin !== 'function') return null;
+    return (await comparePin(String(pin), pinHash)) ? 'pin' : null;
+  }
+
+  return matchesCustomerCredential(customer, credential) ? 'contact' : null;
+}
+
 module.exports = {
   matchesCustomerCredential,
   normalizePortalAccountNumber,
   normalizePortalTenantLookup,
+  resolvePortalLoginMethod,
 };

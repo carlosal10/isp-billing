@@ -1,6 +1,6 @@
 import "./Sidebar.css";
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   MdCable,
   MdClose,
@@ -20,24 +20,80 @@ import {
   MdSupportAgent,
   MdTerminal,
   MdViewList,
+  MdWifiTethering,
 } from "react-icons/md";
 import { FaUsers, FaWifi } from "react-icons/fa";
 import { RiLinksLine } from "react-icons/ri";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
 
+const navigationGroups = [
+  {
+    label: "Workspace",
+    items: [
+      { to: "/", label: "Overview", icon: MdDashboard },
+      { to: "/customers", label: "Customers", icon: FaUsers },
+      { to: "/plans", label: "Plans", icon: MdViewList },
+      { to: "/payments", label: "Payments", icon: MdPayments },
+      { to: "/sms-paylinks", label: "SMS & paylinks", icon: MdSms },
+    ],
+  },
+  {
+    label: "Network",
+    items: [
+      { to: "/routers", label: "Routers", icon: MdRouter },
+      { to: "/pppoe", label: "PPPoE", icon: MdLan },
+      { to: "/hotspot", label: "Hotspot", icon: FaWifi },
+      { to: "/static-ip", label: "Static IP", icon: MdSecurity },
+      { to: "/mikrotik/connect", label: "Connect router", icon: MdCable },
+      { to: "/mikrotik/terminal", label: "Terminal", icon: MdTerminal },
+      { to: "/usage-logs", label: "Usage", icon: MdHistory },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { to: "/operations-health", label: "Operations health", icon: MdSecurity },
+      { to: "/noc", label: "NOC", icon: MdNotificationsActive },
+      { to: "/service-ops", label: "Service operations", icon: MdDns },
+      { to: "/support-ops", label: "Support", icon: MdSupportAgent },
+      { to: "/jobs", label: "Jobs", icon: MdSchedule },
+      { to: "/communications", label: "Communications", icon: MdSms },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { to: "/team-access", label: "Team access", icon: FaUsers },
+      { to: "/api-keys", label: "API keys", icon: MdKey },
+      { to: "/audit-logs", label: "Audit logs", icon: MdSecurity },
+      { to: "/payment-settings", label: "Payment integrations", icon: RiLinksLine },
+      { to: "/settings", label: "Settings", icon: MdSettings },
+    ],
+  },
+];
+
+function initialsFor(user) {
+  const source = user?.displayName || user?.username || user?.email || "Operator";
+  return String(source)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "OP";
+}
+
 export default function Sidebar({ open, toggleSidebar }) {
   const navigate = useNavigate();
-  const { authMode, ispId, isPlatformAdmin, logout, user } = useAuth();
-  const [tenantName, setTenantName] = useState("ISP Billing");
+  const { authMode, ispId, isPlatformAdmin, logout, role, user } = useAuth();
+  const [tenantName, setTenantName] = useState("ISP workspace");
 
   useEffect(() => {
     let mounted = true;
 
     async function loadSidebarTitle() {
       if (isPlatformAdmin || authMode === "platform") {
-        if (!mounted) return;
-        setTenantName("Platform Console");
+        if (mounted) setTenantName("Platform operations");
         return;
       }
 
@@ -46,9 +102,7 @@ export default function Sidebar({ open, toggleSidebar }) {
         const { data } = await api.get("/tenant/me");
         if (mounted && data?.name) setTenantName(String(data.name));
       } catch {
-        if (mounted && user?.displayName) {
-          setTenantName(String(user.displayName));
-        }
+        if (mounted && user?.displayName) setTenantName(String(user.displayName));
       }
     }
 
@@ -58,168 +112,85 @@ export default function Sidebar({ open, toggleSidebar }) {
     };
   }, [authMode, isPlatformAdmin, ispId, user]);
 
+  const operatorName = user?.displayName || user?.username || user?.email || "Operator";
+  const operatorRole = useMemo(
+    () => String(role || (isPlatformAdmin ? "Platform admin" : "Team member")).replace(/-/g, " "),
+    [isPlatformAdmin, role]
+  );
+
+  const handleNavigate = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      toggleSidebar();
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
     } finally {
-      navigate(isPlatformAdmin ? "/login?mode=platform" : "/login", {
-        replace: true,
-      });
+      navigate(isPlatformAdmin ? "/login?mode=platform" : "/login", { replace: true });
     }
   };
 
+  const navClassName = ({ isActive }) => `sidebar-link${isActive ? " active" : ""}`;
+
   return (
-    <nav className={`sidebar ${open ? "show" : ""}`}>
+    <aside className={`sidebar ${open ? "show" : ""}`} aria-label="Application navigation">
       <div className="sidebar-header">
-        <h2 title={tenantName}>{tenantName}</h2>
-        <span
-          className="close-btn"
-          onClick={toggleSidebar}
-          aria-label="Close sidebar"
-        >
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-mark" aria-hidden="true"><MdWifiTethering /></span>
+          <span className="sidebar-brand-copy">
+            <strong>SwiftBridge</strong>
+            <small title={tenantName}>{tenantName}</small>
+          </span>
+        </div>
+        <button className="sidebar-close" onClick={toggleSidebar} aria-label="Close navigation">
           <MdClose />
-        </span>
+        </button>
       </div>
 
-      <ul>
+      <div className="sidebar-scroll">
         {isPlatformAdmin ? (
-          <>
-            <li>
-              <Link to="/platform/gateway-events" onClick={toggleSidebar}>
-                <MdPayments /> Orphan Gateway Events
-              </Link>
-            </li>
-            <li>
-              <button onClick={handleLogout}>
-                <MdLogout /> Logout
-              </button>
-            </li>
-          </>
+          <section className="sidebar-group" aria-labelledby="platform-navigation">
+            <h2 id="platform-navigation">Platform</h2>
+            <NavLink className={navClassName} to="/platform/gateway-events" onClick={handleNavigate}>
+              <MdPayments />
+              <span>Gateway events</span>
+            </NavLink>
+          </section>
         ) : (
-          <>
-            <li>
-              <Link to="/" onClick={toggleSidebar}>
-                <MdDashboard /> Dashboard
-              </Link>
-            </li>
-            <li>
-              <Link to="/routers" onClick={toggleSidebar}>
-                <MdRouter /> Routers
-              </Link>
-            </li>
-            <li>
-              <Link to="/jobs" onClick={toggleSidebar}>
-                <MdSchedule /> Jobs
-              </Link>
-            </li>
-            <li>
-              <Link to="/audit-logs" onClick={toggleSidebar}>
-                <MdSecurity /> Audit Logs
-              </Link>
-            </li>
-            <li>
-              <Link to="/team-access" onClick={toggleSidebar}>
-                <FaUsers /> Team Access
-              </Link>
-            </li>
-            <li>
-              <Link to="/api-keys" onClick={toggleSidebar}>
-                <MdKey /> API Keys
-              </Link>
-            </li>
-            <li>
-              <Link to="/communications" onClick={toggleSidebar}>
-                <MdSms /> Communications
-              </Link>
-            </li>
-            <li>
-              <Link to="/operations-health" onClick={toggleSidebar}>
-                <MdSecurity /> Operations Health
-              </Link>
-            </li>
-            <li>
-              <Link to="/noc" onClick={toggleSidebar}>
-                <MdNotificationsActive /> NOC
-              </Link>
-            </li>
-            <li>
-              <Link to="/service-ops" onClick={toggleSidebar}>
-                <MdDns /> Service Ops
-              </Link>
-            </li>
-            <li>
-              <Link to="/support-ops" onClick={toggleSidebar}>
-                <MdSupportAgent /> Support Ops
-              </Link>
-            </li>
-            <li>
-              <Link to="/static-ip" onClick={toggleSidebar}>
-                <MdSecurity /> Setup Static-IP
-              </Link>
-            </li>
-            <li>
-              <Link to="/sms-paylinks" onClick={toggleSidebar}>
-                <MdSms /> SMS & Paylinks
-              </Link>
-            </li>
-            <li>
-              <Link to="/customers" onClick={toggleSidebar}>
-                <FaUsers /> Manage Clients
-              </Link>
-            </li>
-            <li>
-              <Link to="/plans" onClick={toggleSidebar}>
-                <MdViewList /> Create Plans
-              </Link>
-            </li>
-            <li>
-              <Link to="/pppoe" onClick={toggleSidebar}>
-                <MdLan /> Configure PPPoE
-              </Link>
-            </li>
-            <li>
-              <Link to="/hotspot" onClick={toggleSidebar}>
-                <FaWifi /> Manage Hotspot
-              </Link>
-            </li>
-            <li>
-              <Link to="/payments" onClick={toggleSidebar}>
-                <MdPayments /> Manage Payments
-              </Link>
-            </li>
-            <li>
-              <Link to="/payment-settings" onClick={toggleSidebar}>
-                <RiLinksLine /> Link Payment Account
-              </Link>
-            </li>
-            <li>
-              <Link to="/mikrotik/connect" onClick={toggleSidebar}>
-                <MdCable /> Connect To Mikrotik
-              </Link>
-            </li>
-            <li>
-              <Link to="/mikrotik/terminal" onClick={toggleSidebar}>
-                <MdTerminal /> Mikrotik Terminal
-              </Link>
-            </li>
-            <li>
-              <Link to="/usage-logs" onClick={toggleSidebar}>
-                <MdHistory /> Usage Logs
-              </Link>
-            </li>
-            <li>
-              <Link to="/settings" onClick={toggleSidebar}>
-                <MdSettings /> Settings
-              </Link>
-            </li>
-            <li>
-              <button onClick={handleLogout}>
-                <MdLogout /> Logout
-              </button>
-            </li>
-          </>
+          navigationGroups.map((group) => (
+            <section
+              className="sidebar-group"
+              key={group.label}
+              aria-labelledby={`nav-${group.label.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <h2 id={`nav-${group.label.toLowerCase().replace(/\s+/g, "-")}`}>{group.label}</h2>
+              <div className="sidebar-group-links">
+                {group.items.map(({ to, label, icon: Icon }) => (
+                  <NavLink className={navClassName} to={to} end={to === "/"} onClick={handleNavigate} key={to}>
+                    <Icon />
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </section>
+          ))
         )}
-      </ul>
-    </nav>
+      </div>
+
+      <div className="sidebar-footer">
+        <div className="sidebar-operator">
+          <span className="sidebar-avatar">{initialsFor(user)}</span>
+          <span>
+            <strong title={operatorName}>{operatorName}</strong>
+            <small>{operatorRole}</small>
+          </span>
+        </div>
+        <button className="sidebar-logout" onClick={handleLogout} aria-label="Sign out">
+          <MdLogout />
+        </button>
+      </div>
+    </aside>
   );
 }
