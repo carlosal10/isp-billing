@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -95,19 +96,19 @@ export default function AccountSettings() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
+    <div className="settings-page" style={{ maxWidth: 720, margin: '24px auto', padding: '0 16px' }}>
       <h2 style={{ marginTop: 0 }}>Account Settings</h2>
 
       <form onSubmit={saveSubdomain} className="space-y-3" aria-label="Tenant Subdomain">
         <h3 style={{ margin: 0 }}>Tenant Subdomain</h3>
         <p className="helper-text">Set your subdomain (e.g., "acme" → acme.your-root-domain)</p>
-        <input
+        <Field label="subdomain"><input
           type="text"
           value={subdomain}
           onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
           placeholder="subdomain"
           required
-        />
+        /></Field>
         <button type="submit" disabled={savingSub}>{savingSub ? 'Saving…' : 'Save subdomain'}</button>
         {subMsg && (
           <div className="helper-text" style={{ color: subMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{subMsg}</div>
@@ -160,12 +161,12 @@ export default function AccountSettings() {
       }} className="space-y-3" aria-label="Account Number Prefix">
         <h3 style={{ margin: 0 }}>Account Number Prefix</h3>
         <p className="helper-text">Optional prefix prepended to generated account numbers (e.g., FML- or FUNNET-)</p>
-        <input
+        <Field label="e.g., FML-"><input
           type="text"
           value={prefix}
           onChange={(e) => setPrefix(e.target.value.toUpperCase())}
           placeholder="e.g., FML-"
-        />
+        /></Field>
         <button type="submit">Save prefix</button>
         {prefixMsg && (
           <div className="helper-text" style={{ color: prefixMsg.startsWith('Failed') ? '#ef4444' : '#16a34a' }}>{prefixMsg}</div>
@@ -174,8 +175,8 @@ export default function AccountSettings() {
 
       <form onSubmit={saveProfile} className="space-y-3" aria-label="Profile">
         <h3 style={{ margin: 0 }}>Profile</h3>
-        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" />
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+        <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" /></Field>
+        <Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" /></Field>
         <button type="submit" disabled={busyEmail}>{busyEmail ? 'Saving…' : 'Save profile'}</button>
         {msgEmail && (
           <div className="helper-text" style={{ color: msgEmail.includes('success') ? '#16a34a' : '#ef4444' }}>{msgEmail}</div>
@@ -184,9 +185,9 @@ export default function AccountSettings() {
 
       <form onSubmit={changePassword} className="space-y-3" aria-label="Password">
         <h3 style={{ margin: 0 }}>Change Password</h3>
-        <input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} placeholder="Current password" />
-        <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password (min 8 chars)" />
-        <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="Confirm new password" />
+        <Field label="Current password"><input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} placeholder="Current password" /></Field>
+        <Field label="New password (min 8 chars)"><input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password (min 8 chars)" /></Field>
+        <Field label="Confirm new password"><input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="Confirm new password" /></Field>
         <button type="submit" disabled={busyPw}>{busyPw ? 'Saving…' : 'Change password'}</button>
         {msgPw && (
           <div className="helper-text" style={{ color: msgPw.includes('success') ? '#16a34a' : '#ef4444' }}>{msgPw}</div>

@@ -1,12 +1,13 @@
+import { Field } from "./ui/Field";
 // src/components/CustomersModal.jsx
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import "./CustomersModal.css";
 import { api } from "../lib/apiClient";
-import useDragResize from "../hooks/useDragResize";
+
 
 /** ---------- utils ---------- */
 
@@ -284,20 +285,20 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
 
   return (
     <form onSubmit={handleSubmit}>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" required />
-      <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email" required />
-      <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone Number" required />
-      <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" required />
-      <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account Number (optional)" />
+      <Field label="Full Name"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" required /></Field>
+      <Field label="Email"><input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email" required /></Field>
+      <Field label="Phone Number"><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone Number" required /></Field>
+      <Field label="Address"><input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" required /></Field>
+      <Field label="Account Number (optional)"><input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account Number (optional)" /></Field>
 
-      <select value={plan} onChange={(e) => setPlan(e.target.value)} required>
+      <Field label="Select Plan"><select value={plan} onChange={(e) => setPlan(e.target.value)} required>
         <option value="">Select Plan</option>
         {plans.map((p) => (
           <option key={p._id} value={p._id}>
             {p.name} - {p.speed}Mbps - {p.price} KES
           </option>
         ))}
-      </select>
+      </select></Field>
 
       <div className="customer-form-section">
         <div className="customer-form-section-title">Billing Profile</div>
@@ -576,17 +577,10 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
   const [autoAcc, setAutoAcc] = useState(true);
   const [trustLists, setTrustLists] = useState(true);
 
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 780,
-    minHeight: 560,
-    defaultSize: { width: 1024, height: 720 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   const showError = (msg, e) => {
     console.error(msg, e?.__debug || e);
@@ -668,25 +662,9 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`modal-content customers-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
+      <div  className={`modal-content customers-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
         {!standalone ? (
-          <span className="close" onClick={onClose} data-modal-no-drag>
+          <span className="close" onClick={onClose} >
             <FaTimes />
           </span>
         ) : null}
@@ -765,7 +743,7 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
                 );
               }}
             >
-              <select
+              <Field label="Select Customer"><select
                 onChange={(e) =>
                   setSelectedCustomer(customers.find((c) => c._id === e.target.value) || null)
                 }
@@ -776,7 +754,7 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </select></Field>
               <button type="submit" disabled={loading || !selectedCustomer}>
                 <RiDeleteBinLine className="inline-icon" /> Remove Customer
               </button>
@@ -887,14 +865,14 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
                     }
                     setImporting(true);
                     try {
-                      const payload = { 
+                      const payload = {
                         autoAccount: !!autoAcc,
                         items: items.map((it) => ({
                           ...(autoAcc ? {} : { accountNumber: it.accountNumber || it.ip.replace(/\./g, '-') }),
                           ip: it.ip,
                           comment: it.comment || '',
                           planId: importPlan || undefined,
-                        })) 
+                        }))
                       };
                       const { data } = await api.post('/customers/import-static', payload, { timeout: 60000 });
                       const okCount = Array.isArray(data?.results) ? data.results.filter((r) => r.ok).length : 0;

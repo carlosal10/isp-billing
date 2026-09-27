@@ -1,9 +1,9 @@
 // src/components/MessagingModal.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { api } from "../lib/apiClient";
 import "./MessagingModal.css";
-import useDragResize from "../hooks/useDragResize";
+
 
 const TEMPLATES = [
   {
@@ -176,17 +176,10 @@ export default function MessagingModal({ isOpen = false, onClose, defaults, stan
   );
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState("");
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 540,
-    minHeight: 520,
-    defaultSize: { width: 720, height: 640 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   useEffect(() => {
     if (!visible || standalone) return;
@@ -237,26 +230,10 @@ export default function MessagingModal({ isOpen = false, onClose, defaults, stan
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-        {/* Close */}
+      <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
+         */}
         {!standalone ? (
-          <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
+          <button onClick={onClose} className="ps-close" aria-label="Close" >
             <FaTimes size={18} />
           </button>
         ) : null}

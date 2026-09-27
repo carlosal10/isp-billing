@@ -1,26 +1,19 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import "./MikrotikTerminalModal.css";
 import { api } from "../lib/apiClient";
 import { useServer } from "../context/ServerContext";
-import useDragResize from "../hooks/useDragResize";
+
 
 export default function MikrotikTerminalModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
   const [cmd, setCmd] = useState("/system/resource/print");
   const [out, setOut] = useState([]);
   const { servers, selected, setSelected, reload } = useServer();
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 680,
-    minHeight: 560,
-    defaultSize: { width: 920, height: 640 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   if (!visible) return null;
 
@@ -46,26 +39,10 @@ export default function MikrotikTerminalModal({ isOpen = false, onClose, standal
   };
 
   const content = (
-      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-        {/* Close */}
+      <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
+         */}
         {!standalone ? (
-          <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
+          <button className="ps-close" onClick={onClose} aria-label="Close" >
             <FaTimes size={18} />
           </button>
         ) : null}

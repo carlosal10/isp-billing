@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -43,32 +44,32 @@ export default function InviteAccept() {
         </div>
 
         <form onSubmit={submit} className="login-form">
-          <input
+          <Field label="Invite code"><input
             value={code}
             onChange={(event) => setCode(event.target.value.trim())}
             placeholder="Invite code"
             required
-          />
-          <input
+          /></Field>
+          <Field label="Display name"><input
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
             placeholder="Display name"
             required
-          />
-          <input
+          /></Field>
+          <Field label="Password (min 8 chars)"><input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Password (min 8 chars)"
             required
-          />
-          <input
+          /></Field>
+          <Field label="Confirm password"><input
             type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="Confirm password"
             required
-          />
+          /></Field>
           <button type="submit" disabled={busy || !code}>
             {busy ? "Joining..." : "Accept Invite"}
           </button>
