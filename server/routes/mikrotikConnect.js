@@ -13,6 +13,8 @@ const {
 
 const MikroTikConnection = require("../models/MikrotikConnection");
 const RouterEvent = require("../models/RouterEvent");
+const requireRole = require("../middleware/requireRole");
+const { decryptField } = require('../security/fieldEncryption');
 
 function isMacAddress(value) {
   return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
@@ -90,7 +92,7 @@ setConfigLoader(async (tenantId, selector = {}) => {
     host: String(rec.host),
     port,
     user: String(rec.username),
-    password: rec.password,
+    password: decryptField(rec.password),
     tls,
     timeout: Number(rec.timeout) || 15000
   };
@@ -120,7 +122,7 @@ setAuditLogger(async (entry) => {
 });
 
 // ------------------------------ Router connect endpoint ------------------------------
-router.post("/", async (req, res) => {
+router.post("/", requireRole('owner', 'admin'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     if (!tenantId) {
@@ -163,7 +165,7 @@ router.post("/", async (req, res) => {
       host,
       port,
       username: user,
-      password, // stored as-is; consider vaulting or encryption in production
+      password,
       tls,
       timeout: connectTimeoutMs,
       primary,

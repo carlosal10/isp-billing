@@ -94,7 +94,7 @@ export default function PayLink() {
       const resp = await api.post("/paylink/stk", { token, phone: msisdn });
       const pid = resp?.data?.paymentId;
       setMessage("Payment request sent. Check your phone to approve.");
-      if (pid) pollStatus(pid);
+      if (pid) pollStatus(pid, token);
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || "Failed to initiate payment");
     } finally {
@@ -103,13 +103,15 @@ export default function PayLink() {
   }
 
   // Poll status until terminal state or timeout
-  const pollStatus = useCallback(async (pid) => {
+  const pollStatus = useCallback(async (pid, paylinkToken) => {
     const started = Date.now();
     const timeoutMs = 2 * 60 * 1000; // 2 minutes
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     while (Date.now() - started < timeoutMs) {
       try {
-        const res = await api.get("/paylink/status", { params: { paymentId: pid } });
+        const res = await api.get("/paylink/status", {
+          params: { paymentId: pid, token: paylinkToken },
+        });
         const st = res?.data?.status;
         setStatus(st || "");
         if (st === "Success" || st === "Validated") {

@@ -1,11 +1,18 @@
 import React from "react";
 
-export function Button({ children, onClick, type = "button", className = "" }) {
+export function Button({
+  children,
+  className = "",
+  size = "md",
+  type = "button",
+  variant = "primary",
+  ...props
+}) {
   return (
     <button
       type={type}
-      onClick={onClick}
-      className={`px-4 py-2 bg-blue-600 text-white rounded-xl shadow hover:bg-blue-700 transition ${className}`}
+      className={`ui-button ui-button--${variant} ui-button--${size} ${className}`.trim()}
+      {...props}
     >
       {children}
     </button>

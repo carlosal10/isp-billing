@@ -14,9 +14,20 @@ const { buildBaseUrl } = require("./utils/paylink");
 const requireAuth = require("./middleware/requireAuth");
 const requireTenant = require("./middleware/requireTenant");
 const requirePlatformAdmin = require("./middleware/requirePlatformAdmin");
+const { authenticateTenantSocket } = require("./security/tenantSocketAuth");
+const {
+  canUseTerminalRole,
+  parseCli,
+  isAllowed,
+  redactCommand,
+  sanitizeTerminalResult,
+  sanitizeTerminalWords,
+  sendCommand: sendTerminalCommand,
+} = require("./services/terminal");
 const { isPublicRequestPath } = require("./middleware/publicPaths");
 const { requestContext } = require("./middleware/requestContext");
 const { securityHeaders } = require("./middleware/securityHeaders");
+const stripeWebhook = require("./routes/stripeWebhook");
 const {
   requestMetricsMiddleware,
   requireMetricsAccess,
@@ -64,6 +75,9 @@ app.set("trust proxy", 1);
 app.use(requestContext());
 app.use(securityHeaders());
 app.use(requestMetricsMiddleware());
+// Stripe signature verification requires the untouched request bytes.
+// This mount must remain before the global JSON parser.
+app.use("/api/payment/stripe", stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -76,7 +90,7 @@ app.use(
       return cb(new Error("CORS blocked: " + origin));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id","X-Requested-With", "x-isp-server", "X-API-KEY","Accept", "X-Request-ID"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-isp-id", "X-Requested-With", "x-isp-server", "X-API-KEY", "X-Platform-Bootstrap-Token", "Accept", "X-Request-ID"],
     exposedHeaders: ["X-Request-ID"],
     credentials: true,
     optionsSuccessStatus: 204,
@@ -92,11 +106,10 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const dur = Date.now() - t0;
     const sawAuth = !!req.headers.authorization;
-    const hasAtCookie = !!(req.cookies && req.cookies.at);
-    const isp = req.headers["x-isp-id"] || null;
+    const hasTenantHeader = !!req.headers["x-isp-id"];
     console.log(
-      `[${req.id}] [${req.method}] ${res.statusCode} ${req.originalUrl} ${dur}ms`,
-      { sawAuth, hasAtCookie, isp }
+      `[${req.id}] [${req.method}] ${res.statusCode} ${normalizePath(req.originalUrl)} ${dur}ms`,
+      { sawAuth, hasTenantHeader }
     );
   });
   next();
@@ -176,7 +189,6 @@ const paymentCallbackRoutes = require("./routes/paymentCallback");
 const paymentConfigRoutes = require("./routes/paymentConfig");
 const mpesaC2BRoutes = require("./routes/mpesaC2B");
 const mpesaSettingsRoutes = require("./routes/mpesaSettings");
-const stripeWebhook = require("./routes/stripeWebhook");
 const smsRoutes = require("./routes/sms");
 const paylinkRoutes = require("./routes/paylink");
 const paylinkAdminRoutes = require("./routes/paylinkAdmin");
@@ -193,6 +205,7 @@ const {
   readinessStatusCode,
 } = require("./services/runtimeHealthService");
 const {
+  normalizePath,
   renderPrometheusMetrics,
   requestMetrics,
 } = require("./services/requestMetricsService");
@@ -273,7 +286,6 @@ app.use("/api/paylink", paylinkRoutes);
 // Public payment provider callbacks (support both singular/plural path variations)
 app.use("/api/payment/callback", paymentCallbackRoutes);
 app.use("/api/payments/callback", paymentCallbackRoutes);
-app.use("/api/payment/stripe", stripeWebhook);
 app.use("/api/mpesa/c2b", mpesaC2BRoutes);
 app.use("/api/integration", integrationApiRoutes);
 
@@ -298,7 +310,7 @@ app.use("/api/support", authenticate, attachTenant, supportOperationsRoutes);
 app.use("/api/usageLogs", authenticate, attachTenant, usageLogsRoutes);
 app.use("/api/stats", authenticate, attachTenant, statsRoutes);
 app.use("/api/tenant", authenticate, attachTenant, tenantRoutes);
-app.use("/api/account", authenticate, accountRoutes);
+app.use("/api/account", authenticate, attachTenant, accountRoutes);
 app.use("/api/queues", authenticate, attachTenant, queuesRoutes);
 app.use("/api/arp", authenticate, attachTenant, arpRoutes);
 app.use("/api/pppoe", authenticate, attachTenant, pppoeRoutes);  
@@ -358,15 +370,18 @@ if (String(process.env.SERVE_CLIENT).toLowerCase() === 'true') {
 }
 
 // ----------------- Socket.IO (namespaced terminal) -----------------
-io.of("/terminal").use((socket, next) => {
+io.of("/terminal").use(async (socket, next) => {
   try {
-    const { token, ispId } = socket.handshake.auth || {};
-    if (!token) return next(new Error("Missing token"));
-    const decoded = jwt.verify(token.split(" ")[1] || token, process.env.JWT_SECRET);
-    socket.user = decoded;
-    socket.tenantId = ispId || decoded.ispId;
-    if (!socket.tenantId) return next(new Error("Missing tenant"));
-    next();
+    const context = await authenticateTenantSocket(socket.handshake.auth || {});
+    if (!canUseTerminalRole(context.role)) {
+      return next(new Error("Terminal role required"));
+    }
+    socket.user = context.user;
+    socket.tenantId = context.tenantId;
+    socket.membership = context.membership;
+    socket.role = context.role;
+    socket.authToken = context.authToken;
+    return next();
   } catch (err) {
     return next(new Error("Unauthorized"));
   }
@@ -374,15 +389,30 @@ io.of("/terminal").use((socket, next) => {
 
 io.of("/terminal").on("connection", (socket) => {
   console.log("🔌 terminal connected", { user: socket.user?.sub, tenant: socket.tenantId });
-  socket.on("exec", async ({ command }) => {
+  socket.on("exec", async (payload) => {
     try {
-      const { parseCli, isAllowed, sendCommand } = require("./services/terminal");
+      const command = payload?.command;
+      const context = await authenticateTenantSocket({
+        token: socket.authToken,
+        ispId: socket.tenantId,
+      });
+      socket.membership = context.membership;
+      socket.role = context.role;
+      if (!canUseTerminalRole(context.role)) {
+        throw new Error("Terminal role required");
+      }
       const { path, words } = parseCli(command);
       if (!isAllowed(path)) return socket.emit("error", `Not allowed: ${path}`);
-      const result = await sendCommand(socket.tenantId, path, words);
-      socket.emit("result", { command, result });
+      const result = await sendTerminalCommand(socket.tenantId, path, words);
+      socket.emit("result", {
+        command: redactCommand(command),
+        words: sanitizeTerminalWords(words),
+        result: sanitizeTerminalResult(result),
+      });
     } catch (e) {
-      socket.emit("error", e?.message || "exec failed");
+      const authorizationFailure = /token|tenant|membership|jwt|expired|role|forbidden/i.test(e?.message || "");
+      socket.emit("error", authorizationFailure ? "Session expired or tenant access revoked" : (e?.message || "exec failed"));
+      if (authorizationFailure) socket.disconnect(true);
     }
   });
   socket.on("disconnect", () => console.log("🔌 terminal disconnected"));

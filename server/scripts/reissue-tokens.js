@@ -10,16 +10,11 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const fs = require('fs');
 const mongoose = require('mongoose');
-const crypto = require('crypto');
 
 const User = require('../models/User');
 const Membership = require('../models/Membership');
-const RefreshToken = require('../models/RefreshToken');
 const { signTenantAccessToken } = require('../utils/jwt');
-
-function refreshExpiry(days = Number(process.env.REFRESH_TTL_DAYS || 30)) {
-  return new Date(Date.now() + days * 86400 * 1000);
-}
+const { issueRefreshToken } = require('../services/refreshTokenService');
 
 function parseArgs(argv) {
   const args = { cases: [] };
@@ -72,8 +67,7 @@ async function reissueOne({ email, tenantId }) {
   if (!mem) throw new Error(`No membership for tenant ${tenantId} for user ${email}`);
 
   const accessToken = signTenantAccessToken({ user, tenantId });
-  const token = crypto.randomBytes(48).toString('base64url');
-  await RefreshToken.create({ token, user: user._id, tenant: tenantId, expiresAt: refreshExpiry() });
+  const token = await issueRefreshToken({ userId: user._id, tenantId });
 
   return {
     email,

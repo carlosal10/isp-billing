@@ -7,12 +7,13 @@ const Customer = require('../models/customers');
 const Tenant = require('../models/Tenant');
 const requirePortalAuth = require('../middleware/requirePortalAuth');
 const {
-  matchesCustomerCredential,
   normalizePortalAccountNumber,
   normalizePortalTenantLookup,
+  resolvePortalLoginMethod,
 } = require('../services/customerPortalIdentity');
 const { getPortalCustomer } = require('../services/customerPortalService');
 const { signCustomerPortalAccessToken } = require('../utils/jwt');
+const { loginLimiter } = require('../middleware/riskRateLimits');
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ async function resolvePortalCustomer({ tenantName, accountNumber }) {
   return { tenant, customer };
 }
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const parsed = LoginSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -68,20 +69,12 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Customer portal access is disabled' });
     }
 
-    let authenticated = false;
-    let loginMethod = null;
-
-    if (customer.portalProfile?.pinHash && pin) {
-      authenticated = await bcrypt.compare(pin, customer.portalProfile.pinHash);
-      if (authenticated) loginMethod = 'pin';
-    }
-
-    if (!authenticated && credential) {
-      authenticated = matchesCustomerCredential(customer, credential);
-      if (authenticated) loginMethod = 'contact';
-    }
-
-    if (!authenticated) {
+    const loginMethod = await resolvePortalLoginMethod(
+      customer,
+      { credential, pin },
+      { comparePin: bcrypt.compare }
+    );
+    if (!loginMethod) {
       return res.status(401).json({ ok: false, error: 'Invalid portal credentials' });
     }
 

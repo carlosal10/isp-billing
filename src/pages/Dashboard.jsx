@@ -143,7 +143,7 @@ function deriveCreatedAt(customer) {
    Component
 ----------------------------------- */
 export default function Dashboard() {
-  const { isAuthenticated, token, ispId } = useAuth();
+  const { isAuthenticated, token, ispId, user } = useAuth();
   const pageVisible = usePageVisibility();
   const mountedRef = useRef(true);
 
@@ -821,8 +821,8 @@ export default function Dashboard() {
         {
           label: "Payments (KES) - last 14 days",
           data: labels.map((k) => map.get(k) || 0),
-          borderColor: "rgb(255,59,59)",
-          backgroundColor: "rgba(255,59,59,0.2)",
+          borderColor: "#175cd3",
+          backgroundColor: "rgba(23,92,211,0.14)",
           tension: 0.3,
           pointRadius: 2,
         },
@@ -859,13 +859,36 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       <div className="main-content">
-        <header className="page-header">
-          <h1>Dashboard</h1>
+        <header className="page-header dashboard-header">
+          <div className="dashboard-heading">
+            <span className="dashboard-eyebrow">Network command center</span>
+            <h1>Operations overview</h1>
+            <p>
+              {user?.displayName ? `Welcome back, ${user.displayName}. ` : ""}
+              Track subscribers, collections, and network access from one live view.
+            </p>
+          </div>
 
-          <div className="header-search">
+          <div
+            className={`mikrotik-status ${mikrotik.connected ? "online" : "offline"}`}
+            title={mikrotik.routerIp || ""}
+          >
+            <span className="dot" />
+            <span className="mikrotik-status-copy">
+              <strong>{mikrotik.connected ? "Network connected" : "Network attention needed"}</strong>
+              <small>
+                {mikrotik.connected
+                  ? [mikrotik.identity, mikrotik.uptime ? `Uptime ${mikrotik.uptime}` : null].filter(Boolean).join(" · ") || "MikroTik responding"
+                  : "Check router reachability and credentials"}
+              </small>
+            </span>
+          </div>
+
+          <div className="header-search dashboard-search">
             <input
               className="search-input"
-              placeholder="Search customers (name, account, phone, email, address)"
+              aria-label="Search customers"
+              placeholder="Search by customer, account, phone, email, or address"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -877,9 +900,8 @@ export default function Dashboard() {
             <button
               className="btn"
               onClick={() => { setBrowseOpen(true); setTimeout(scrollToCustomers, 0); }}
-              style={{ marginLeft: 8 }}
             >
-              Browse All
+              Browse customers
             </button>
             {searchOpen && searchQuery.trim() && (
               <div className="search-results">
@@ -905,16 +927,6 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div
-            className={`mikrotik-status ${mikrotik.connected ? "online" : "offline"}`}
-            title={mikrotik.routerIp || ""}
-          >
-            <span className="dot" />
-            {mikrotik.connected ? "MikroTik Connected" : "MikroTik Disconnected"}
-            {mikrotik.identity ? ` — ${mikrotik.identity}` : ""}{" "}
-            {mikrotik.routerIp ? `(${mikrotik.routerIp})` : ""}
-            {mikrotik.uptime ? ` • Uptime: ${mikrotik.uptime}` : ""}
-          </div>
         </header>
 
         {/* Stats skeleton while loading */}
@@ -930,25 +942,30 @@ export default function Dashboard() {
         )}
 
         <section className="quick-counters">
-          <div className="counter">
-            <div className="counter-title">Online</div>
+          <div className="counter counter-online">
+            <div className="counter-title"><span />Online now</div>
             <div className="counter-value">{computed.onlineCount}</div>
+            <small>Active sessions</small>
           </div>
-          <div className="counter">
-            <div className="counter-title">Due in {DUE_WINDOW_DAYS}d</div>
+          <div className="counter counter-due">
+            <div className="counter-title"><span />Due in {DUE_WINDOW_DAYS} days</div>
             <div className="counter-value">{computed.dueCount}</div>
+            <small>Needs attention soon</small>
           </div>
-          <div className="counter">
-            <div className="counter-title">Expired</div>
+          <div className="counter counter-expired">
+            <div className="counter-title"><span />Expired</div>
             <div className="counter-value">{computed.expiredCount}</div>
+            <small>Access review</small>
           </div>
-          <div className="counter">
-            <div className="counter-title">Total Customers</div>
+          <div className="counter counter-total">
+            <div className="counter-title"><span />Total customers</div>
             <div className="counter-value">{computed.totalCustomers}</div>
+            <small>All subscriber records</small>
           </div>
-          <div className="counter">
-            <div className="counter-title">Static Inactive</div>
+          <div className="counter counter-static">
+            <div className="counter-title"><span />Static inactive</div>
             <div className="counter-value">{computed.staticInactiveCount}</div>
+            <small>Queue state review</small>
           </div>
         </section>
 

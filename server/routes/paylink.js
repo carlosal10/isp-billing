@@ -6,6 +6,8 @@ const { sendSTKPush } = require('../utils/stkPush');
 const PaymentConfig = require('../models/PaymentConfig');
 const { upsertStkCorrelation } = require('../services/paymentGatewayCorrelationService');
 const { ensureCollectableInvoiceForPaymentStart } = require('../services/billingFinanceService');
+const { paymentInitiationLimiter } = require('../middleware/riskRateLimits');
+const { decryptPaymentConfig } = require('../security/fieldEncryption');
 
 function normalizePhone(msisdn) {
   let s = String(msisdn).replace(/\D/g, '');
@@ -19,6 +21,41 @@ function shortRef(x) {
   return (x || 'PAY').toString().replace(/[^A-Za-z0-9\-_. ]/g, '').slice(0, 12);
 }
 
+function buildPaylinkStatusFilter({ paymentId, token } = {}) {
+  const id = String(paymentId || '').trim();
+  if (!id) {
+    const error = new Error('Missing paymentId');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!token) {
+    const error = new Error('Paylink token is required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let decoded;
+  try {
+    decoded = verifyPayToken(token);
+  } catch (error) {
+    error.statusCode = 401;
+    throw error;
+  }
+  const tenantId = String(decoded?.tenantId || '').trim();
+  const customerId = String(decoded?.customerId || '').trim();
+  if (!tenantId || !customerId) {
+    const error = new Error('Invalid paylink token');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return {
+    _id: id,
+    tenantId,
+    customer: customerId,
+  };
+}
+
 router.get('/info', async (req, res) => {
   try {
     const { token } = req.query;
@@ -30,7 +67,7 @@ router.get('/info', async (req, res) => {
   }
 });
 
-router.post('/stk', async (req, res) => {
+router.post('/stk', paymentInitiationLimiter, async (req, res) => {
   try {
     const { token, phone } = req.body || {};
     if (!token || !phone) return res.status(400).json({ error: 'Missing token or phone' });
@@ -39,14 +76,12 @@ router.post('/stk', async (req, res) => {
     const { tenantId, customerId, planId } = decoded;
 
     console.log('[paylink:/stk] request', {
-      tenantId: String(tenantId),
-      customerId: String(customerId),
-      planId: String(planId),
-      phoneRaw: String(phone),
+      requestId: req.id || null,
     });
 
     // 1) Load tenant config (fallback to env for legacy)
-    const cfg = await PaymentConfig.findOne({ ispId: String(tenantId), provider: 'mpesa' }).lean();
+    const storedConfig = await PaymentConfig.findOne({ ispId: String(tenantId), provider: 'mpesa' }).lean();
+    const cfg = decryptPaymentConfig(storedConfig);
 
     const payMethod = cfg?.payMethod === 'buygoods' ? 'buygoods' : 'paybill';
     const environment = cfg?.environment === 'production' ? 'production' : 'sandbox';
@@ -97,17 +132,14 @@ router.post('/stk', async (req, res) => {
     });
 
     console.log('[paylink:/stk] created payment', {
-      paymentId: String(payment._id),
-      tenantId: String(tenantId),
+      requestId: req.id || null,
       amount,
-      phoneNorm: msisdn,
     });
 
     // 5) Compute callback base
     const apiBase = process.env.VITE_API_URL || '';
     const serverBase = apiBase.replace(/\/?api\/?$/, '');
     const callbackUrl = process.env.MPESA_CALLBACK_URL || `${serverBase}/api/payment/callback/callback`;
-    console.log('[paylink:/stk] callback URL', { callbackUrl });
 
     // 6) Pick TransactionType per payMethod
     const transactionType = payMethod === 'buygoods'
@@ -131,12 +163,8 @@ router.post('/stk', async (req, res) => {
     });
 
     console.log('[paylink:/stk] STK response', {
-      paymentId: String(payment._id),
-      MerchantRequestID: resp?.MerchantRequestID,
-      CheckoutRequestID: resp?.CheckoutRequestID,
+      requestId: req.id || null,
       ResponseCode: resp?.ResponseCode,
-      ResponseDescription: resp?.ResponseDescription,
-      CustomerMessage: resp?.CustomerMessage,
     });
 
     // Persist Daraja correlation ids so callback can match this payment
@@ -164,9 +192,9 @@ router.post('/stk', async (req, res) => {
           console.warn('Could not persist STK correlation:', correlationError?.message || correlationError);
         });
         console.log('[paylink:/stk] saved STK ids to payment', {
-          paymentId: String(payment._id),
-          CheckoutRequestID: checkoutRequestId || null,
-          MerchantRequestID: merchantRequestId || null,
+          requestId: req.id || null,
+          hasCheckoutRequestId: Boolean(checkoutRequestId),
+          hasMerchantRequestId: Boolean(merchantRequestId),
         });
       }
     } catch (e) {
@@ -194,19 +222,20 @@ router.post('/stk', async (req, res) => {
 // Poll payment status (public)
 router.get('/status', async (req, res) => {
   try {
-    const { paymentId } = req.query || {};
-    if (!paymentId) return res.status(400).json({ error: 'Missing paymentId' });
-    const p = await Payment.findById(paymentId).lean();
+    const { paymentId, token } = req.query || {};
+    const filter = buildPaylinkStatusFilter({ paymentId, token });
+    const p = await Payment.findOne(filter).lean();
     if (!p) return res.status(404).json({ error: 'Payment not found' });
     res.json({
       status: p.status,
-      transactionId: p.transactionId || null,
       amount: p.amount,
       method: p.method,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message || 'Failed to fetch payment status' });
+    const status = Number(e?.statusCode) || (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError' ? 401 : 500);
+    res.status(status).json({ error: e.message || 'Failed to fetch payment status' });
   }
 });
 
 module.exports = router;
+module.exports.buildPaylinkStatusFilter = buildPaylinkStatusFilter;

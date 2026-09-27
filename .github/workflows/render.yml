@@ -44,6 +44,10 @@ jobs:
         run: npm run env:check
       - name: Run server tests
         run: npm run test:server
+      - name: Syntax-check security scripts
+        run: |
+          node --check server/scripts/encrypt-configuration-secrets.js
+          node --check server/scripts/reissue-tokens.js
       - name: Build client
         run: npm run build
 

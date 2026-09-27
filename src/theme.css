@@ -1,29 +1,29 @@
 /* Executive visual system: shared polish across pages, modals, tables, and forms. */
 :root {
-  --brand-navy: #0b2545;
-  --brand-navy-2: #12345f;
-  --brand-red: #e63946;
-  --brand-red-dark: #b92533;
-  --brand-gold: #f1c40f;
-  --brand-green: #16a34a;
+  --brand-navy: #071a2f;
+  --brand-navy-2: #0b3b8c;
+  --brand-red: #175cd3;
+  --brand-red-dark: #0b3b8c;
+  --brand-gold: #0ea5e9;
+  --brand-green: #12b76a;
 
-  --ink: #101827;
-  --ink-soft: #334155;
-  --muted: #64748b;
-  --canvas: #f5f7fb;
-  --canvas-2: #eef3f8;
+  --ink: #10243e;
+  --ink-soft: #354a62;
+  --muted: #5d6b7d;
+  --canvas: #f4f7fb;
+  --canvas-2: #edf3f9;
   --surface: #ffffff;
   --surface-soft: #f8fafc;
-  --line: #dfe6ef;
-  --line-strong: #cbd5e1;
+  --line: #dce4ee;
+  --line-strong: #bdcad9;
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-card: 8px;
-  --shadow-card: 0 18px 38px rgba(15, 23, 42, 0.08);
-  --shadow-soft: 0 10px 26px rgba(15, 23, 42, 0.07);
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-card: 14px;
+  --shadow-card: 0 18px 44px rgba(7, 26, 47, 0.08);
+  --shadow-soft: 0 10px 28px rgba(7, 26, 47, 0.07);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  --focus-ring: 0 0 0 3px rgba(241, 196, 15, 0.28);
+  --focus-ring: 0 0 0 3px rgba(14, 165, 233, 0.22);
 }
 
 *,
@@ -177,7 +177,7 @@ button.primary,
   border: 1px solid transparent !important;
   background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark)) !important;
   color: #fff !important;
-  box-shadow: 0 14px 24px rgba(230, 57, 70, 0.22) !important;
+  box-shadow: 0 14px 28px rgba(23, 92, 211, 0.22) !important;
 }
 
 .btn:hover,
@@ -185,7 +185,7 @@ button.primary,
 .primary:hover,
 button.primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 30px rgba(230, 57, 70, 0.28) !important;
+  box-shadow: 0 18px 34px rgba(23, 92, 211, 0.29) !important;
 }
 
 .secondary,
@@ -294,7 +294,7 @@ tbody tr,
 
 tbody tr:hover,
 .data-table tbody tr:hover {
-  background: #fff9ed !important;
+  background: #f4f8ff !important;
 }
 
 tbody tr:last-child td,
@@ -494,3 +494,96 @@ div[style*="box-shadow"] {
     min-width: 680px;
   }
 }
+
+/* Shared primitives. These replace utility-library strings in the reusable
+   component layer and provide one stable base for the UI migration. */
+.ui-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.ui-button--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark));
+  box-shadow: 0 12px 26px rgba(23, 92, 211, 0.22);
+}
+
+.ui-button--secondary {
+  color: var(--brand-navy);
+  border-color: var(--line);
+  background: #fff;
+}
+
+.ui-button--danger { color: #fff; background: #f04438; }
+.ui-button--sm { min-height: 36px; padding-inline: 12px; font-size: 0.82rem; }
+.ui-button--lg { min-height: 48px; padding-inline: 20px; }
+.ui-button:hover:not(:disabled) { transform: translateY(-1px); }
+.ui-button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ui-button:disabled { cursor: not-allowed; opacity: 0.58; transform: none; }
+
+.ui-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.ui-card-content { padding: 18px; }
+
+.ui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 18, 33, 0.64);
+  backdrop-filter: blur(6px);
+}
+
+.ui-modal-surface {
+  position: relative;
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid rgba(220, 228, 238, 0.9);
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: 0 36px 90px rgba(7, 26, 47, 0.28);
+}
+
+.ui-modal-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line) !important;
+  border-radius: 10px !important;
+  color: var(--muted) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.ui-modal-close:hover { color: var(--ink) !important; background: #f4f7fb !important; transform: none !important; }
+.ui-modal-title { margin: 0 50px 20px 0; color: var(--brand-navy); font-size: 1.35rem; font-weight: 850; letter-spacing: -0.025em; }
+
+/* Compatibility while the last legacy consumers move off utility strings. */
+.mb-4 { margin-bottom: 16px; }
+.overflow-x-auto { overflow-x: auto; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.gap-2 { gap: 8px; }

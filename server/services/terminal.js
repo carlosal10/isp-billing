@@ -10,7 +10,6 @@ const ALLOW_PREFIXES = [
   "/ip/route/print",
   "/ip/pool/print",
   "/ip/dhcp-server/lease/print",
-  "/ppp/secret/print",
   "/ppp/profile/print",
   "/queue/simple/print",
   "/routing/route/print",
@@ -28,11 +27,17 @@ const DENY_EXACT = new Set([
 ]);
 
 const SENSITIVE_KEYS = ["password", "pass", "secret", "key", "token"];
+const SENSITIVE_RESULT_KEY = /(?:password|passphrase|secret|token|api[_-]?key|private[_-]?key|client[_-]?secret|consumer[_-]?secret)/i;
+const TERMINAL_ROLES = Object.freeze(["owner", "admin"]);
+
+function canUseTerminalRole(role) {
+  return TERMINAL_ROLES.includes(String(role || '').trim().toLowerCase());
+}
 
 function isAllowed(path) {
   if (!path) return false;
   if (DENY_EXACT.has(path)) return false;
-  return ALLOW_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return ALLOW_PREFIXES.includes(path);
 }
 
 function parseCli(command) {
@@ -103,6 +108,43 @@ function redactCommand(command) {
   return redacted;
 }
 
+function redactSensitiveText(value) {
+  let redacted = String(value ?? '');
+  for (const key of SENSITIVE_KEYS) {
+    const unquoted = new RegExp(`([?=\\s,\\{\\[]${key}\\s*=?)[^\\s,\\}\\]]+`, "ig");
+    const quoted = new RegExp(`(${key}\\s*=\\s*[\\\"])[^\\\"]*([\\\"])`, "ig");
+    redacted = redacted
+      .replace(unquoted, "$1******")
+      .replace(quoted, "$1******$2");
+  }
+  return redacted;
+}
+
+/**
+ * RouterOS responses are provider-controlled objects and may include secret
+ * fields even for read commands such as /ppp/secret/print. Redact by key and
+ * scrub string-form responses before returning them to the client.
+ */
+function sanitizeTerminalResult(value, key = '') {
+  if (SENSITIVE_RESULT_KEY.test(String(key || ''))) return '[REDACTED]';
+  if (value == null) return value;
+  if (Buffer.isBuffer(value)) return '[REDACTED]';
+  if (Array.isArray(value)) return value.map((item) => sanitizeTerminalResult(item));
+  if (typeof value === 'string') return redactSensitiveText(value);
+  if (typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      sanitizeTerminalResult(entryValue, entryKey),
+    ])
+  );
+}
+
+function sanitizeTerminalWords(words = []) {
+  return Array.isArray(words) ? words.map((word) => redactSensitiveText(word)) : [];
+}
+
 async function sendCommand(tenantId, path, words = [], options = {}) {
   if (!tenantId) throw new Error("Missing tenantId for terminal command");
   return sendRouterCommand(path, words, { tenantId, ...options });
@@ -110,8 +152,13 @@ async function sendCommand(tenantId, path, words = [], options = {}) {
 
 module.exports = {
   ALLOW_PREFIXES,
+  TERMINAL_ROLES,
+  canUseTerminalRole,
   isAllowed,
   parseCli,
   redactCommand,
+  redactSensitiveText,
+  sanitizeTerminalResult,
+  sanitizeTerminalWords,
   sendCommand,
 };

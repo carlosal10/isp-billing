@@ -16,6 +16,13 @@ Multi-tenant ISP billing and network operations platform for managing customers,
 - Backend server: `server/App.js`
 - API contract snapshot: `docs/openapi.yaml`
 
+## Product And Design Planning
+
+- Market-readiness phases and release gates: `docs/product/market-readiness-roadmap.md`
+- Engineering delivery and release workflow: `docs/product/delivery-workflow.md`
+- Phase 1 security implementation status and deployment sequence: `docs/product/phase-1-security-status.md`
+- UI direction, tokens, interaction rules, and accessibility baseline: `docs/design/ui-foundations.md`
+
 ## Development Notes
 
 - `npm start` runs the React client

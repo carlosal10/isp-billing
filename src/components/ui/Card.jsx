@@ -1,16 +1,16 @@
 import React from "react";
 
-export function Card({ children, className = "" }) {
+export function Card({ children, className = "", ...props }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-md p-4 ${className}`}>
+    <div className={`ui-card ${className}`.trim()} {...props}>
       {children}
     </div>
   );
 }
 
-export function CardContent({ children, className = "" }) {
+export function CardContent({ children, className = "", ...props }) {
   return (
-    <div className={`p-2 ${className}`}>
+    <div className={`ui-card-content ${className}`.trim()} {...props}>
       {children}
     </div>
   );

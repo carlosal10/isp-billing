@@ -71,23 +71,25 @@ router.post('/validation', async (req, res) => {
       });
       return res.json({ ResultCode: 1, ResultDesc: 'Missing account reference' });
     }
+    if (!config.ispId) {
+      console.warn('[mpesa:c2b:validation] rejected - shortcode has no tenant binding', context);
+      return res.json({ ResultCode: 1, ResultDesc: 'Shortcode is not bound to a tenant' });
+    }
+
     const accountRef = String(BillRefNumber).trim();
-        let customer = null;
-        // Build query to search account number and aliases
-        const q = { $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] };
-        if (config.ispId) q.tenantId = config.ispId;
-        customer = await Customer.findOne(q).lean();
-        // If not found under tenant, try cross-tenant search
-        if (!customer) {
-          customer = await Customer.findOne({ $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }] }).lean();
-        }
-        if (!customer) {
-          console.warn('[mpesa:c2b:validation] rejected - account not found', {
-            ...context,
-            tenantId: config.ispId ? String(config.ispId) : null,
-          });
-          return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
-        }
+    // A shortcode is a tenant boundary. Never fall back to a global account
+    // lookup: the same account number may legitimately exist in another ISP.
+    const customer = await Customer.findOne({
+      tenantId: config.ispId,
+      $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }],
+    }).lean();
+    if (!customer) {
+      console.warn('[mpesa:c2b:validation] rejected - account not found', {
+        ...context,
+        tenantId: String(config.ispId),
+      });
+      return res.json({ ResultCode: 1, ResultDesc: 'Account not found' });
+    }
     if (customer?.tenantId) context.tenantId = customer.tenantId.toString();
     console.log('[mpesa:c2b:validation] accepted', {
       ...context,
@@ -99,7 +101,7 @@ router.post('/validation', async (req, res) => {
       ...context,
       error: err?.message || err,
     });
-    return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    return res.json({ ResultCode: 1, ResultDesc: 'Unable to validate account' });
   }
 });
 

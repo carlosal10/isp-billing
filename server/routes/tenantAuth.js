@@ -1,13 +1,23 @@
 // server/routes/tenantAuth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");            // ← pure JS, reliable on cloud
-const crypto = require("crypto");
 const { z } = require("zod");
 const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
-const RefreshToken = require("../models/RefreshToken");
-const { signTenantAccessToken, verifyAccessToken } = require("../utils/jwt");
+const requireAuth = require("../middleware/requireAuth");
+const requireTenant = require("../middleware/requireTenant");
+const { signTenantAccessToken } = require("../utils/jwt");
+const {
+  consumeRefreshToken,
+  issueRefreshToken,
+  revokeRefreshToken,
+} = require('../services/refreshTokenService');
+const {
+  loginLimiter,
+  refreshLimiter,
+  registrationLimiter,
+} = require("../middleware/riskRateLimits");
 
 const router = express.Router();
 
@@ -27,31 +37,8 @@ const LoginSchema = z.object({
 
 const RefreshSchema = z.object({ refreshToken: z.string().min(1) });
 
-/* ----------------- Helpers ----------------- */
-function refreshExpiry(days = Number(process.env.REFRESH_TTL_DAYS || 30)) {
-  return new Date(Date.now() + days * 86400 * 1000);
-}
-
-async function issueRefreshToken({ userId, tenantId }) {
-  const token = crypto.randomBytes(48).toString("base64url");
-  await RefreshToken.create({
-    token,
-    user: userId,
-    tenant: tenantId,
-    expiresAt: refreshExpiry(),
-    isRevoked: false,
-  });
-  return token;
-}
-
-function readAccessToken(req) {
-  const bearer = req.headers.authorization || "";
-  const [, headerToken] = bearer.split(" ");
-  return headerToken || req.cookies?.at || null;
-}
-
 /* ----------------- Register ----------------- */
-router.post("/register", async (req, res) => {
+router.post("/register", registrationLimiter, async (req, res) => {
   try {
     console.log('[auth] register request', {
       ip: req.ip,
@@ -67,7 +54,7 @@ router.post("/register", async (req, res) => {
 
     const existing = await User.findOne({ email }).lean();
     if (existing) {
-      console.warn('[auth] register email exists', { email });
+      console.warn('[auth] register rejected because identity already exists');
       return res.status(409).json({ ok: false, error: "Email already exists" });
     }
 
@@ -122,7 +109,7 @@ router.post("/register", async (req, res) => {
 });
 
 /* ----------------- Login ----------------- */
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     console.log('[auth] login request', {
       ip: req.ip,
@@ -139,7 +126,7 @@ router.post("/login", async (req, res) => {
     const { email, password, ispId } = parsed.data;
     const user = await User.findOne({ email });
     if (!user || !user.isActive) {
-      console.warn('[auth] login invalid user or inactive', { email, isActive: user?.isActive ?? null });
+      console.warn('[auth] login rejected for invalid or inactive identity');
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
@@ -198,40 +185,26 @@ router.post("/login", async (req, res) => {
 });
 
 /* ----------------- Session Introspection ----------------- */
-router.get("/me", async (req, res) => {
+router.get("/me", requireAuth, requireTenant, async (req, res) => {
   try {
-    const token = readAccessToken(req);
-    if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+    const tenantId = req.tenantId;
+    const userId = String(req.user.sub);
 
-    const claims = verifyAccessToken(token);
-    const tenantId = claims?.ispId ? String(claims.ispId) : null;
-    const userId = claims?.sub ? String(claims.sub) : null;
-
-    if (!tenantId || !userId) {
-      return res.status(401).json({ ok: false, error: "Invalid token claims" });
-    }
-
-    const [user, membership] = await Promise.all([
-      User.findById(userId, { email: 1, displayName: 1, isActive: 1 }).lean(),
-      Membership.findOne({ user: userId, tenant: tenantId }).lean(),
-    ]);
+    const user = await User.findById(userId, { email: 1, displayName: 1, isActive: 1 }).lean();
 
     if (!user || !user.isActive) {
       return res.status(401).json({ ok: false, error: "User disabled" });
-    }
-    if (!membership) {
-      return res.status(403).json({ ok: false, error: "No access to tenant" });
     }
 
     return res.json({
       ok: true,
       ispId: tenantId,
-      role: membership.role,
+      role: req.role,
       user: {
         id: String(user._id),
         email: user.email,
         displayName: user.displayName,
-        role: membership.role,
+        role: req.role,
       },
     });
   } catch (e) {
@@ -240,7 +213,7 @@ router.get("/me", async (req, res) => {
 });
 
 /* ----------------- Refresh (rotate) ----------------- */
-router.post("/refresh", async (req, res) => {
+router.post("/refresh", refreshLimiter, async (req, res) => {
   try {
     console.log('[auth] refresh request', {
       ip: req.ip,
@@ -253,9 +226,9 @@ router.post("/refresh", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
 
-    const current = await RefreshToken.findOne({ token: parsed.data.refreshToken });
-    if (!current || current.isRevoked || current.expiresAt < new Date()) {
-      console.warn('[auth] refresh invalid token', { reason: !current ? 'not_found' : current.isRevoked ? 'revoked' : 'expired' });
+    const current = await consumeRefreshToken(parsed.data.refreshToken);
+    if (!current) {
+      console.warn('[auth] refresh rejected');
       return res.status(401).json({ ok: false, error: "Invalid refresh" });
     }
 
@@ -264,18 +237,6 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ ok: false, error: "User disabled" });
     }
 
-    // rotate: revoke old, mint new
-    await RefreshToken.updateOne({ _id: current._id }, { $set: { isRevoked: true } });
-
-    const nextRaw = crypto.randomBytes(48).toString("base64url");
-    await RefreshToken.create({
-      token: nextRaw,
-      user: current.user,
-      tenant: current.tenant,
-      expiresAt: refreshExpiry(),
-      isRevoked: false,
-    });
-
     const membership = await Membership.findOne({ user: current.user, tenant: current.tenant })
       .select({ role: 1 })
       .lean();
@@ -283,6 +244,10 @@ router.post("/refresh", async (req, res) => {
       return res.status(403).json({ ok: false, error: "No access to tenant" });
     }
 
+    const nextRaw = await issueRefreshToken({
+      userId: current.user,
+      tenantId: current.tenant,
+    });
     const accessToken = signTenantAccessToken({ user, tenantId: current.tenant });
 
     // Log token issuance (no secrets)
@@ -318,7 +283,7 @@ router.post("/logout", async (req, res) => {
   try {
     const token = req.body?.refreshToken;
     if (token) {
-      await RefreshToken.updateMany({ token }, { $set: { isRevoked: true } });
+      await revokeRefreshToken(token);
     }
     console.log('[auth] logout', {
       ip: req.ip,

@@ -5,25 +5,38 @@ import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
 import useDragResize from "../hooks/useDragResize";
 
+const DEFAULT_SMS_SETTINGS = {
+  enabled: false,
+  primaryProvider: "twilio",
+  fallbackEnabled: false,
+  senderId: "",
+  twilio: { accountSid: "", authToken: "", from: "" },
+  africastalking: { apiKey: "", username: "", from: "", useSandbox: false },
+  textsms: { apiKey: "", partnerId: "", sender: "", baseUrl: "" },
+  schedule: { reminder5Days: true, reminder3Days: true, dueWarnHours: 4 },
+  autoSendOnCreate: false,
+  autoSendOnPlanChange: false,
+  autoTemplateType: "payment-link",
+};
+
+function normalizeSmsSettings(value = {}) {
+  return {
+    ...DEFAULT_SMS_SETTINGS,
+    ...value,
+    twilio: { ...DEFAULT_SMS_SETTINGS.twilio, ...(value.twilio || {}) },
+    africastalking: { ...DEFAULT_SMS_SETTINGS.africastalking, ...(value.africastalking || {}) },
+    textsms: { ...DEFAULT_SMS_SETTINGS.textsms, ...(value.textsms || {}) },
+    schedule: { ...DEFAULT_SMS_SETTINGS.schedule, ...(value.schedule || {}) },
+  };
+}
+
 export default function SmsSettingsModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
   const [tab, setTab] = useState("settings"); // settings | templates | paylink
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const [settings, setSettings] = useState({
-    enabled: false,
-    primaryProvider: "twilio",
-    fallbackEnabled: false,
-    senderId: "",
-    twilio: { accountSid: "", authToken: "", from: "" },
-    africastalking: { apiKey: "", username: "", from: "", useSandbox: false },
-    textsms: { apiKey: "", partnerId: "", sender: "", baseUrl: "" },
-    schedule: { reminder5Days: true, reminder3Days: true, dueWarnHours: 4 },
-    autoSendOnCreate: false,
-    autoSendOnPlanChange: false,
-    autoTemplateType: "payment-link",
-  });
+  const [settings, setSettings] = useState(() => normalizeSmsSettings());
 
   const [templates, setTemplates] = useState([
     {
@@ -96,7 +109,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
         api.get("/sms/templates").catch(() => ({ data: [] })),
       ]);
       if (s.data && Object.keys(s.data).length)
-        setSettings((prev) => ({ ...prev, ...s.data }));
+        setSettings(normalizeSmsSettings(s.data));
       if (Array.isArray(t.data) && t.data.length)
         setTemplates((prev) => mergeTemplates(prev, t.data));
     } catch (e) {
@@ -126,7 +139,8 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
     setLoading(true);
     setMsg("");
     try {
-      await api.post("/sms/settings", settings);
+      const { data } = await api.post("/sms/settings", settings);
+      if (data?.settings) setSettings(normalizeSmsSettings(data.settings));
       setMsg("Settings saved");
     } catch (e) {
       setMsg(e?.message || "Failed to save settings");
@@ -379,7 +393,9 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="Account SID"
+                        placeholder={settings.twilio?.accountSidConfigured ? "Account SID configured — enter to replace" : "Account SID"}
+                        type="password"
+                        autoComplete="new-password"
                         value={settings.twilio?.accountSid || ""}
                         onChange={(e) =>
                           setSettings((s) => ({
@@ -391,7 +407,9 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="Auth Token"
+                        placeholder={settings.twilio?.authTokenConfigured ? "Auth token configured — enter to replace" : "Auth Token"}
+                        type="password"
+                        autoComplete="new-password"
                         value={settings.twilio?.authToken || ""}
                         onChange={(e) =>
                           setSettings((s) => ({
@@ -432,7 +450,9 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="API Key"
+                        placeholder={settings.africastalking?.apiKeyConfigured ? "API key configured — enter to replace" : "API Key"}
+                        type="password"
+                        autoComplete="new-password"
                         value={settings.africastalking?.apiKey || ""}
                         onChange={(e) =>
                           setSettings((s) => ({
@@ -447,7 +467,8 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="Username"
+                        placeholder={settings.africastalking?.usernameConfigured ? "Username configured — enter to replace" : "Username"}
+                        autoComplete="off"
                         value={settings.africastalking?.username || ""}
                         onChange={(e) =>
                           setSettings((s) => ({
@@ -511,7 +532,9 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="API Key"
+                        placeholder={settings.textsms?.apiKeyConfigured ? "API key configured — enter to replace" : "API Key"}
+                        type="password"
+                        autoComplete="new-password"
                         value={settings.textsms?.apiKey || ""}
                         onChange={(e) =>
                           setSettings((s) => ({
@@ -526,7 +549,8 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       <input
                         className="ps-input"
                         disabled={disabled}
-                        placeholder="Partner ID"
+                        placeholder={settings.textsms?.partnerIdConfigured ? "Partner ID configured — enter to replace" : "Partner ID"}
+                        autoComplete="off"
                         value={settings.textsms?.partnerId || ""}
                         onChange={(e) =>
                           setSettings((s) => ({

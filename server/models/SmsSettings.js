@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { encryptField } = require('../security/fieldEncryption');
 
 const SmsSettingsSchema = new mongoose.Schema(
   {
@@ -14,19 +15,19 @@ const SmsSettingsSchema = new mongoose.Schema(
 
     // Provider credentials (optional, per-tenant)
     twilio: {
-      accountSid: String,
-      authToken: String,
+      accountSid: { type: String, set: encryptField },
+      authToken: { type: String, set: encryptField },
       from: String,
     },
     africastalking: {
-      apiKey: String,
-      username: String,
+      apiKey: { type: String, set: encryptField },
+      username: { type: String, set: encryptField },
       from: String,
       useSandbox: { type: Boolean, default: false },
     },
     textsms: {
-      apiKey: String,
-      partnerId: String,
+      apiKey: { type: String, set: encryptField },
+      partnerId: { type: String, set: encryptField },
       sender: String,
       baseUrl: String,
     },

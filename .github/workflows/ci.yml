@@ -54,6 +54,8 @@ jobs:
           node --check server/scripts/run-privacy-retention.js
           node --check server/scripts/backup-mongo.js
           node --check server/scripts/restore-mongo.js
+          node --check server/scripts/encrypt-configuration-secrets.js
+          node --check server/scripts/reissue-tokens.js
       - name: Run server tests
         run: npm run test:server
       - name: Validate backup dry-run

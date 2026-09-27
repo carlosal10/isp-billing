@@ -76,6 +76,19 @@ function createStatusError(statusCode, message) {
   return err;
 }
 
+function buildScopedStkCandidateFilter({ tenantId, phone, amount, since } = {}) {
+  const scopedTenantId = String(tenantId || '').trim();
+  if (!scopedTenantId || !phone || !Number.isFinite(Number(amount))) return null;
+  return {
+    tenantId: scopedTenantId,
+    method: 'mpesa',
+    status: 'Pending',
+    phoneNumber: String(phone),
+    amount: Number(amount),
+    createdAt: { $gte: since },
+  };
+}
+
 function buildEventPatch(gatewayEvent, patch = {}) {
   return {
     tenantId: gatewayEvent?.tenantId || null,
@@ -189,6 +202,12 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
     checkoutRequestId,
     merchantRequestId,
   });
+  // A callback is allowed to mutate a payment only when its tenant is known
+  // from a trusted request context or a persisted STK correlation. Never use a
+  // global phone/amount search for an uncorrelated public callback.
+  const trustedTenantId = String(
+    options.tenantId || gatewayEvent.tenantId || correlation?.tenantId || ''
+  ).trim() || null;
   const touchCorrelation = async () => {
     await markStkCorrelationCallback({
       correlationId: correlation?._id || null,
@@ -198,7 +217,7 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
   };
 
   const eventPatch = buildEventPatch(gatewayEvent, {
-    tenantId: gatewayEvent.tenantId || correlation?.tenantId || null,
+    tenantId: trustedTenantId,
     paymentId: gatewayEvent.paymentId || correlation?.paymentId || null,
     externalId: checkoutRequestId || merchantRequestId || mpesaReceipt || gatewayEvent.externalId || null,
     externalRef: merchantRequestId || checkoutRequestId || gatewayEvent.externalRef || null,
@@ -213,45 +232,56 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
   let payment = null;
   let matchedBy = null;
   if (options.overridePaymentId) {
+    if (!trustedTenantId) {
+      throw createStatusError(400, 'A tenant-scoped context is required for manual payment resolution');
+    }
     payment = await loadResolutionPayment({
-      tenantId: options.tenantId || gatewayEvent.tenantId,
+      tenantId: trustedTenantId,
       paymentId: options.overridePaymentId,
       expectedMethod: 'mpesa',
       gatewayTransactionId: mpesaReceipt || null,
     });
     matchedBy = 'manualPaymentId';
   }
-  if (!payment && correlation?.paymentId) {
+  if (!payment && correlation?.paymentId && correlation?.tenantId &&
+      String(correlation.tenantId) === trustedTenantId) {
     payment = await Payment.findOne({
       _id: correlation.paymentId,
-      tenantId: correlation.tenantId || undefined,
+      tenantId: trustedTenantId,
       isDeleted: { $ne: true },
     }).populate('customer plan');
     if (payment) matchedBy = 'stkCorrelation';
   }
-  if (!payment && checkoutRequestId) {
-    payment = await Payment.findOne({ checkoutRequestId }).populate('customer plan');
+  if (!payment && checkoutRequestId && trustedTenantId) {
+    payment = await Payment.findOne({
+      checkoutRequestId,
+      tenantId: trustedTenantId,
+      isDeleted: { $ne: true },
+    }).populate('customer plan');
     if (payment) matchedBy = 'checkoutRequestId';
   }
-  if (!payment && merchantRequestId) {
-    payment = await Payment.findOne({ merchantRequestId }).populate('customer plan');
+  if (!payment && merchantRequestId && trustedTenantId) {
+    payment = await Payment.findOne({
+      merchantRequestId,
+      tenantId: trustedTenantId,
+      isDeleted: { $ne: true },
+    }).populate('customer plan');
     if (payment) matchedBy = 'merchantRequestId';
   }
-  if (!payment && phone && amount) {
+  if (!payment && trustedTenantId && phone && amount) {
     const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    const candidates = await Payment.find({
-      method: 'mpesa',
-      status: 'Pending',
-      phoneNumber: String(phone),
-      amount: Number(amount),
-      createdAt: { $gte: since },
-    })
+    const candidates = await Payment.find(buildScopedStkCandidateFilter({
+      tenantId: trustedTenantId,
+      phone,
+      amount,
+      since,
+    }))
       .sort({ createdAt: -1 })
       .limit(2)
       .populate('customer plan');
     if (candidates.length === 1) {
       payment = candidates[0];
-      matchedBy = 'phone+amount';
+      matchedBy = 'tenant+phone+amount';
     }
   }
 
@@ -367,7 +397,7 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
     amount: Number.isFinite(Number(TransAmount)) ? Number(TransAmount) : gatewayEvent.amount,
   });
 
-  if (!config && !options.overrideCustomerId) {
+  if ((!config || !config.ispId) && !options.overrideCustomerId) {
     return finalizeGatewayEvent(
       gatewayEvent._id,
       buildEventPatch(basePatch, {
@@ -404,19 +434,20 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
 
   let customer = null;
   if (options.overrideCustomerId) {
+    const tenantId = options.tenantId || gatewayEvent.tenantId || config?.ispId;
+    if (!tenantId) {
+      throw createStatusError(400, 'A tenant-scoped context is required for manual customer resolution');
+    }
     customer = await loadResolutionCustomer({
-      tenantId: options.tenantId || gatewayEvent.tenantId,
+      tenantId,
       customerId: options.overrideCustomerId,
     });
   }
   if (!customer && config?.ispId) {
     customer = await Customer.findOne({
       tenantId: config.ispId,
-      accountNumber: accountRef,
+      $or: [{ accountNumber: accountRef }, { accountAliases: accountRef }],
     });
-  }
-  if (!customer) {
-    customer = await Customer.findOne({ accountNumber: accountRef });
   }
 
   if (!customer) {
@@ -464,7 +495,7 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
     );
   }
 
-  const plan = await Plan.findById(planId);
+  const plan = await Plan.findOne({ _id: planId, tenantId: customer.tenantId });
   if (!plan) {
     return finalizeGatewayEvent(
       gatewayEvent._id,
@@ -770,6 +801,7 @@ async function resolveGatewayEvent({ tenantId, eventId, paymentId = null, custom
 }
 
 module.exports = {
+  buildScopedStkCandidateFilter,
   processGatewayEvent,
   retryGatewayEvent,
   resolveGatewayEvent,

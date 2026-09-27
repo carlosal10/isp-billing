@@ -1,5 +1,6 @@
 // models/MikroTikConnection.js
 const mongoose = require("mongoose");
+const { encryptField } = require('../security/fieldEncryption');
 
 function isMacAddress(value) {
   return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
@@ -12,7 +13,7 @@ const MikroTikConnectionSchema = new mongoose.Schema(
     host: { type: String, required: true, trim: true },
     port: { type: Number, default: 8728, min: 1, max: 65535 },
     username: { type: String, required: true, trim: true },
-    password: { type: String, required: true }, // store encrypted at rest if you have KMS
+    password: { type: String, required: true, set: encryptField },
     tls: { type: Boolean, default: false },
     timeout: { type: Number, default: 15000, min: 1000, max: 60000 },
     primary: { type: Boolean, default: false }, // mark one as default per tenant

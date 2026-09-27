@@ -1,6 +1,7 @@
 const axios = require('axios');
 const qs = require('querystring');
 const SmsSettings = require('../models/SmsSettings');
+const { decryptSmsSettings } = require('../security/fieldEncryption');
 
 function getEnv(name, def = undefined) {
   return process.env[name] || def;
@@ -150,7 +151,8 @@ function normalizePhone(phone) {
 }
 
 async function sendSms(tenantId, to, body) {
-  const settings = await SmsSettings.findOne({ tenantId }).lean();
+  const storedSettings = await SmsSettings.findOne({ tenantId }).lean();
+  const settings = decryptSmsSettings(storedSettings);
   const enabled = settings?.enabled ?? false;
   if (!enabled) throw new Error('SMS disabled');
 

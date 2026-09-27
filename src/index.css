@@ -15,8 +15,8 @@ body {
   background: #f9fafb;
 }
 :root {
-  --sidebar-w: 280px;
-  --success: #16a34a;
+  --sidebar-w: 292px;
+  --success: #12b76a;
 }
 
 .success { color: var(--success); }

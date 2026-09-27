@@ -45,6 +45,7 @@ test('getEnvReport warns on short production secrets without exposing values', (
     MONGO_URI: 'mongodb://example/app',
     JWT_SECRET: 'short-but-ok',
     CLIENT_URL: 'https://isp.example.com',
+    DATA_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   });
 
   assert.equal(report.ok, true);
@@ -56,6 +57,27 @@ test('getEnvReport warns on short production secrets without exposing values', (
 test('sanitizedValue redacts known secrets', () => {
   assert.equal(sanitizedValue('JWT_SECRET', 'super-secret-value'), '<set:18 chars>');
   assert.equal(sanitizedValue('CLIENT_URL', 'https://isp.example.com'), 'https://isp.example.com');
+});
+
+test('getEnvReport requires and validates a production data-encryption key', () => {
+  const missing = getEnvReport({
+    NODE_ENV: 'production',
+    MONGO_URI: 'mongodb://example/app',
+    JWT_SECRET: 'a-production-jwt-secret-that-is-long-enough',
+    CLIENT_URL: 'https://isp.example.com',
+  });
+  assert.equal(missing.ok, false);
+  assert.deepEqual(missing.errors.map((item) => item.key), ['DATA_ENCRYPTION_KEY']);
+
+  const invalid = getEnvReport({
+    NODE_ENV: 'production',
+    MONGO_URI: 'mongodb://example/app',
+    JWT_SECRET: 'a-production-jwt-secret-that-is-long-enough',
+    CLIENT_URL: 'https://isp.example.com',
+    DATA_ENCRYPTION_KEY: 'too-short',
+  });
+  assert.equal(invalid.ok, false);
+  assert.deepEqual(invalid.errors.map((item) => item.key), ['DATA_ENCRYPTION_KEY']);
 });
 
 test('validateEnv writes MongoDB aliases back onto provided env object', () => {
