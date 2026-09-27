@@ -4,7 +4,7 @@ import { FaTimes } from "react-icons/fa";
 import { MdAdd, MdEdit, MdDelete, MdClose } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import { exportRows } from "../lib/exporters";
-import useDragResize from "../hooks/useDragResize";
+
 import { useAuth } from "../context/AuthContext";
 
 const DEFAULT_GATEWAY_FILTERS = {
@@ -166,17 +166,10 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
   const adjustDropdownRef = useRef(null);
   const invoiceDropdownRef = useRef(null);
 
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 720,
-    minHeight: 520,
-    defaultSize: { width: 980, height: 680 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   // fetch on open
   useEffect(() => {
@@ -203,24 +196,6 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
-
-  // Defensive inline container styles so CSS flex layout assumptions always hold
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (!visible) {
-      // clear defensive inline styles when modal closed
-      el.style.display = "";
-      el.style.flexDirection = "";
-      el.style.boxSizing = "";
-      return;
-    }
-    // ensure modal container behaves like a flex column (so inner .table-wrapper can flex/scroll)
-    el.style.display = "flex";
-    el.style.flexDirection = "column";
-    el.style.boxSizing = "border-box";
-    // note: hook may still write inline width/height/position; this complements it.
-  }, [visible]);
 
   // ---------- API helpers ----------
   const getErrMsg = (err, fallback = "Request failed") =>
@@ -1591,30 +1566,15 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`modal-content large ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${dir.length === 1 ? "edge" : "corner"} ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-
+      <div  className={`modal-content large ${standalone ? "tool-page-card" : "dialog-surface"}`}>
         {!standalone ? (
-          <span className="close" onClick={onClose} role="button" aria-label="Close" data-modal-no-drag>
+          <span className="close" onClick={onClose} role="button" aria-label="Close" >
             <FaTimes />
           </span>
         ) : null}
 
         {/* Tabs */}
-        <div className="tabs" data-modal-no-drag>
+        <div className="tabs" >
           <button className={activeTab === "payments" ? "active" : ""} onClick={() => setActiveTab("payments")}>
             Payments
           </button>

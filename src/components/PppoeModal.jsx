@@ -1,12 +1,13 @@
+import { Field } from "./ui/Field";
 // src/components/PppoeModal.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PppoeModal.css";
-import useDragResize from "../hooks/useDragResize";
+
 
 export default function PppoeModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
@@ -27,17 +28,10 @@ export default function PppoeModal({ isOpen = false, onClose, standalone = false
 const [removeUser, setRemoveUser] = useState("");
 
 const [loading, setLoading] = useState(false);
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 560,
-    minHeight: 520,
-    defaultSize: { width: 760, height: 600 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   // Load PPPoE profiles from backend (protected route)
   useEffect(() => {
@@ -125,23 +119,9 @@ const [loading, setLoading] = useState(false);
   };
 
   const content = (
-      <div ref={containerRef} className={`modal-content ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
+      <div  className={`modal-content ${standalone ? "tool-page-card" : "dialog-surface"}`}>
         {!standalone ? (
-          <span className="close" onClick={onClose} data-modal-no-drag>
+          <span className="close" onClick={onClose} >
             <FaTimes />
           </span>
         ) : null}
@@ -151,20 +131,20 @@ const [loading, setLoading] = useState(false);
 
         {/* Add User */}
         <form id="addUserForm" onSubmit={handleAddUser}>
-          <input
+          <Field label="Username"><input
             type="text"
             placeholder="Username"
             required
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-          />
-          <input
+          /></Field>
+          <Field label="Password"><input
             type="password"
             placeholder="Password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-          />
+          /></Field>
 
           <select
             required
@@ -192,20 +172,20 @@ const [loading, setLoading] = useState(false);
 
         {/* Update User */}
         <form id="updateUserForm" onSubmit={handleUpdateUser}>
-          <input
+          <Field label="Username"><input
             type="text"
             placeholder="Username"
             required
             value={updateUser}
             onChange={(e) => setUpdateUser(e.target.value)}
-          />
-          <input
+          /></Field>
+          <Field label="New Password"><input
             type="password"
             placeholder="New Password"
             required
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-          />
+          /></Field>
           <button type="submit" disabled={loading}>
             <AiOutlineEdit className="inline-icon" />{" "}
             {loading ? "Updating..." : "Update Password"}
@@ -214,13 +194,13 @@ const [loading, setLoading] = useState(false);
 
         {/* Remove User */}
         <form id="removeUserForm" onSubmit={handleRemoveUser}>
-          <input
+          <Field label="Username"><input
             type="text"
             placeholder="Username"
             required
             value={removeUser}
             onChange={(e) => setRemoveUser(e.target.value)}
-          />
+          /></Field>
           <button type="submit" className="remove-btn" disabled={loading}>
             <RiDeleteBinLine className="inline-icon" />{" "}
             {loading ? "Removing..." : "Remove User"}

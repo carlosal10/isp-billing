@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdContentCopy } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
-import useDragResize from "../hooks/useDragResize";
+
 
 const DEFAULT_SMS_SETTINGS = {
   enabled: false,
@@ -75,17 +75,10 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
   const [pick, setPick] = useState({ customerId: "", planId: "", dueAt: "" });
   const [created, setCreated] = useState({ url: "", token: "", shortUrl: "", shortPath: "" });
   const [sendMsg, setSendMsg] = useState("");
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 780,
-    minHeight: 640,
-    defaultSize: { width: 980, height: 760 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   const shortLink = useMemo(() => {
     if (!created) return "";
@@ -252,26 +245,10 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`ps-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-        {/* Close */}
+      <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
+         */}
         {!standalone ? (
-          <button onClick={onClose} className="ps-close" aria-label="Close" data-modal-no-drag>
+          <button onClick={onClose} className="ps-close" aria-label="Close" >
             <FaTimes size={18} />
           </button>
         ) : null}

@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -295,13 +296,13 @@ export default function ApiKeys() {
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
             />
           </div>
-          <textarea
+          <Field label="Description or system owner"><textarea
             value={form.description}
             onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
             placeholder="Description or system owner"
             rows={2}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
+          /></Field>
           <ScopePicker
             scopes={scopes}
             selected={form.scopes}

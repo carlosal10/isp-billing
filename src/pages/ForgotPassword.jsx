@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/apiClient";
@@ -47,7 +48,7 @@ export default function ForgotPassword() {
         <form onSubmit={submit} className="login-form" aria-label="Forgot password form">
           <h2 style={{ margin: 0, color: "#0B2545" }}>Forgot password</h2>
           <p className="helper-text">Enter your account email to receive a reset link.</p>
-          <input
+          <Field label="Email"><input
             type="email"
             required
             value={email}
@@ -55,7 +56,7 @@ export default function ForgotPassword() {
             placeholder="Email"
             autoComplete="email"
             className="input"
-          />
+          /></Field>
           <button type="submit" className="btn-primary" disabled={busy || !/\S+@\S+\.\S+/.test(email)}>
             {busy ? "Sending..." : "Send reset link"}
           </button>

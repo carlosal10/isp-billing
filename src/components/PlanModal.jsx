@@ -1,12 +1,13 @@
+import { Field } from "./ui/Field";
 // src/components/PlanModal.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import { api } from "../lib/apiClient"; // ✅ use authenticated axios
 import "./PlanModal.css";
-import useDragResize from "../hooks/useDragResize";
+
 
 export default function PlanModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
@@ -24,17 +25,10 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
     rateLimit: "",
     dataCap: "",
   });
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 640,
-    minHeight: 560,
-    defaultSize: { width: 920, height: 640 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   useEffect(() => {
     if (visible) fetchPlans();
@@ -140,22 +134,8 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`modal-content plan-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-        {!standalone ? <span className="close" onClick={onClose} data-modal-no-drag><FaTimes /></span> : null}
+      <div  className={`modal-content plan-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
+        {!standalone ? <span className="close" onClick={onClose}><FaTimes /></span> : null}
         <h2>Manage Plans</h2>
         {msg && <p className="status-msg">{msg}</p>}
 
@@ -176,12 +156,12 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
           {/* Add Plan */}
           {activeTab === "Add" && (
             <form onSubmit={handleAddPlan}>
-              <input type="text" name="planName" placeholder="Plan Name" required />
-              <input type="number" min="0" step="0.01" name="planPrice" placeholder="Price (KES)" required />
-              <input type="text" name="planDuration" placeholder="Duration (e.g. 30 days)" required />
-              <input type="number" min="0" step="1" name="planSpeed" placeholder="Speed (Mbps)" required />
-              <input type="text" name="planRateLimit" placeholder="Rate Limit (e.g., 10M/10M)" required />
-              <input type="number" min="0" step="1" name="planDataCap" placeholder="Data Cap (GB, optional)" />
+              <Field label="Plan Name"><input type="text" name="planName" placeholder="Plan Name" required /></Field>
+              <Field label="Price (KES)"><input type="number" min="0" step="0.01" name="planPrice" placeholder="Price (KES)" required /></Field>
+              <Field label="Duration (e.g. 30 days)"><input type="text" name="planDuration" placeholder="Duration (e.g. 30 days)" required /></Field>
+              <Field label="Speed (Mbps)"><input type="number" min="0" step="1" name="planSpeed" placeholder="Speed (Mbps)" required /></Field>
+              <Field label="Rate Limit (e.g., 10M/10M)"><input type="text" name="planRateLimit" placeholder="Rate Limit (e.g., 10M/10M)" required /></Field>
+              <Field label="Data Cap (GB, optional)"><input type="number" min="0" step="1" name="planDataCap" placeholder="Data Cap (GB, optional)" /></Field>
               <button type="submit" disabled={loading}>
                 <MdAdd className="inline-icon" /> Add Plan
               </button>
@@ -206,14 +186,14 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
 
               {selectedPlanId && (
                 <form onSubmit={handleUpdatePlan}>
-                  <input
+                  <Field label="Name"><input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Name"
                     required
-                  />
-                  <input
+                  /></Field>
+                  <Field label="Price"><input
                     type="number"
                     min="0"
                     step="0.01"
@@ -221,36 +201,36 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="Price"
                     required
-                  />
-                  <input
+                  /></Field>
+                  <Field label="Duration"><input
                     type="text"
                     value={formData.duration}
                     onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                     placeholder="Duration"
                     required
-                  />
-                  <input
+                  /></Field>
+                  <Field label="Speed (Mbps)"><input
                     type="number"
                     min="0"
                     step="1"
                     value={formData.speed}
                     onChange={(e) => setFormData({ ...formData, speed: e.target.value })}
                     placeholder="Speed (Mbps)"
-                  />
-                  <input
+                  /></Field>
+                  <Field label="Rate Limit"><input
                     type="text"
                     value={formData.rateLimit}
                     onChange={(e) => setFormData({ ...formData, rateLimit: e.target.value })}
                     placeholder="Rate Limit"
-                  />
-                  <input
+                  /></Field>
+                  <Field label="Data Cap (GB)"><input
                     type="number"
                     min="0"
                     step="1"
                     value={formData.dataCap}
                     onChange={(e) => setFormData({ ...formData, dataCap: e.target.value })}
                     placeholder="Data Cap (GB)"
-                  />
+                  /></Field>
                   <button type="submit" disabled={loading}>
                     <AiOutlineEdit className="inline-icon" /> Update Plan
                   </button>
@@ -262,7 +242,7 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
           {/* Remove Plan */}
           {activeTab === "Remove" && (
             <form onSubmit={handleDeletePlan}>
-              <select
+              <Field label="Select Plan to Remove"><select
                 value={selectedDeleteId}
                 onChange={(e) => setSelectedDeleteId(e.target.value)}
                 required
@@ -273,7 +253,7 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
                     {p.name} ({p.price} KES)
                   </option>
                 ))}
-              </select>
+              </select></Field>
               <button type="submit" className="remove-btn" disabled={loading || !selectedDeleteId}>
                 <RiDeleteBinLine className="inline-icon" /> Remove Plan
               </button>

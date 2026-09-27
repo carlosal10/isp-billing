@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -203,14 +204,14 @@ export default function TeamAccess() {
         actions={<button className="btn" onClick={load} disabled={loading}>Refresh</button>}
       >
         <form onSubmit={createInvite} style={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) 160px 160px auto", gap: 10 }}>
-          <input
+          <Field label="teammate@example.com"><input
             type="email"
             value={inviteForm.email}
             onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))}
             placeholder="teammate@example.com"
             required
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
+          /></Field>
           <select
             value={inviteForm.role}
             onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value }))}
@@ -220,7 +221,7 @@ export default function TeamAccess() {
               <option key={item} value={item}>{roleLabel(item)}</option>
             ))}
           </select>
-          <select
+          <Field label="24 hours"><select
             value={inviteForm.expiresInHours}
             onChange={(event) => setInviteForm((current) => ({ ...current, expiresInHours: Number(event.target.value) }))}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -228,7 +229,7 @@ export default function TeamAccess() {
             <option value={24}>24 hours</option>
             <option value={72}>72 hours</option>
             <option value={168}>7 days</option>
-          </select>
+          </select></Field>
           <button className="btn" type="submit" disabled={busy === "invite"}>{busy === "invite" ? "Creating..." : "Create Invite"}</button>
         </form>
       </SectionCard>

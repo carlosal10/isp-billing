@@ -1,11 +1,11 @@
 // src/components/StaticIpSetupModal.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdSecurity, MdBolt, MdPreview, MdRule, MdRefresh, MdDone, MdDownloadDone, MdHistory } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./PppoeModal.css"; // keeps your base modal tokens if any
 import "./StaticIpSetupModal.css";
-import useDragResize from "../hooks/useDragResize";
+
 
 export default function StaticIpSetupModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
@@ -26,17 +26,10 @@ export default function StaticIpSetupModal({ isOpen = false, onClose, standalone
   const [rollbackPreview, setRollbackPreview] = useState(null);
   const [cleaning, setCleaning] = useState(false);
   const [cleanPreview, setCleanPreview] = useState(null);
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 880,
-    minHeight: 680,
-    defaultSize: { width: 1100, height: 780 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   // Persist seed options between sessions
   useEffect(() => {
@@ -253,24 +246,10 @@ export default function StaticIpSetupModal({ isOpen = false, onClose, standalone
   }
 
   const content = (
-      <div ref={containerRef} className={`ps-modal staticip-modal ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>Drag</div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
-        {/* Close */}
+      <div  className={`ps-modal staticip-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
+         */}
         {!standalone ? (
-          <button className="ps-close" onClick={onClose} aria-label="Close" data-modal-no-drag>
+          <button className="ps-close" onClick={onClose} aria-label="Close" >
             <FaTimes size={18} />
           </button>
         ) : null}

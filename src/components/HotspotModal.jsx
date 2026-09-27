@@ -1,12 +1,12 @@
 // src/components/HotspotModal.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdAdd } from "react-icons/md";
 import { AiOutlineEdit } from "react-icons/ai";
 import { RiDeleteBinLine } from "react-icons/ri";
 import "./HotspotModal.css";
 import { api } from "../lib/apiClient";
-import useDragResize from "../hooks/useDragResize";
+
 
 export default function HotspotModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
@@ -23,17 +23,10 @@ export default function HotspotModal({ isOpen = false, onClose, standalone = fal
     profile: "",
     secret: "",
   });
-  const containerRef = useRef(null);
-  const dragHandleRef = useRef(null);
-  const { getResizeHandleProps, isDraggingEnabled } = useDragResize({
-    isOpen: visible && !standalone,
-    containerRef,
-    handleRef: dragHandleRef,
-    minWidth: 620,
-    minHeight: 520,
-    defaultSize: { width: 880, height: 620 },
-  });
-  const resizeHandles = isDraggingEnabled ? ["n", "s", "e", "w", "ne", "nw", "se", "sw"] : [];
+
+
+
+
 
   useEffect(() => {
     if (!visible) return;
@@ -116,25 +109,9 @@ export default function HotspotModal({ isOpen = false, onClose, standalone = fal
   if (!visible) return null;
 
   const content = (
-      <div ref={containerRef} className={`modal-content ${standalone ? "tool-page-card" : "draggable-modal"}`}>
-        {isDraggingEnabled && (
-          <>
-            <div className="modal-drag-bar" ref={dragHandleRef}>
-              Drag
-            </div>
-            {resizeHandles.map((dir) => (
-              <div
-                key={dir}
-                className={`modal-resize-handle ${
-                  dir.length === 1 ? "edge" : "corner"
-                } ${["n", "s"].includes(dir) ? "horizontal" : ""} ${["e", "w"].includes(dir) ? "vertical" : ""} ${dir}`}
-                {...getResizeHandleProps(dir)}
-              />
-            ))}
-          </>
-        )}
+      <div  className={`modal-content ${standalone ? "tool-page-card" : "dialog-surface"}`}>
         {!standalone ? (
-          <span className="close" onClick={onClose} data-modal-no-drag>
+          <span className="close" onClick={onClose} >
             <FaTimes />
           </span>
         ) : null}
