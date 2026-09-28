@@ -457,6 +457,7 @@ async function updatePortalPin(tenantId, customerId, payload = {}) {
 
   customer.set('portalProfile.isEnabled', customer.portalProfile?.isEnabled !== false);
   customer.set('portalProfile.pinHash', await bcrypt.hash(nextPin, 12));
+  customer.set('portalProfile.sessionVersion', Number(customer.portalProfile?.sessionVersion || 0) + 1);
   customer.set('portalProfile.lastSeenAt', new Date());
   await customer.save();
 

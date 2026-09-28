@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 import "./PaymentsModal.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
@@ -1701,13 +1702,13 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
             <form onSubmit={handleManualValidation} className="stacked-form" ref={manualDropdownRef}>
               {/* Customer search & select */}
               <div className="field">
-                <input
+                <Field label="Search customer by name or account number"><input
                   type="text"
                   placeholder="Search customer by name or account number"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   autoComplete="off"
-                />
+                /></Field>
                 {loadingSearch && <div className="help-text">Searching…</div>}
                 {searchError && <div className="error-text">{searchError}</div>}
 
@@ -1738,28 +1739,28 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
 
               {/* Transaction details */}
               <div className="field">
-                <input
+                <Field label="Transaction ID"><input
                   type="text"
                   placeholder="Transaction ID"
                   value={manualPayment.transactionId}
                   onChange={(e) => setManualPayment((p) => ({ ...p, transactionId: e.target.value }))}
                   required
-                />
+                /></Field>
               </div>
 
               <div className="field">
-                <input
+                <Field label="Amount (KES) — optional (defaults to plan price)"><input
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="Amount (KES) — optional (defaults to plan price)"
                   value={manualPayment.amount}
                   onChange={(e) => setManualPayment((p) => ({ ...p, amount: e.target.value }))}
-                />
+                /></Field>
               </div>
 
               <div className="field">
-                <select
+                <Field label="Select Method (default: Manual)"><select
                   value={manualPayment.method}
                   onChange={(e) => setManualPayment((p) => ({ ...p, method: e.target.value }))}
                 >
@@ -1768,7 +1769,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                   <option value="mpesa">M-Pesa</option>
                   <option value="stripe">Stripe</option>
                   <option value="paypal">PayPal</option>
-                </select>
+                </select></Field>
               </div>
 
               <button type="submit" className="primary">
@@ -1779,13 +1780,13 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
             <h3>Backdate & Goodwill Adjustment</h3>
             <form onSubmit={handleAdjustment} className="stacked-form" ref={adjustDropdownRef}>
               <div className="field">
-                <input
+                <Field label="Search customer by name or account number"><input
                   type="text"
                   placeholder="Search customer by name or account number"
                   value={adjustSearchTerm}
                   onChange={(e) => setAdjustSearchTerm(e.target.value)}
                   autoComplete="off"
-                />
+                /></Field>
                 {adjustLoading && <div className="help-text">Searching...</div>}
                 {adjustSearchError && <div className="error-text">{adjustSearchError}</div>}
 
@@ -1847,11 +1848,11 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
 
               <div className="field">
                 <label>Backdate To (optional)</label>
-                <input
+                <Field label="Date"><input
                   type="date"
                   value={adjustForm.backdateTo}
                   onChange={(e) => setAdjustForm((p) => ({ ...p, backdateTo: e.target.value }))}
-                />
+                /></Field>
                 <p className="help-text">Sets the billing cycle anchor; expiry = backdate + plan duration.</p>
               </div>
 
@@ -1868,12 +1869,12 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
 
               <div className="field">
                 <label>Adjustment Notes (optional)</label>
-                <input
+                <Field label="Reason for adjustment"><input
                   type="text"
                   value={adjustForm.notes}
                   onChange={(e) => setAdjustForm((p) => ({ ...p, notes: e.target.value }))}
                   placeholder="Reason for adjustment"
-                />
+                /></Field>
               </div>
 
               <button type="submit" className="primary" disabled={adjustSaving}>
@@ -1890,13 +1891,13 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
             <h3>Issue Invoice</h3>
             <form onSubmit={submitInvoiceIssue} className="stacked-form" ref={invoiceDropdownRef}>
               <div className="field">
-                <input
+                <Field label="Search customer by name or account number"><input
                   type="text"
                   placeholder="Search customer by name or account number"
                   value={invoiceSearchTerm}
                   onChange={(e) => setInvoiceSearchTerm(e.target.value)}
                   autoComplete="off"
-                />
+                /></Field>
                 {invoiceSearchLoading && <div className="help-text">Searching...</div>}
                 {invoiceSearchError && <div className="error-text">{invoiceSearchError}</div>}
 
@@ -1963,7 +1964,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <select
+                <Field label="Select plan"><select
                   value={invoiceForm.planId}
                   onChange={(e) => handleInvoicePlanChange(e.target.value)}
                 >
@@ -1973,53 +1974,53 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                       {plan.name} - KES {Number(plan.price || 0).toFixed(2)}
                     </option>
                   ))}
-                </select>
+                </select></Field>
               </div>
 
               <div className="field">
-                <input
+                <Field label="Amount (optional override)"><input
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="Amount (optional override)"
                   value={invoiceForm.amount}
                   onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
-                />
+                /></Field>
               </div>
 
               <div className="field">
-                <input
+                <Field label="Date"><input
                   type="date"
                   value={invoiceForm.dueDate}
                   onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                />
+                /></Field>
                 <p className="help-text">Due date for collections and aging.</p>
               </div>
 
               <div className="field">
-                <input
+                <Field label="Date"><input
                   type="date"
                   value={invoiceForm.servicePeriodStart}
                   onChange={(e) =>
                     setInvoiceForm((prev) => ({ ...prev, servicePeriodStart: e.target.value }))
                   }
-                />
+                /></Field>
                 <p className="help-text">Optional service period start.</p>
               </div>
 
               <div className="field">
-                <input
+                <Field label="Date"><input
                   type="date"
                   value={invoiceForm.servicePeriodEnd}
                   onChange={(e) =>
                     setInvoiceForm((prev) => ({ ...prev, servicePeriodEnd: e.target.value }))
                   }
-                />
+                /></Field>
                 <p className="help-text">Optional service period end.</p>
               </div>
 
               <div className="field">
-                <select
+                <Field label="Manual"><select
                   value={invoiceForm.billingReason}
                   onChange={(e) =>
                     setInvoiceForm((prev) => ({ ...prev, billingReason: e.target.value }))
@@ -2030,7 +2031,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                   <option value="proration">Proration</option>
                   <option value="adjustment">Adjustment</option>
                   <option value="migration">Migration</option>
-                </select>
+                </select></Field>
               </div>
 
               <button type="submit" className="primary" disabled={invoiceSaving}>
@@ -2717,7 +2718,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 </div>
                 <div className="field">
                   <label>Method</label>
-                  <select
+                  <Field label="Manual"><select
                     value={editPayment.method}
                     onChange={(e) => setEditPayment((p) => ({ ...p, method: e.target.value }))}
                   >
@@ -2725,11 +2726,11 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                     <option value="mpesa">M-Pesa</option>
                     <option value="stripe">Stripe</option>
                     <option value="paypal">PayPal</option>
-                  </select>
+                  </select></Field>
                 </div>
                 <div className="field">
                   <label>Status</label>
-                  <select
+                  <Field label="Validated"><select
                     value={editPayment.status}
                     onChange={(e) => setEditPayment((p) => ({ ...p, status: e.target.value }))}
                   >
@@ -2739,16 +2740,16 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                     <option value="Refunded">Refunded</option>
                     <option value="Reversed">Reversed</option>
                     <option value="Chargeback">Chargeback</option>
-                  </select>
+                  </select></Field>
                 </div>
                 <div className="field">
                   <label>Notes</label>
-                  <textarea
+                  <Field label="Optional notes / reason for edit"><textarea
                     rows={4}
                     value={editPayment.notes}
                     onChange={(e) => setEditPayment((p) => ({ ...p, notes: e.target.value }))}
                     placeholder="Optional notes / reason for edit"
-                  />
+                  /></Field>
                 </div>
 
                 {/* Backdating in edit */}

@@ -35,12 +35,12 @@ MikroTikConnectionSchema.path("host").validate(function (v) {
 // Unique name per tenant (ignore docs missing name during migration)
 MikroTikConnectionSchema.index(
   { tenant: 1, name: 1 },
-  { unique: true, partialFilterExpression: { name: { $type: 'string', $ne: '' } } }
+  { unique: true, partialFilterExpression: { name: { $type: 'string', $gt: '' } } }
 );
 // Prevent duplicate host:port per tenant (ignore docs missing host)
 MikroTikConnectionSchema.index(
   { tenant: 1, host: 1, port: 1 },
-  { unique: true, partialFilterExpression: { host: { $type: 'string', $ne: '' }, port: { $type: 'number' } } }
+  { unique: true, partialFilterExpression: { host: { $type: 'string', $gt: '' }, port: { $type: 'number' } } }
 );
 
 module.exports = mongoose.model("MikroTikConnection", MikroTikConnectionSchema);

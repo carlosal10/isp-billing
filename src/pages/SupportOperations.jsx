@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -496,53 +497,53 @@ export default function SupportOperations() {
       >
         <form onSubmit={submitTicket} className="stacked-form" style={{ padding: 0 }}>
           <div className="field">
-            <input name="title" value={ticketForm.title} onChange={handleTicketChange} placeholder="Ticket title" required />
+            <Field label="Ticket title"><input name="title" value={ticketForm.title} onChange={handleTicketChange} placeholder="Ticket title" required /></Field>
           </div>
           <div className="field">
-            <select name="priority" value={ticketForm.priority} onChange={handleTicketChange}>
+            <Field label="priority"><select name="priority" value={ticketForm.priority} onChange={handleTicketChange}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="status" value={ticketForm.status} onChange={handleTicketChange}>
+            <Field label="status"><select name="status" value={ticketForm.status} onChange={handleTicketChange}>
               <option value="open">Open</option>
               <option value="in_progress">In Progress</option>
               <option value="waiting">Waiting</option>
               <option value="resolved">Resolved</option>
               <option value="closed">Closed</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="channel" value={ticketForm.channel} onChange={handleTicketChange}>
+            <Field label="channel"><select name="channel" value={ticketForm.channel} onChange={handleTicketChange}>
               <option value="internal">Internal</option>
               <option value="phone">Phone</option>
               <option value="email">Email</option>
               <option value="walk-in">Walk-In</option>
               <option value="portal">Portal</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="category" value={ticketForm.category} onChange={handleTicketChange} placeholder="Category" />
+            <Field label="Category"><input name="category" value={ticketForm.category} onChange={handleTicketChange} placeholder="Category" /></Field>
           </div>
           <div className="field">
-            <input name="assigneeName" value={ticketForm.assigneeName} onChange={handleTicketChange} placeholder="Assignee name" />
+            <Field label="Assignee name"><input name="assigneeName" value={ticketForm.assigneeName} onChange={handleTicketChange} placeholder="Assignee name" /></Field>
           </div>
           <div className="field">
-            <input name="assigneeEmail" value={ticketForm.assigneeEmail} onChange={handleTicketChange} placeholder="Assignee email" />
+            <Field label="Assignee email"><input name="assigneeEmail" value={ticketForm.assigneeEmail} onChange={handleTicketChange} placeholder="Assignee email" /></Field>
           </div>
           <div className="field">
-            <input name="tags" value={ticketForm.tags} onChange={handleTicketChange} placeholder="Tags (comma separated)" />
+            <Field label="Tags (comma separated)"><input name="tags" value={ticketForm.tags} onChange={handleTicketChange} placeholder="Tags (comma separated)" /></Field>
           </div>
           <div className="field" style={{ position: "relative", gridColumn: "span 2" }}>
-            <input
+            <Field label="Search customer by name or account number"><input
               name="customerQuery"
               value={ticketForm.customerQuery}
               onChange={handleTicketChange}
               placeholder="Search customer by name or account number"
-            />
+            /></Field>
             {ticketCustomerLoading ? <div className="help-text">Searching...</div> : null}
             <CustomerSearchResults
               results={ticketCustomerResults}
@@ -557,32 +558,32 @@ export default function SupportOperations() {
             />
           </div>
           <div className="field">
-            <select name="assetId" value={ticketForm.assetId} onChange={handleTicketChange}>
+            <Field label="asset Id"><select name="assetId" value={ticketForm.assetId} onChange={handleTicketChange}>
               <option value="">No asset linked</option>
               {assetOptions.map((asset) => (
                 <option key={asset._id} value={asset._id}>
                   {asset.assetTag} | {asset.name}
                 </option>
               ))}
-            </select>
+            </select></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 3" }}>
-            <textarea
+            <Field label="Describe the issue, symptoms, or customer request"><textarea
               name="description"
               value={ticketForm.description}
               onChange={handleTicketChange}
               rows={3}
               placeholder="Describe the issue, symptoms, or customer request"
-            />
+            /></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 2" }}>
-            <textarea
+            <Field label="note"><textarea
               name="note"
               value={ticketForm.note}
               onChange={handleTicketChange}
               rows={2}
               placeholder={editingTicketId ? "Add an internal note for this update" : "Optional opening note"}
-            />
+            /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "ticket:save"}>
             {busyAction === "ticket:save"
@@ -682,43 +683,43 @@ export default function SupportOperations() {
       >
         <form onSubmit={submitWorkOrder} className="stacked-form" style={{ padding: 0 }}>
           <div className="field">
-            <input name="summary" value={workOrderForm.summary} onChange={handleWorkOrderChange} placeholder="Work order summary" required />
+            <Field label="Work order summary"><input name="summary" value={workOrderForm.summary} onChange={handleWorkOrderChange} placeholder="Work order summary" required /></Field>
           </div>
           <div className="field">
-            <select name="type" value={workOrderForm.type} onChange={handleWorkOrderChange}>
+            <Field label="type"><select name="type" value={workOrderForm.type} onChange={handleWorkOrderChange}>
               <option value="install">Install</option>
               <option value="repair">Repair</option>
               <option value="maintenance">Maintenance</option>
               <option value="pickup">Pickup</option>
               <option value="survey">Survey</option>
               <option value="other">Other</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="priority" value={workOrderForm.priority} onChange={handleWorkOrderChange}>
+            <Field label="priority"><select name="priority" value={workOrderForm.priority} onChange={handleWorkOrderChange}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="status" value={workOrderForm.status} onChange={handleWorkOrderChange}>
+            <Field label="status"><select name="status" value={workOrderForm.status} onChange={handleWorkOrderChange}>
               <option value="open">Open</option>
               <option value="scheduled">Scheduled</option>
               <option value="dispatched">Dispatched</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field" style={{ position: "relative", gridColumn: "span 2" }}>
-            <input
+            <Field label="Search customer by name or account number"><input
               name="customerQuery"
               value={workOrderForm.customerQuery}
               onChange={handleWorkOrderChange}
               placeholder="Search customer by name or account number"
-            />
+            /></Field>
             {workOrderCustomerLoading ? <div className="help-text">Searching...</div> : null}
             <CustomerSearchResults
               results={workOrderCustomerResults}
@@ -733,46 +734,46 @@ export default function SupportOperations() {
             />
           </div>
           <div className="field">
-            <select name="assetId" value={workOrderForm.assetId} onChange={handleWorkOrderChange}>
+            <Field label="asset Id"><select name="assetId" value={workOrderForm.assetId} onChange={handleWorkOrderChange}>
               <option value="">No asset linked</option>
               {assetOptions.map((asset) => (
                 <option key={asset._id} value={asset._id}>
                   {asset.assetTag} | {asset.name}
                 </option>
               ))}
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="ticketId" value={workOrderForm.ticketId} onChange={handleWorkOrderChange}>
+            <Field label="ticket Id"><select name="ticketId" value={workOrderForm.ticketId} onChange={handleWorkOrderChange}>
               <option value="">No ticket linked</option>
               {ticketOptions.map((ticket) => (
                 <option key={ticket._id} value={ticket._id}>
                   {ticket.ticketNumber} | {ticket.title}
                 </option>
               ))}
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="technicianName" value={workOrderForm.technicianName} onChange={handleWorkOrderChange} placeholder="Technician name" />
+            <Field label="Technician name"><input name="technicianName" value={workOrderForm.technicianName} onChange={handleWorkOrderChange} placeholder="Technician name" /></Field>
           </div>
           <div className="field">
-            <input name="technicianPhone" value={workOrderForm.technicianPhone} onChange={handleWorkOrderChange} placeholder="Technician phone" />
+            <Field label="Technician phone"><input name="technicianPhone" value={workOrderForm.technicianPhone} onChange={handleWorkOrderChange} placeholder="Technician phone" /></Field>
           </div>
           <div className="field">
-            <input name="site" value={workOrderForm.site} onChange={handleWorkOrderChange} placeholder="Site or area" />
+            <Field label="Site or area"><input name="site" value={workOrderForm.site} onChange={handleWorkOrderChange} placeholder="Site or area" /></Field>
           </div>
           <div className="field">
-            <input type="datetime-local" name="scheduledFor" value={workOrderForm.scheduledFor} onChange={handleWorkOrderChange} />
+            <Field label="scheduled For"><input type="datetime-local" name="scheduledFor" value={workOrderForm.scheduledFor} onChange={handleWorkOrderChange} /></Field>
             <p className="help-text">Optional dispatch or appointment time.</p>
           </div>
           <div className="field" style={{ gridColumn: "span 3" }}>
-            <textarea
+            <Field label="Dispatch notes, parts used, or resolution details"><textarea
               name="resolutionNotes"
               value={workOrderForm.resolutionNotes}
               onChange={handleWorkOrderChange}
               rows={3}
               placeholder="Dispatch notes, parts used, or resolution details"
-            />
+            /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "work-order:save"}>
             {busyAction === "work-order:save"

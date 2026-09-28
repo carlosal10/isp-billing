@@ -6,6 +6,7 @@ function registerJobs() {
   if (registered) return;
   registered = true;
 
+  require('./accessRecovery');
   require('./exports');
   require('./historyRetention');
   require('./privacyRetention');

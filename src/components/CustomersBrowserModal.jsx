@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 // src/components/CustomersBrowserModal.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "./ui/Modal";
@@ -160,12 +161,12 @@ export default function CustomersBrowserModal({ open, onClose, onSelect }) {
           Disabled/Inactive
         </button>
 
-        <input
+        <Field label="Filter"><input
           placeholder="Filter..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={{ flex: 1, padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 12 }}
-        />
+        /></Field>
 
         <button
           className="btn"

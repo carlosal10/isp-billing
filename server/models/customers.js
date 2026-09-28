@@ -49,6 +49,7 @@ const customerSchema = new mongoose.Schema({
   },
 
   portalProfile: {
+    sessionVersion: { type: Number, default: 0 },
     isEnabled: { type: Boolean, default: true },
     pinHash: { type: String, default: null },
     lastLoginAt: { type: Date, default: null },

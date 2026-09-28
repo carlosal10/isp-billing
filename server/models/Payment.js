@@ -89,6 +89,7 @@ const PaymentSchema = new mongoose.Schema(
     unappliedAmount: { type: Number, default: 0, min: 0 },
     isFinanciallyApplied: { type: Boolean, default: false, index: true },
     financialAppliedAt: { type: Date, default: null },
+    financialFingerprint: { type: String, default: null },
     financeVersion: { type: Number, default: 0, min: 0 },
     refundAmount: { type: Number, default: 0, min: 0 },
     refundedAt: { type: Date, default: null },
@@ -175,8 +176,8 @@ PaymentSchema.index(
   {
     unique: true,
     partialFilterExpression: {
-      transactionId: { $type: 'string', $ne: '' },
-      isDeleted: { $ne: true },
+      transactionId: { $type: 'string', $gt: '' },
+      isDeleted: false,
     },
   }
 );

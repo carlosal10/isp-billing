@@ -96,6 +96,7 @@ async function updateCustomerPortalAccess({
     throw serviceError(400, 'No portal access changes provided');
   }
 
+  customer.set('portalProfile.sessionVersion', Number(customer.portalProfile?.sessionVersion || 0) + 1);
   const updated = await customer.save();
   const after = serializePortalProfile(updated);
 

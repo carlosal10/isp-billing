@@ -36,6 +36,7 @@ const invoiceAllocationSchema = new mongoose.Schema(
 );
 
 invoiceAllocationSchema.index({ tenantId: 1, invoice: 1, status: 1, appliedAt: 1 });
+invoiceAllocationSchema.index({ tenantId: 1, batchId: 1, invoice: 1 }, { unique: true, partialFilterExpression: { batchId: { $type: 'string' } } });
 invoiceAllocationSchema.index({ tenantId: 1, payment: 1, status: 1, appliedAt: 1 });
 invoiceAllocationSchema.index({ tenantId: 1, creditNote: 1, status: 1, appliedAt: 1 });
 

@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -511,13 +512,13 @@ export default function ServiceOperations() {
       >
         <form onSubmit={submitAsset} className="stacked-form" style={{ padding: 0, marginBottom: 18 }}>
           <div className="field">
-            <input name="assetTag" value={assetForm.assetTag} onChange={handleAssetChange} placeholder="Asset tag" required />
+            <Field label="Asset tag"><input name="assetTag" value={assetForm.assetTag} onChange={handleAssetChange} placeholder="Asset tag" required /></Field>
           </div>
           <div className="field">
-            <input name="name" value={assetForm.name} onChange={handleAssetChange} placeholder="Display name" required />
+            <Field label="Display name"><input name="name" value={assetForm.name} onChange={handleAssetChange} placeholder="Display name" required /></Field>
           </div>
           <div className="field">
-            <select name="kind" value={assetForm.kind} onChange={handleAssetChange}>
+            <Field label="kind"><select name="kind" value={assetForm.kind} onChange={handleAssetChange}>
               <option value="cpe">CPE</option>
               <option value="router">Router</option>
               <option value="switch">Switch</option>
@@ -526,37 +527,37 @@ export default function ServiceOperations() {
               <option value="ap">Access Point</option>
               <option value="server">Server</option>
               <option value="other">Other</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="status" value={assetForm.status} onChange={handleAssetChange}>
+            <Field label="status"><select name="status" value={assetForm.status} onChange={handleAssetChange}>
               <option value="in_stock">In Stock</option>
               <option value="spare">Spare</option>
               <option value="maintenance">Maintenance</option>
               <option value="faulty">Faulty</option>
               <option value="retired">Retired</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="vendor" value={assetForm.vendor} onChange={handleAssetChange} placeholder="Vendor" />
+            <Field label="Vendor"><input name="vendor" value={assetForm.vendor} onChange={handleAssetChange} placeholder="Vendor" /></Field>
           </div>
           <div className="field">
-            <input name="model" value={assetForm.model} onChange={handleAssetChange} placeholder="Model" />
+            <Field label="Model"><input name="model" value={assetForm.model} onChange={handleAssetChange} placeholder="Model" /></Field>
           </div>
           <div className="field">
-            <input name="serialNumber" value={assetForm.serialNumber} onChange={handleAssetChange} placeholder="Serial number" />
+            <Field label="Serial number"><input name="serialNumber" value={assetForm.serialNumber} onChange={handleAssetChange} placeholder="Serial number" /></Field>
           </div>
           <div className="field">
-            <input name="macAddress" value={assetForm.macAddress} onChange={handleAssetChange} placeholder="MAC address" />
+            <Field label="MAC address"><input name="macAddress" value={assetForm.macAddress} onChange={handleAssetChange} placeholder="MAC address" /></Field>
           </div>
           <div className="field">
-            <input name="site" value={assetForm.site} onChange={handleAssetChange} placeholder="Site" />
+            <Field label="Site"><input name="site" value={assetForm.site} onChange={handleAssetChange} placeholder="Site" /></Field>
           </div>
           <div className="field">
-            <input name="location" value={assetForm.location} onChange={handleAssetChange} placeholder="Location / shelf / zone" />
+            <Field label="Location / shelf / zone"><input name="location" value={assetForm.location} onChange={handleAssetChange} placeholder="Location / shelf / zone" /></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 3" }}>
-            <input name="notes" value={assetForm.notes} onChange={handleAssetChange} placeholder="Notes" />
+            <Field label="Notes"><input name="notes" value={assetForm.notes} onChange={handleAssetChange} placeholder="Notes" /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "asset:create"}>
             {busyAction === "asset:create" ? "Saving..." : "Add Asset"}
@@ -646,22 +647,22 @@ export default function ServiceOperations() {
       <SectionCard title="Asset Assignment" subtitle="Link field assets to customer accounts as they are installed.">
         <form onSubmit={submitAssetAssignment} className="stacked-form" style={{ padding: 0 }}>
           <div className="field">
-            <select name="assetId" value={assetAssignmentForm.assetId} onChange={handleAssignmentChange}>
+            <Field label="asset Id"><select name="assetId" value={assetAssignmentForm.assetId} onChange={handleAssignmentChange}>
               <option value="">Choose asset</option>
               {assetOptions.map((asset) => (
                 <option key={asset._id} value={asset._id}>
                   {asset.assetTag} | {asset.name}
                 </option>
               ))}
-            </select>
+            </select></Field>
           </div>
           <div className="field" style={{ position: "relative" }}>
-            <input
+            <Field label="Search customer by name or account number"><input
               name="customerQuery"
               value={assetAssignmentForm.customerQuery}
               onChange={handleAssignmentChange}
               placeholder="Search customer by name or account number"
-            />
+            /></Field>
             {assetCustomerLoading ? <div className="help-text">Searching...</div> : null}
             <CustomerSearchResults
               results={assetCustomerResults}
@@ -677,11 +678,11 @@ export default function ServiceOperations() {
             />
           </div>
           <div className="field">
-            <input type="date" name="installedAt" value={assetAssignmentForm.installedAt} onChange={handleAssignmentChange} />
+            <Field label="installed At"><input type="date" name="installedAt" value={assetAssignmentForm.installedAt} onChange={handleAssignmentChange} /></Field>
             <p className="help-text">Optional install date.</p>
           </div>
           <div className="field" style={{ gridColumn: "span 2" }}>
-            <input name="notes" value={assetAssignmentForm.notes} onChange={handleAssignmentChange} placeholder="Install or handover notes" />
+            <Field label="Install or handover notes"><input name="notes" value={assetAssignmentForm.notes} onChange={handleAssignmentChange} placeholder="Install or handover notes" /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "asset:assign"}>
             {busyAction === "asset:assign" ? "Linking..." : "Link Asset"}
@@ -692,13 +693,13 @@ export default function ServiceOperations() {
       <SectionCard title="IP Pools" subtitle="Manage static, management, and infrastructure address pools.">
         <form onSubmit={submitPool} className="stacked-form" style={{ padding: 0, marginBottom: 18 }}>
           <div className="field">
-            <input name="name" value={poolForm.name} onChange={handlePoolChange} placeholder="Pool name" required />
+            <Field label="Pool name"><input name="name" value={poolForm.name} onChange={handlePoolChange} placeholder="Pool name" required /></Field>
           </div>
           <div className="field">
-            <input name="cidr" value={poolForm.cidr} onChange={handlePoolChange} placeholder="CIDR (e.g. 192.168.20.0/24)" required />
+            <Field label="CIDR (e.g. 192.168.20.0/24)"><input name="cidr" value={poolForm.cidr} onChange={handlePoolChange} placeholder="CIDR (e.g. 192.168.20.0/24)" required /></Field>
           </div>
           <div className="field">
-            <select name="kind" value={poolForm.kind} onChange={handlePoolChange}>
+            <Field label="kind"><select name="kind" value={poolForm.kind} onChange={handlePoolChange}>
               <option value="static">Static WAN</option>
               <option value="management">Management</option>
               <option value="infrastructure">Infrastructure</option>
@@ -706,28 +707,28 @@ export default function ServiceOperations() {
               <option value="hotspot">Hotspot</option>
               <option value="loopback">Loopback</option>
               <option value="other">Other</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="gateway" value={poolForm.gateway} onChange={handlePoolChange} placeholder="Gateway IP" />
+            <Field label="Gateway IP"><input name="gateway" value={poolForm.gateway} onChange={handlePoolChange} placeholder="Gateway IP" /></Field>
           </div>
           <div className="field">
-            <input name="dnsServers" value={poolForm.dnsServers} onChange={handlePoolChange} placeholder="DNS servers (comma separated)" />
+            <Field label="DNS servers (comma separated)"><input name="dnsServers" value={poolForm.dnsServers} onChange={handlePoolChange} placeholder="DNS servers (comma separated)" /></Field>
           </div>
           <div className="field">
-            <input name="vlanId" type="number" value={poolForm.vlanId} onChange={handlePoolChange} placeholder="VLAN ID" />
+            <Field label="VLAN ID"><input name="vlanId" type="number" value={poolForm.vlanId} onChange={handlePoolChange} placeholder="VLAN ID" /></Field>
           </div>
           <div className="field">
-            <input name="site" value={poolForm.site} onChange={handlePoolChange} placeholder="Site" />
+            <Field label="Site"><input name="site" value={poolForm.site} onChange={handlePoolChange} placeholder="Site" /></Field>
           </div>
           <div className="field">
-            <select name="status" value={poolForm.status} onChange={handlePoolChange}>
+            <Field label="status"><select name="status" value={poolForm.status} onChange={handlePoolChange}>
               <option value="active">Active</option>
               <option value="disabled">Disabled</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 2" }}>
-            <input name="notes" value={poolForm.notes} onChange={handlePoolChange} placeholder="Notes" />
+            <Field label="Notes"><input name="notes" value={poolForm.notes} onChange={handlePoolChange} placeholder="Notes" /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "pool:create"}>
             {busyAction === "pool:create" ? "Saving..." : "Add Pool"}
@@ -800,37 +801,37 @@ export default function ServiceOperations() {
       <SectionCard title="IP Allocation" subtitle="Allocate addresses to customer WANs, device management interfaces, or reserve them for infrastructure.">
         <form onSubmit={submitIpAllocation} className="stacked-form" style={{ padding: 0 }}>
           <div className="field">
-            <select name="poolId" value={ipForm.poolId} onChange={handleIpFormChange}>
+            <Field label="pool Id"><select name="poolId" value={ipForm.poolId} onChange={handleIpFormChange}>
               <option value="">Choose pool</option>
               {activePoolOptions.map((pool) => (
                 <option key={pool._id} value={pool._id}>
                   {pool.name} | {poolDescriptor(pool)}
                 </option>
               ))}
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="purpose" value={ipForm.purpose} onChange={handleIpFormChange}>
+            <Field label="purpose"><select name="purpose" value={ipForm.purpose} onChange={handleIpFormChange}>
               <option value="customer-wan">Customer WAN</option>
               <option value="device-management">Device Management</option>
               <option value="gateway">Gateway</option>
               <option value="infrastructure">Infrastructure</option>
               <option value="hotspot">Hotspot</option>
               <option value="reserved">Reserved</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="ipAddress" value={ipForm.ipAddress} onChange={handleIpFormChange} placeholder="Preferred IP (optional)" />
+            <Field label="Preferred IP (optional)"><input name="ipAddress" value={ipForm.ipAddress} onChange={handleIpFormChange} placeholder="Preferred IP (optional)" /></Field>
             <p className="help-text">Leave empty to auto-assign the next free host.</p>
           </div>
 
           <div className="field" style={{ position: "relative" }}>
-            <input
+            <Field label="Customer search (for WAN allocation)"><input
               name="customerQuery"
               value={ipForm.customerQuery}
               onChange={handleIpFormChange}
               placeholder="Customer search (for WAN allocation)"
-            />
+            /></Field>
             {ipCustomerLoading ? <div className="help-text">Searching...</div> : null}
             <CustomerSearchResults
               results={ipCustomerResults}
@@ -847,19 +848,19 @@ export default function ServiceOperations() {
           </div>
 
           <div className="field">
-            <select name="assetId" value={ipForm.assetId} onChange={handleIpFormChange}>
+            <Field label="asset Id"><select name="assetId" value={ipForm.assetId} onChange={handleIpFormChange}>
               <option value="">No asset selected</option>
               {assetOptions.map((asset) => (
                 <option key={asset._id} value={asset._id}>
                   {asset.assetTag} | {asset.name}
                 </option>
               ))}
-            </select>
+            </select></Field>
             <p className="help-text">Required for device management allocations.</p>
           </div>
 
           <div className="field" style={{ gridColumn: "span 2" }}>
-            <input name="note" value={ipForm.note} onChange={handleIpFormChange} placeholder="Purpose / reservation note" />
+            <Field label="Purpose / reservation note"><input name="note" value={ipForm.note} onChange={handleIpFormChange} placeholder="Purpose / reservation note" /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "ip:allocate"}>
             {busyAction === "ip:allocate" ? "Allocating..." : "Allocate IP"}

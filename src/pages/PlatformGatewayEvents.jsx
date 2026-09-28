@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useMemo, useState } from "react";
 import { platformApi } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -608,7 +609,7 @@ export default function PlatformGatewayEvents() {
               marginBottom: 10,
             }}
           >
-            <select
+            <Field label="All providers"><select
               value={filters.provider}
               onChange={(e) =>
                 setFilters((current) => ({ ...current, provider: e.target.value }))
@@ -618,8 +619,8 @@ export default function PlatformGatewayEvents() {
               <option value="">All providers</option>
               <option value="stripe">Stripe</option>
               <option value="mpesa">M-Pesa</option>
-            </select>
-            <select
+            </select></Field>
+            <Field label="All kinds"><select
               value={filters.kind}
               onChange={(e) =>
                 setFilters((current) => ({ ...current, kind: e.target.value }))
@@ -630,8 +631,8 @@ export default function PlatformGatewayEvents() {
               <option value="webhook">Webhook</option>
               <option value="c2b-confirmation">C2B confirmation</option>
               <option value="stk-callback">STK callback</option>
-            </select>
-            <select
+            </select></Field>
+            <Field label="All statuses"><select
               value={filters.eventStatus}
               onChange={(e) =>
                 setFilters((current) => ({
@@ -645,8 +646,8 @@ export default function PlatformGatewayEvents() {
               <option value="rejected">Rejected</option>
               <option value="failed">Failed</option>
               <option value="unmatched">Unmatched</option>
-            </select>
-            <select
+            </select></Field>
+            <Field label="All claims"><select
               value={filters.claimState}
               onChange={(e) =>
                 setFilters((current) => ({
@@ -660,8 +661,8 @@ export default function PlatformGatewayEvents() {
               <option value="unclaimed">Unclaimed</option>
               <option value="claimed">Claimed</option>
               <option value="mine">Mine</option>
-            </select>
-            <select
+            </select></Field>
+            <Field label="Oldest first"><select
               value={filters.sort}
               onChange={(e) =>
                 setFilters((current) => ({ ...current, sort: e.target.value }))
@@ -670,7 +671,7 @@ export default function PlatformGatewayEvents() {
             >
               <option value="oldest">Oldest first</option>
               <option value="newest">Newest first</option>
-            </select>
+            </select></Field>
             <button
               type="button"
               onClick={() => fetchSummaryAndEvents(filters)}
@@ -942,7 +943,7 @@ export default function PlatformGatewayEvents() {
 
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={{ fontWeight: 700 }}>Target Tenant</label>
-                <input
+                <Field label="Search by tenant name or subdomain"><input
                   value={tenantQuery}
                   onChange={(e) => setTenantQuery(e.target.value)}
                   placeholder="Search by tenant name or subdomain"
@@ -951,7 +952,7 @@ export default function PlatformGatewayEvents() {
                     borderRadius: 10,
                     border: "1px solid #cbd5e1",
                   }}
-                />
+                /></Field>
                 {tenantLoading ? (
                   <div style={{ color: "#64748b", fontSize: 14 }}>
                     Searching tenants...
@@ -1006,7 +1007,7 @@ export default function PlatformGatewayEvents() {
 
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={{ fontWeight: 700 }}>Operator Note</label>
-                <textarea
+                <Field label="Optional context for the audit trail"><textarea
                   value={actionNote}
                   onChange={(e) => setActionNote(e.target.value)}
                   placeholder="Optional context for the audit trail"
@@ -1017,7 +1018,7 @@ export default function PlatformGatewayEvents() {
                     border: "1px solid #cbd5e1",
                     resize: "vertical",
                   }}
-                />
+                /></Field>
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

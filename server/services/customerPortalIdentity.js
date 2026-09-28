@@ -38,7 +38,7 @@ async function resolvePortalLoginMethod(
     return (await comparePin(String(pin), pinHash)) ? 'pin' : null;
   }
 
-  return matchesCustomerCredential(customer, credential) ? 'contact' : null;
+  return null;
 }
 
 module.exports = {

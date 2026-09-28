@@ -14,6 +14,7 @@ const {
 const { getPortalCustomer } = require('../services/customerPortalService');
 const { signCustomerPortalAccessToken } = require('../utils/jwt');
 const { loginLimiter } = require('../middleware/riskRateLimits');
+const { issuePortalChallenge, completePortalChallenge } = require('../services/portalChallengeService');
 
 const router = express.Router();
 
@@ -52,6 +53,21 @@ async function resolvePortalCustomer({ tenantName, accountNumber }) {
 
   return { tenant, customer };
 }
+
+router.post('/challenge', loginLimiter, async (req, res) => {
+  try {
+    const { tenantName, accountNumber } = req.body || {};
+    if (typeof tenantName !== 'string' || typeof accountNumber !== 'string' || tenantName.length > 120 || accountNumber.length > 120) {
+      return res.status(400).json({ ok: false, error: 'Workspace and account number are required' });
+    }
+    return res.json(await issuePortalChallenge(await resolvePortalCustomer({ tenantName, accountNumber })));
+  } catch { return res.status(503).json({ ok: false, error: 'Verification is temporarily unavailable' }); }
+});
+
+router.post('/challenge/complete', loginLimiter, async (req, res) => {
+  try { return res.json(await completePortalChallenge(req.body || {})); }
+  catch (err) { return res.status(err.statusCode || 503).json({ ok: false, error: err.statusCode ? err.message : 'Verification is temporarily unavailable' }); }
+});
 
 router.post('/login', loginLimiter, async (req, res) => {
   try {
@@ -136,7 +152,8 @@ router.get('/verify', requirePortalAuth, async (req, res) => {
   }
 });
 
-router.post('/logout', (_req, res) => {
+router.post('/logout', requirePortalAuth, async (req, res) => {
+  await Customer.updateOne({ _id: req.portalCustomerId, tenantId: req.tenantId }, { $inc: { 'portalProfile.sessionVersion': 1 } });
   return res.json({ ok: true });
 });
 

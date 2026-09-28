@@ -31,9 +31,8 @@ export const API_BASE = normalizeApiBase(
 export const PLATFORM_API_BASE = API_BASE.replace(/\/api\/?$/, "/platform-api");
 export const PORTAL_API_BASE = API_BASE.replace(/\/api\/?$/, "/portal-api");
 
-// Enable cookie-based auth transport so the server can fall back to cookies
-// if Authorization header is briefly missing.
-const USE_COOKIES = true;
+// Authentication uses explicit bearer headers; ambient cookies are never credentials.
+const USE_COOKIES = false;
 
 /** ================================
  *  Minimal local storage helpers

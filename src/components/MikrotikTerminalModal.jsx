@@ -4,16 +4,11 @@ import "./MikrotikTerminalModal.css";
 import { api } from "../lib/apiClient";
 import { useServer } from "../context/ServerContext";
 
-
 export default function MikrotikTerminalModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
   const [cmd, setCmd] = useState("/system/resource/print");
   const [out, setOut] = useState([]);
   const { servers, selected, setSelected, reload } = useServer();
-
-
-
-
 
   if (!visible) return null;
 
@@ -40,7 +35,7 @@ export default function MikrotikTerminalModal({ isOpen = false, onClose, standal
 
   const content = (
       <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
-         */}
+
         {!standalone ? (
           <button className="ps-close" onClick={onClose} aria-label="Close" >
             <FaTimes size={18} />

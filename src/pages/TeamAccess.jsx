@@ -204,7 +204,7 @@ export default function TeamAccess() {
         actions={<button className="btn" onClick={load} disabled={loading}>Refresh</button>}
       >
         <form onSubmit={createInvite} style={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) 160px 160px auto", gap: 10 }}>
-          <Field label="teammate@example.com"><input
+          <Field label="Email address"><input
             type="email"
             value={inviteForm.email}
             onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))}

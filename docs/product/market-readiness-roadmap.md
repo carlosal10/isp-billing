@@ -1,5 +1,9 @@
 # SwiftBridge Market-Readiness Roadmap
 
+## Current implementation checkpoint
+
+The local Phase 1 exit checks and the first Phase 2 finance-recovery vertical slice are complete. The next release gate is staging validation with real provider credentials, a production-like backup/restore rehearsal, MikroTik lab validation, and named operational owners. Local evidence is recorded in `docs/product/phase-1-security-status.md`.
+
 ## Product goal
 
 Ship SwiftBridge as a dependable multi-tenant ISP operations platform that an ISP can trust with customer identity, billing, collections, network access, and daily support work.

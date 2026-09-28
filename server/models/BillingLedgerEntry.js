@@ -6,6 +6,7 @@ const billingLedgerEntrySchema = new mongoose.Schema(
   {
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', index: true, required: true },
     batchId: { type: String, trim: true, required: true, index: true },
+    lineNumber: { type: Number },
     sourceType: {
       type: String,
       enum: ['invoice', 'payment', 'credit-note', 'credit-application', 'reversal', 'chargeback'],
@@ -34,6 +35,7 @@ const billingLedgerEntrySchema = new mongoose.Schema(
 );
 
 billingLedgerEntrySchema.index({ tenantId: 1, effectiveAt: -1 });
+billingLedgerEntrySchema.index({ tenantId: 1, batchId: 1, lineNumber: 1 }, { unique: true, partialFilterExpression: { lineNumber: { $type: 'number' } } });
 billingLedgerEntrySchema.index({ tenantId: 1, sourceType: 1, sourceId: 1 });
 
 module.exports = mongoose.model('BillingLedgerEntry', billingLedgerEntrySchema);

@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -442,80 +443,80 @@ export default function NocOperations() {
       >
         <form onSubmit={submitIncident} className="stacked-form" style={{ padding: 0 }}>
           <div className="field">
-            <input name="title" value={incidentForm.title} onChange={handleChange} placeholder="Incident title" required />
+            <Field label="Incident title"><input name="title" value={incidentForm.title} onChange={handleChange} placeholder="Incident title" required /></Field>
           </div>
           <div className="field">
-            <select name="kind" value={incidentForm.kind} onChange={handleChange}>
+            <Field label="kind"><select name="kind" value={incidentForm.kind} onChange={handleChange}>
               <option value="outage">Outage</option>
               <option value="degradation">Degradation</option>
               <option value="maintenance">Maintenance</option>
               <option value="security">Security</option>
               <option value="other">Other</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="severity" value={incidentForm.severity} onChange={handleChange}>
+            <Field label="severity"><select name="severity" value={incidentForm.severity} onChange={handleChange}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <select name="status" value={incidentForm.status} onChange={handleChange}>
+            <Field label="status"><select name="status" value={incidentForm.status} onChange={handleChange}>
               <option value="scheduled">Scheduled</option>
               <option value="open">Open</option>
               <option value="investigating">Investigating</option>
               <option value="monitoring">Monitoring</option>
               <option value="resolved">Resolved</option>
               <option value="closed">Closed</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field">
-            <input name="site" value={incidentForm.site} onChange={handleChange} placeholder="Site / tower / POP" />
+            <Field label="Site / tower / POP"><input name="site" value={incidentForm.site} onChange={handleChange} placeholder="Site / tower / POP" /></Field>
           </div>
           <div className="field">
-            <input name="routerName" value={incidentForm.routerName} onChange={handleChange} placeholder="Router / node name" />
+            <Field label="Router / node name"><input name="routerName" value={incidentForm.routerName} onChange={handleChange} placeholder="Router / node name" /></Field>
           </div>
           <div className="field">
-            <input type="datetime-local" name="detectedAt" value={incidentForm.detectedAt} onChange={handleChange} />
+            <Field label="detected At"><input type="datetime-local" name="detectedAt" value={incidentForm.detectedAt} onChange={handleChange} /></Field>
             <p className="help-text">Detection time.</p>
           </div>
           <div className="field">
-            <input type="datetime-local" name="startedAt" value={incidentForm.startedAt} onChange={handleChange} />
+            <Field label="started At"><input type="datetime-local" name="startedAt" value={incidentForm.startedAt} onChange={handleChange} /></Field>
             <p className="help-text">Service impact start.</p>
           </div>
           <div className="field">
-            <input type="datetime-local" name="plannedStart" value={incidentForm.plannedStart} onChange={handleChange} />
+            <Field label="planned Start"><input type="datetime-local" name="plannedStart" value={incidentForm.plannedStart} onChange={handleChange} /></Field>
             <p className="help-text">Planned start for maintenance.</p>
           </div>
           <div className="field">
-            <input type="datetime-local" name="plannedEnd" value={incidentForm.plannedEnd} onChange={handleChange} />
+            <Field label="planned End"><input type="datetime-local" name="plannedEnd" value={incidentForm.plannedEnd} onChange={handleChange} /></Field>
             <p className="help-text">Planned end for maintenance.</p>
           </div>
           <div className="field">
-            <select name="notificationState" value={incidentForm.notificationState} onChange={handleChange}>
+            <Field label="notification State"><select name="notificationState" value={incidentForm.notificationState} onChange={handleChange}>
               <option value="not_started">Notification Not Started</option>
               <option value="drafted">Notification Drafted</option>
               <option value="sent">Notification Sent</option>
-            </select>
+            </select></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 3" }}>
-            <textarea
+            <Field label="What is happening, which sites are affected, and what operators should know"><textarea
               name="summary"
               value={incidentForm.summary}
               onChange={handleChange}
               rows={3}
               placeholder="What is happening, which sites are affected, and what operators should know"
-            />
+            /></Field>
           </div>
           <div className="field" style={{ position: "relative", gridColumn: "span 2" }}>
-            <input
+            <Field label="Search affected customers by name or account number"><input
               name="customerQuery"
               value={incidentForm.customerQuery}
               onChange={handleChange}
               placeholder="Search affected customers by name or account number"
-            />
+            /></Field>
             {customerLoading ? <div className="help-text">Searching...</div> : null}
             <CustomerSearchResults results={customerResults} onSelect={addCustomer} />
             <SelectionChips
@@ -525,7 +526,7 @@ export default function NocOperations() {
             />
           </div>
           <div className="field">
-            <select name="assetIdToAdd" value={incidentForm.assetIdToAdd} onChange={handleChange}>
+            <Field label="asset Id To Add"><select name="assetIdToAdd" value={incidentForm.assetIdToAdd} onChange={handleChange}>
               <option value="">Add affected asset</option>
               {activeAssets
                 .filter((asset) => !incidentForm.affectedAssetIds.includes(asset._id))
@@ -534,7 +535,7 @@ export default function NocOperations() {
                     {asset.assetTag} | {asset.name}
                   </option>
                 ))}
-            </select>
+            </select></Field>
             <div style={{ marginTop: 8 }}>
               <button type="button" className="secondary" onClick={addAsset}>
                 Add Asset
@@ -547,16 +548,16 @@ export default function NocOperations() {
             />
           </div>
           <div className="field">
-            <input name="tags" value={incidentForm.tags} onChange={handleChange} placeholder="Tags (comma separated)" />
+            <Field label="Tags (comma separated)"><input name="tags" value={incidentForm.tags} onChange={handleChange} placeholder="Tags (comma separated)" /></Field>
           </div>
           <div className="field" style={{ gridColumn: "span 2" }}>
-            <textarea
+            <Field label="update"><textarea
               name="update"
               value={incidentForm.update}
               onChange={handleChange}
               rows={2}
               placeholder={editingIncidentId ? "Add an incident timeline update" : "Opening incident note"}
-            />
+            /></Field>
           </div>
           <button type="submit" className="primary" disabled={busyAction === "incident:save"}>
             {busyAction === "incident:save"

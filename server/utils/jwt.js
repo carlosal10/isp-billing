@@ -87,6 +87,7 @@ function signCustomerPortalAccessToken({ tenant, customer }) {
       accountNumber: customer.accountNumber || null,
       customerName: customer.name || null,
       role: "customer",
+      sessionVersion: Number(customer.portalProfile?.sessionVersion || 0),
       tokenUse: "access",
     },
     SECRET,

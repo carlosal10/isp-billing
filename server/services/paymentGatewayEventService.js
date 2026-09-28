@@ -86,8 +86,6 @@ async function recordGatewayEvent(meta = {}) {
       {
         $set: {
           lastSeenAt: now,
-          headers: base.headers,
-          payload: base.payload,
         },
         $inc: { duplicateCount: 1 },
       },
@@ -98,8 +96,8 @@ async function recordGatewayEvent(meta = {}) {
 }
 
 async function beginGatewayEventProcessing(eventId) {
-  return PaymentGatewayEvent.findByIdAndUpdate(
-    eventId,
+  return PaymentGatewayEvent.findOneAndUpdate(
+    { _id: eventId, eventStatus: { $ne: 'processed' } },
     {
       $set: {
         eventStatus: 'processing',

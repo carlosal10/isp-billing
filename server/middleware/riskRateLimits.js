@@ -1,9 +1,11 @@
 'use strict';
 
 const rateLimit = require('express-rate-limit');
+const { MongoRateLimitStore } = require('../security/mongoRateLimitStore');
 
 function createRiskLimiter({ limit, message, windowMs }) {
   return rateLimit({
+    store: new MongoRateLimitStore(message),
     windowMs,
     limit,
     standardHeaders: 'draft-8',

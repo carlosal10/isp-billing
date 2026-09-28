@@ -108,10 +108,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const stripe = getStripeClient();
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    const derivedContext = await deriveStripeGatewayContext(parsedPayload).catch(() => ({}));
-    const rejectedDedupeKey = parsedPayload?.id
-      ? `stripe:webhook:${parsedPayload.id}`
-      : `stripe:webhook:invalid:${hashValue(rawBodyText)}`;
+    const derivedContext = {};
+    const rejectedDedupeKey = `stripe:webhook:invalid:${hashValue(rawBodyText)}`;
     const recorded = await recordGatewayEvent({
       provider: 'stripe',
       kind: 'webhook',
@@ -122,7 +120,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       externalId: parsedPayload?.id || null,
       ...derivedContext,
       headers,
-      payload: parsedPayload || { rawBody: rawBodyText },
+      payload: null,
       processingError: err.message,
     }).catch(() => null);
     if (recorded?.event?._id) {
@@ -135,7 +133,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         externalId: parsedPayload?.id || null,
         ...derivedContext,
         headers,
-        payload: parsedPayload || { rawBody: rawBodyText },
+        payload: null,
         processingError: err.message,
       }).catch(() => {});
     }
@@ -162,6 +160,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       return res.json({ received: true });
     }
     gatewayEvent = await beginGatewayEventProcessing(gatewayEvent._id);
+    if (!gatewayEvent) return res.json({ received: true });
 
     await processGatewayEvent(gatewayEvent);
     return res.json({ received: true });

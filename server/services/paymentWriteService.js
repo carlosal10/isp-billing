@@ -6,10 +6,9 @@ const {
   computeExpiryDate,
   resolveEntitlementAnchor,
 } = require("./paymentEntitlementService");
-const {
-  syncCustomerAccessFromPayments,
-  syncCustomerNetworkState,
-} = require("./customerAccessService");
+const { enqueueAccessSync: syncCustomerAccessFromPayments } = require("./accessOutboxService");
+const syncCustomerNetworkState = ({ customer }) => syncCustomerAccessFromPayments({ tenantId: customer.tenantId, customerId: customer._id });
+const { transactional } = require("./financialTransaction");
 const { syncPaymentFinancials } = require("./billingFinanceService");
 
 function serviceError(statusCode, message, extras = {}) {
@@ -69,6 +68,8 @@ async function manualValidatePayment({ tenantId, payload }) {
       throw serviceError(400, "Invalid plan duration on payment.plan", { debugId });
     }
 
+    if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw serviceError(409, 'Reversed payments cannot be validated');
+    if (payment.isFinanciallyApplied && ['Success', 'Validated'].includes(payment.status)) return { message: 'Payment already validated', payment, debugId };
     payment.transactionId = String(transactionId).trim();
     payment.status = "Success";
     payment.validatedBy = validatedBy || "Manual Entry";
@@ -99,16 +100,12 @@ async function manualValidatePayment({ tenantId, payload }) {
       paymentId: payment._id,
       actor: { id: validatedBy || "Manual Entry" },
       reason: "Manual payment validation",
-    }).catch((e) => {
-      console.warn(`[${debugId}] finance sync failed:`, e?.message || e);
     });
 
     await syncCustomerAccessFromPayments({
       tenantId,
       customerId: payment.customer?._id || payment.customer,
       debugId,
-    }).catch((e) => {
-      console.warn(`[${debugId}] customer access sync failed:`, e?.message || e);
     });
 
     return { message: "Payment validated", payment, debugId };
@@ -178,16 +175,12 @@ async function manualValidatePayment({ tenantId, payload }) {
     paymentId: doc._id,
     actor: { id: validatedBy || "Manual Entry" },
     reason: "Manual payment creation",
-  }).catch((e) => {
-    console.warn(`[${debugId}] finance sync failed:`, e?.message || e);
   });
 
   await syncCustomerAccessFromPayments({
     tenantId,
     customerId: customer._id,
     debugId,
-  }).catch((e) => {
-    console.warn(`[${debugId}] customer access sync failed:`, e?.message || e);
   });
 
   return { message: "Manual payment created and validated", payment: doc, debugId };
@@ -407,8 +400,6 @@ async function updatePaymentRecord({ tenantId, paymentId, payload }) {
       paymentId: payment._id,
       actor: { id: editedBy || "Admin Panel" },
       reason: "Payment record updated",
-    }).catch((err) => {
-      console.warn(`[payments:update] finance sync failed:`, err?.message || err);
     });
     await syncCustomerAccessFromPayments({
       tenantId,
@@ -436,8 +427,6 @@ async function softDeletePayment({ tenantId, paymentId, payload }) {
     paymentId: payment._id,
     actor: { id: deletedBy || "Admin Panel" },
     reason: reason || "Payment deleted",
-  }).catch((err) => {
-    console.warn(`[payments:delete] finance sync failed:`, err?.message || err);
   });
   if (payment.customer) {
     await syncCustomerAccessFromPayments({
@@ -465,8 +454,6 @@ async function restorePaymentRecord({ tenantId, paymentId }) {
     paymentId: payment._id,
     actor: { id: "Admin Panel" },
     reason: "Payment restored",
-  }).catch((err) => {
-    console.warn(`[payments:restore] finance sync failed:`, err?.message || err);
   });
   if (payment.customer) {
     await syncCustomerAccessFromPayments({
@@ -480,9 +467,9 @@ async function restorePaymentRecord({ tenantId, paymentId }) {
 }
 
 module.exports = {
-  manualValidatePayment,
-  adjustPayment,
-  updatePaymentRecord,
-  softDeletePayment,
-  restorePaymentRecord,
+  manualValidatePayment: transactional(manualValidatePayment),
+  adjustPayment: transactional(adjustPayment),
+  updatePaymentRecord: transactional(updatePaymentRecord),
+  softDeletePayment: transactional(softDeletePayment),
+  restorePaymentRecord: transactional(restorePaymentRecord),
 };

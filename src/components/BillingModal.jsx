@@ -28,7 +28,7 @@ export default function BillingModal({ isOpen, onClose }) {
         <form id="addBillForm">
           <Field label="Customer ID / Username"><input type="text" placeholder="Customer ID / Username" required /></Field>
           <Field label="Amount (KES)"><input type="number" placeholder="Amount (KES)" required /></Field>
-          <input type="date" required />
+          <Field label="Date"><input type="date" required /></Field>
           <button type="submit">
             <MdAdd className="inline-icon" /> Add Bill
           </button>

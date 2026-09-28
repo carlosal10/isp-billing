@@ -1,9 +1,10 @@
-jest.mock("../lib/apiClient", () => ({
-  api: { get: jest.fn() },
-  setApiAccessors: jest.fn(),
+import { vi } from "vitest";
+vi.mock("../lib/apiClient", () => ({
+  api: { get: vi.fn() },
+  setApiAccessors: vi.fn(),
 }));
 
-jest.mock("./AuthContext", () => ({
+vi.mock("./AuthContext", () => ({
   useAuth: () => ({ status: "guest", ispId: null }),
 }));
 

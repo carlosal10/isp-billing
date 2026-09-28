@@ -86,6 +86,7 @@ button:hover, .btn:hover { transform:none !important; }
 }
 .ui-field > label > span { color:#b42318; }
 .ui-field-hint, .helper-text, .help-text { color:var(--muted); font-size:12px; line-height:1.6; }
+.muted-inline { color:#52657d; font-size:12px; }
 .ui-field-error { color:#b42318; font-size:12px; }
 :is(.form-grid, .stacked-form, .gateway-filters) { gap:16px !important; align-items:start; }
 fieldset { min-width:0; border:1px solid var(--line); border-radius:10px; padding:18px; }
@@ -203,3 +204,29 @@ td input[type="checkbox"] { min-width:0; }
 @media (prefers-reduced-motion:reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* Workflow workspaces */
+.workspace-page { max-width:1280px; margin:0 auto; padding:28px; }
+.workspace-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
+.workspace-header h1 { margin:6px 0 10px; }
+.workspace-header p { max-width:680px; margin:0; }
+.eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em; color:#52657d; }
+.workspace-card { padding:24px; margin-bottom:20px; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.workspace-card h2 { margin-top:0; }
+.recovery-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:24px; }
+.recovery-metrics article { background:white; border:1px solid var(--line); border-radius:12px; padding:20px; }
+.recovery-metrics strong { display:block; font-size:32px; margin:10px 0; font-variant-numeric:tabular-nums; }
+.recovery-metrics p, .recovery-metrics a { font-size:12px; margin-bottom:0; }
+.table-scroll { max-width:100%; overflow-x:auto; }
+.table-scroll table { width:100%; border-collapse:collapse; }
+.table-scroll th, .table-scroll td { padding:12px; text-align:left; border-bottom:1px solid var(--line); }
+.table-scroll th { font-size:12px; color:var(--ink-soft); background:var(--surface-soft); }
+.empty-state { padding:24px; background:var(--surface-soft); border:1px dashed var(--line-strong); border-radius:8px; }
+.notice { padding:12px 16px; background:#edf5ff; border:1px solid #b8d3f7; border-radius:8px; }
+.notice.error { color:#912018; background:#fff4f2; border-color:#f7c6c1; }
+.portal-setup-shell { max-width:520px; margin:8vh auto; padding:20px; }
+.portal-setup-card { margin-top:20px; padding:32px; background:white; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-card); }
+.portal-setup-card form { display:grid; gap:18px; }
+.login-form > a { display:block; margin:12px 0; font-size:13px; }
+@media(max-width:767px) { .workspace-page { padding:18px 12px; } .workspace-header { flex-direction:column; } .workspace-card { padding:16px; } .recovery-metrics { grid-template-columns:1fr; } .portal-setup-card { padding:22px; } }
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; } }

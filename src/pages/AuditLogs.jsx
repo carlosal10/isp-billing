@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { exportRows } from "../lib/exporters";
@@ -271,13 +272,13 @@ export default function AuditLogs() {
         }
       >
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-          <input
+          <Field label="Search actor, action, ids, reason"><input
             value={filters.q}
             onChange={(event) => updateFilter("q", event.target.value)}
             placeholder="Search actor, action, ids, reason..."
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
-          <select
+          /></Field>
+          <Field label="All actions"><select
             value={filters.action}
             onChange={(event) => updateFilter("action", event.target.value)}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -288,25 +289,25 @@ export default function AuditLogs() {
                 {formatAction(item.action)} ({item.count})
               </option>
             ))}
-          </select>
-          <input
+          </select></Field>
+          <Field label="Actor email or id"><input
             value={filters.actor}
             onChange={(event) => updateFilter("actor", event.target.value)}
             placeholder="Actor email or id"
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
-          <input
+          /></Field>
+          <Field label="Date"><input
             type="date"
             value={filters.from}
             onChange={(event) => updateFilter("from", event.target.value)}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
-          <input
+          /></Field>
+          <Field label="Date"><input
             type="date"
             value={filters.to}
             onChange={(event) => updateFilter("to", event.target.value)}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
+          /></Field>
           <select
             value={limit}
             onChange={(event) => {

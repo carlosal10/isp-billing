@@ -33,7 +33,8 @@ async function createLedgerBatch({
     throw new Error('Ledger batch entries are required');
   }
 
-  const normalizedEntries = entries.map((entry) => ({
+  const normalizedEntries = entries.map((entry, lineNumber) => ({
+    lineNumber,
     tenantId,
     batchId,
     sourceType,
@@ -81,7 +82,8 @@ async function reverseLedgerBatch({
     return [];
   }
 
-  const reversedEntries = activeEntries.map((entry) => ({
+  const reversedEntries = activeEntries.map((entry, lineNumber) => ({
+    lineNumber,
     tenantId: entry.tenantId,
     batchId: reversalBatchId,
     sourceType: 'reversal',

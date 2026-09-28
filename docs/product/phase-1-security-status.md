@@ -59,4 +59,15 @@ Implemented:
 
 These checks use unit tests and mocked database boundaries. Live provider callbacks, real MongoDB authorization matrices, browser visual/accessibility review, and production deployment verification remain required before launch.
 
-Phase 1 remains open until these items pass the exit gate in the market-readiness roadmap.
+## Verification completed in the market-readiness batch
+
+- A disposable MongoDB replica-set harness seeds two tenants, three staff roles, plans, customers, invoices, and payments for repeatable integration checks.
+- The mounted tenant API surface is exercised across 195 operations. Missing tokens, platform/portal tokens, wrong-tenant headers, and cross-tenant object IDs are rejected.
+- Portal login now requires a PIN. A one-time, five-attempt, ten-minute SMS verification challenge establishes or resets a PIN. Portal session versions revoke existing sessions when a PIN or access state changes, and logout revokes the session.
+- Finance settlement runs in MongoDB transactions with deterministic fingerprints, unique allocation/ledger safeguards, and replay-safe gateway processing. Stripe callbacks retain raw signature bytes and reject amount, currency, method, or reference mismatches.
+- Router/customer access changes are recorded in a durable, leased outbox with retry backoff and an owner/admin recovery endpoint. Payment settlement remains complete when router work is unavailable.
+- Encryption rotation is exercised with old and new key material present, then the old key is removed and the rotated secret is decrypted successfully.
+- Browser checks cover portal enrollment, customer/plans/payments/reconciliation/settings at 360, 768, 1024, 1440, and 1920 pixels. They include WCAG automated checks, overflow checks, screenshots, and a real plan-creation flow.
+- Client CI uses Vite and Vitest. Dependency scanning reports zero high or critical vulnerabilities; four moderate advisories remain in the selected React Router/Vitest major versions and require a later compatibility upgrade.
+
+Phase 1 local exit verification is complete. Live provider credentials, production-like backup/restore rehearsal, MikroTik lab validation, and deployment-environment verification remain required before launch.

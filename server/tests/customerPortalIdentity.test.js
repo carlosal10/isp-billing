@@ -52,7 +52,7 @@ test('configured portal PIN cannot be bypassed with a matching contact value', a
   assert.equal(pinComparisonAttempted, true);
 });
 
-test('portal login uses PIN when configured and contact bootstrap only without a PIN', async () => {
+test('portal login requires a PIN and never accepts contact bootstrap', async () => {
   const withPin = {
     email: 'customer@example.com',
     portalProfile: { pinHash: 'stored-pin-hash' },
@@ -69,6 +69,6 @@ test('portal login uses PIN when configured and contact bootstrap only without a
   );
   assert.equal(
     await resolvePortalLoginMethod(withoutPin, { credential: 'customer@example.com' }),
-    'contact'
+    null
   );
 });
