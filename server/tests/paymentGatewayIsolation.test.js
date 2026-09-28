@@ -3,6 +3,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const events = require('../services/paymentGatewayEventService');
+// Unit tests isolate query policy; real transactions are covered by integration/readiness.test.js.
+require('../services/financialTransaction').transactional = (work) => work;
+require('../models/PaymentGatewayEvent').findOneAndUpdate = async () => ({ _id: 'unit-event' });
 const correlation = require('../services/paymentGatewayCorrelationService');
 // Replace network/DB side effects before loading the processor. Model queries
 // below are asserted so an unscoped fallback fails the regression tests.

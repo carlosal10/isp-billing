@@ -35,6 +35,7 @@ const navigationGroups = [
       { to: "/customers", label: "Customers", icon: FaUsers },
       { to: "/plans", label: "Plans", icon: MdViewList },
       { to: "/payments", label: "Payments", icon: MdPayments },
+      { to: "/finance-recovery", label: "Reconciliation", icon: MdHistory },
       { to: "/sms-paylinks", label: "SMS & paylinks", icon: MdSms },
     ],
   },

@@ -161,7 +161,7 @@ export default function AccountSettings() {
       }} className="space-y-3" aria-label="Account Number Prefix">
         <h3 style={{ margin: 0 }}>Account Number Prefix</h3>
         <p className="helper-text">Optional prefix prepended to generated account numbers (e.g., FML- or FUNNET-)</p>
-        <Field label="e.g., FML-"><input
+        <Field label="Account number prefix"><input
           type="text"
           value={prefix}
           onChange={(e) => setPrefix(e.target.value.toUpperCase())}

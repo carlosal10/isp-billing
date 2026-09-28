@@ -281,20 +281,20 @@ export default function ApiKeys() {
       >
         <form onSubmit={createKey} style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
-            <input
+            <Field label="Label, e.g. CRM Sync"><input
               value={form.label}
               onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
               placeholder="Label, e.g. CRM Sync"
               required
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-            />
-            <input
+            /></Field>
+            <Field label="Date"><input
               type="date"
               value={form.expiresAt}
               onChange={(event) => setForm((current) => ({ ...current, expiresAt: event.target.value }))}
               title="Optional expiry"
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-            />
+            /></Field>
           </div>
           <Field label="Description or system owner"><textarea
             value={form.description}
@@ -368,12 +368,12 @@ export default function ApiKeys() {
                                 onChange={(event) => setEditForm((current) => ({ ...current, label: event.target.value }))}
                                 style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
                               />
-                              <input
+                              <Field label="Date"><input
                                 type="date"
                                 value={editForm.expiresAt}
                                 onChange={(event) => setEditForm((current) => ({ ...current, expiresAt: event.target.value }))}
                                 style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-                              />
+                              /></Field>
                             </div>
                             <textarea
                               value={editForm.description}

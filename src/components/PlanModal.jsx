@@ -143,6 +143,7 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
         <div className="tabs">
           {["Add", "Update", "Remove"].map((tab) => (
             <button
+              type="button"
               key={tab}
               className={`tab-btn ${activeTab === tab ? "active" : ""}`}
               onClick={() => setActiveTab(tab)}
@@ -171,7 +172,7 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
           {/* Update Plan */}
           {activeTab === "Update" && (
             <>
-              <select
+              <Field label="Select Plan to Update"><select
                 value={selectedPlanId}
                 onChange={(e) => handleSelectPlan(e.target.value)}
                 required
@@ -182,7 +183,7 @@ export default function PlanModal({ isOpen = false, onClose, standalone = false 
                     {p.name} ({p.price} KES)
                   </option>
                 ))}
-              </select>
+              </select></Field>
 
               {selectedPlanId && (
                 <form onSubmit={handleUpdatePlan}>

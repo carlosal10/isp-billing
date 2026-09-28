@@ -317,7 +317,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
             <span>Enable autopay</span>
           </label>
 
-          <select
+          <Field label="Preferred Method: M-Pesa"><select
             value={billingProfile.preferredPaymentMethod}
             onChange={(e) =>
               setBillingProfile((prev) => ({
@@ -329,9 +329,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
             <option value="mpesa">Preferred Method: M-Pesa</option>
             <option value="stripe">Preferred Method: Stripe</option>
             <option value="manual">Preferred Method: Manual</option>
-          </select>
+          </select></Field>
 
-          <input
+          <Field label="Autopay phone (optional)"><input
             value={billingProfile.preferredPhoneNumber}
             onChange={(e) =>
               setBillingProfile((prev) => ({
@@ -340,9 +340,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               }))
             }
             placeholder="Autopay phone (optional)"
-          />
+          /></Field>
 
-          <input
+          <Field label="Invoice lead days"><input
             type="number"
             min="0"
             step="1"
@@ -354,9 +354,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               }))
             }
             placeholder="Invoice lead days"
-          />
+          /></Field>
 
-          <input
+          <Field label="Grace days"><input
             type="number"
             min="0"
             step="1"
@@ -368,9 +368,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               }))
             }
             placeholder="Grace days"
-          />
+          /></Field>
 
-          <input
+          <Field label="Retry interval days"><input
             type="number"
             min="1"
             step="1"
@@ -382,9 +382,9 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               }))
             }
             placeholder="Retry interval days"
-          />
+          /></Field>
 
-          <input
+          <Field label="Max autopay attempts"><input
             type="number"
             min="0"
             step="1"
@@ -396,19 +396,19 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
               }))
             }
             placeholder="Max autopay attempts"
-          />
+          /></Field>
         </div>
       </div>
 
       {type !== "Remove" && (
         <>
-          <select value={networkType} onChange={(e) => setNetworkType(e.target.value)}>
+          <Field label="PPPoE"><select value={networkType} onChange={(e) => setNetworkType(e.target.value)}>
             <option value="pppoe">PPPoE</option>
             <option value="static">Static</option>
-          </select>
+          </select></Field>
 
           {networkType === "pppoe" && (
-            <select
+            <Field label="Select PPPoE Profile"><select
               value={selectedProfile}
               onChange={(e) => setSelectedProfile(e.target.value)}
               required
@@ -419,7 +419,7 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                   {p.name || p.id} {p.rateLimit ? `(${p.rateLimit})` : ""}
                 </option>
               ))}
-            </select>
+            </select></Field>
           )}
 
           {networkType === "static" && (
@@ -519,21 +519,21 @@ function CustomerForm({ type, plans, pppoeProfiles, customer, onSubmit, loading 
                   </label>
                 </div>
               )}
-              <input
+              <Field label="IP Address (leave blank to auto-assign)"><input
                 value={staticConfig.ip}
                 onChange={(e) => setStaticConfig({ ...staticConfig, ip: e.target.value })}
                 placeholder="IP Address (leave blank to auto-assign)"
-              />
-              <input
+              /></Field>
+              <Field label="Gateway (optional)"><input
                 value={staticConfig.gateway}
                 onChange={(e) => setStaticConfig({ ...staticConfig, gateway: e.target.value })}
                 placeholder="Gateway (optional)"
-              />
-              <input
+              /></Field>
+              <Field label="DNS (optional)"><input
                 value={staticConfig.dns}
                 onChange={(e) => setStaticConfig({ ...staticConfig, dns: e.target.value })}
                 placeholder="DNS (optional)"
-              />
+              /></Field>
             </div>
           )}
         </>
@@ -698,7 +698,7 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
 
           {activeTab === "Update" && (
             <>
-              <select
+              <Field label="Select Customer"><select
                 onChange={(e) =>
                   setSelectedCustomer(customers.find((c) => c._id === e.target.value) || null)
                 }
@@ -709,7 +709,7 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </select></Field>
               {selectedCustomer && (
                 <CustomerForm
                   type="Update"
@@ -786,12 +786,12 @@ export default function CustomersModal({ isOpen = false, onClose, standalone = f
                 </button>
 
                 <span style={{ marginLeft: 8, opacity: .8 }}>Assign Plan to imported:</span>
-                <select value={importPlan} onChange={(e) => setImportPlan(e.target.value)}>
+                <Field label="No plan"><select value={importPlan} onChange={(e) => setImportPlan(e.target.value)}>
                   <option value="">No plan</option>
                   {plans.map((p) => (
                     <option key={p._id} value={p._id}>{p.name} {p.speed ? `(${p.speed})` : ""}</option>
                   ))}
-                </select>
+                </select></Field>
                 <label style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={trustLists} onChange={() => setTrustLists(v => !v)} /> Trust address-lists
                 </label>

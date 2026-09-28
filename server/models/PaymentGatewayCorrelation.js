@@ -31,7 +31,7 @@ PaymentGatewayCorrelationSchema.index(
   {
     unique: true,
     partialFilterExpression: {
-      checkoutRequestId: { $type: 'string', $ne: '' },
+      checkoutRequestId: { $type: 'string', $gt: '' },
     },
   }
 );
@@ -41,7 +41,7 @@ PaymentGatewayCorrelationSchema.index(
   {
     unique: true,
     partialFilterExpression: {
-      merchantRequestId: { $type: 'string', $ne: '' },
+      merchantRequestId: { $type: 'string', $gt: '' },
     },
   }
 );

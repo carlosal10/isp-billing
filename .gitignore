@@ -7,6 +7,13 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/.local-staging
+/artifacts
+/*-output.log
+/dependency-audit.json
+/npm-audit-high.log
 
 # production
 /backups

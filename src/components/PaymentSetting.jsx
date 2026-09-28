@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 import { useEffect, useState } from "react"; 
 import { FaTimes, FaStripe, FaPaypal, FaMoneyBillWave } from "react-icons/fa";
 import "./PaymentSetting.css";
@@ -240,24 +241,24 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
             {activeTab === "mpesa" ? (
               <>
                 {/* payMethod */}
-                <select
+                <Field label="Paybill"><select
                   className="ps-input"
                   value={formData.mpesa.payMethod || "paybill"}
                   onChange={(e) => onChange("mpesa", "payMethod", e.target.value)}
                 >
                   <option value="paybill">Paybill</option>
                   <option value="buygoods">Buy Goods (Till)</option>
-                </select>
+                </select></Field>
 
                 {/* environment */}
-                <select
+                <Field label="Sandbox"><select
                   className="ps-input"
                   value={formData.mpesa.environment || "sandbox"}
                   onChange={(e) => onChange("mpesa", "environment", e.target.value)}
                 >
                   <option value="sandbox">Sandbox</option>
                   <option value="production">Production</option>
-                </select>
+                </select></Field>
 
                 {/* The rest of the MPesa fields, filtered by payMethod */}
                 {mpesaVisibleFields

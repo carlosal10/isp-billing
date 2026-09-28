@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 
@@ -158,20 +159,20 @@ export default function CustomerPortalAccessCard({ customer, onUpdated }) {
       </div>
 
       <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-        <input
+        <Field label="Set or reset customer PIN (4-8 digits)"><input
           value={pin}
           onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
           placeholder="Set or reset customer PIN (4-8 digits)"
           inputMode="numeric"
           autoComplete="new-password"
           style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-        />
-        <input
+        /></Field>
+        <Field label="Optional audit reason"><input
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           placeholder="Optional audit reason"
           style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-        />
+        /></Field>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>

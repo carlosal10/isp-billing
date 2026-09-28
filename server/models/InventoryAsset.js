@@ -71,7 +71,6 @@ inventoryAssetSchema.index(
   { tenantId: 1, serialNumber: 1 },
   {
     unique: true,
-    sparse: true,
     partialFilterExpression: { serialNumber: { $type: 'string' } },
   }
 );
@@ -79,7 +78,6 @@ inventoryAssetSchema.index(
   { tenantId: 1, macAddress: 1 },
   {
     unique: true,
-    sparse: true,
     partialFilterExpression: { macAddress: { $type: 'string' } },
   }
 );

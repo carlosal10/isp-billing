@@ -29,6 +29,8 @@ import InviteAccept from "./pages/InviteAccept";
 import Jobs from "./pages/Jobs";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import FinanceRecovery from "./pages/FinanceRecovery";
+import PortalSetup from "./pages/PortalSetup";
 import NocOperations from "./pages/NocOperations";
 import OperationsHealth from "./pages/OperationsHealth";
 import PayLink from "./pages/PayLink";
@@ -82,6 +84,7 @@ export default function App() {
           <Route path="/invite/accept" element={<InviteAccept />} />
           <Route path="/portal" element={<Navigate to="/login?mode=customer" replace />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/portal/setup" element={<PortalSetup />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -164,6 +167,7 @@ export default function App() {
                 <Route path="/pppoe" element={<PppoeSetupModal standalone />} />
                 <Route path="/hotspot" element={<HotspotSetupModal standalone />} />
                 <Route path="/payments" element={<PaymentsModal standalone />} />
+                <Route path="/finance-recovery" element={<FinanceRecovery />} />
                 <Route path="/payment-settings" element={<PaymentIntegrationModal standalone />} />
                 <Route path="/mikrotik/connect" element={<ConnectMikrotikModal standalone />} />
                 <Route path="/mikrotik/terminal" element={<MikrotikTerminalModal standalone />} />

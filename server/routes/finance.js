@@ -10,6 +10,35 @@ const {
 } = require('../services/financeReportService');
 
 const router = express.Router();
+const { getReconciliation } = require('../services/reconciliationService');
+const AccessOutbox = require('../models/AccessOutbox');
+const AuditLog = require('../models/AuditLog');
+const { financialTransaction } = require('../services/financialTransaction');
+const { syncPaymentFinancials } = require('../services/billingFinanceService');
+const Payment = require('../models/Payment');
+
+router.get('/reconciliation', requireRole('owner', 'admin'), async (req, res, next) => {
+  try { res.json(await getReconciliation(req.tenantId)); } catch (err) { next(err); }
+});
+router.post('/recovery/:kind/:id', requireRole('owner', 'admin'), async (req, res, next) => {
+  try {
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < 5 || reason.length > 500 || !['access', 'payment'].includes(req.params.kind)) return res.status(400).json({ error: 'A recovery type and reason (5–500 characters) are required' });
+    await financialTransaction(async () => {
+      if (req.params.kind === 'payment') {
+        const payment = await Payment.findOne({ _id: req.params.id, tenantId: req.tenantId, status: { $in: ['Success', 'Validated'] }, isDeleted: false });
+        if (!payment) throw Object.assign(new Error('Payment not found'), { statusCode: 404 });
+        await syncPaymentFinancials({ paymentId: payment._id, reason });
+      } else {
+        const result = await AccessOutbox.updateOne({ _id: req.params.id, tenantId: req.tenantId, status: { $in: ['failed', 'pending'] } },
+          { $set: { status: 'pending', attempts: 0, nextAttemptAt: new Date() }, $inc: { generation: 1 } });
+        if (!result.matchedCount) throw Object.assign(new Error('Recoverable job not found'), { statusCode: 404 });
+      }
+      await AuditLog.create({ tenantId: req.tenantId, actor: String(req.user.sub), action: 'finance.recovery', payload: { kind: req.params.kind, id: req.params.id, reason } });
+    });
+    res.json({ ok: true });
+  } catch (err) { if (err.statusCode) return res.status(err.statusCode).json({ error: err.message }); next(err); }
+});
 
 router.get('/summary', requireRole('owner', 'admin'), async (req, res) => {
   try {

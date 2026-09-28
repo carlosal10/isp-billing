@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useRef } from "react";
+import { useDialogFocus } from "../../hooks/useDialogFocus";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes } from "react-icons/fa";
 
 
-export function Modal({ open, onClose, title, children, minWidth = 520, minHeight = 420, defaultSize }) {
+export function Modal({ open, onClose, title, children }) {
+  const surface = useRef(null);
+  useDialogFocus(open, surface, onClose);
 
 
 
@@ -21,6 +24,8 @@ export function Modal({ open, onClose, title, children, minWidth = 520, minHeigh
           <motion.div
 
             className="ui-modal-surface dialog-surface"
+            ref={surface}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={title || "Dialog"}

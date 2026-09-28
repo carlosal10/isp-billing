@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -291,7 +292,7 @@ export default function Communications() {
         actions={<button className="btn" onClick={load} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</button>}
       >
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-          <select
+          <Field label="All statuses"><select
             value={filters.status}
             onChange={(event) => updateFilter("status", event.target.value)}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -302,8 +303,8 @@ export default function Communications() {
             <option value="delivered">Delivered</option>
             <option value="failed">Failed</option>
             <option value="skipped">Skipped</option>
-          </select>
-          <select
+          </select></Field>
+          <Field label="All templates"><select
             value={filters.templateType}
             onChange={(event) => updateFilter("templateType", event.target.value)}
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -314,7 +315,7 @@ export default function Communications() {
                 {templateType}
               </option>
             ))}
-          </select>
+          </select></Field>
           <select
             value={filters.limit}
             onChange={(event) => updateFilter("limit", Number(event.target.value))}
@@ -349,13 +350,13 @@ export default function Communications() {
         {campaignMessage ? <div style={{ color: "#166534", fontWeight: 800, marginBottom: 12 }}>{campaignMessage}</div> : null}
         <div style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-            <input
+            <Field label="Campaign name"><input
               value={campaignForm.name}
               onChange={(event) => updateCampaignField("name", event.target.value)}
               placeholder="Campaign name"
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-            />
-            <select
+            /></Field>
+            <Field label="broadcast"><select
               value={campaignForm.templateType}
               onChange={(event) => updateCampaignField("templateType", event.target.value)}
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -365,8 +366,8 @@ export default function Communications() {
               {templateOptions.filter((type) => !["broadcast", "payment-link"].includes(type)).map((type) => (
                 <option key={type} value={type}>{type}</option>
               ))}
-            </select>
-            <select
+            </select></Field>
+            <Field label="Service alert"><select
               value={campaignForm.category}
               onChange={(event) => updateCampaignField("category", event.target.value)}
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -375,7 +376,7 @@ export default function Communications() {
               <option value="billing">Billing</option>
               <option value="payment-link">Payment link</option>
               <option value="marketing">Marketing</option>
-            </select>
+            </select></Field>
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#334155", fontWeight: 800 }}>
               <input
                 type="checkbox"
@@ -393,15 +394,15 @@ export default function Communications() {
             placeholder="Message body. Supports {{name}}, {{account_number}}, {{plan_name}}, {{payment_link}}, and {{message}}."
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
           />
-          <input
+          <Field label="Optional {{message}} variable"><input
             value={campaignForm.message}
             onChange={(event) => updateCampaignField("message", event.target.value)}
             placeholder="Optional {{message}} variable"
             style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-          />
+          /></Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
-            <select
+            <Field label="Any status"><select
               value={campaignForm.audience.status}
               onChange={(event) => updateAudienceField("status", event.target.value)}
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -410,8 +411,8 @@ export default function Communications() {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="suspended">Suspended</option>
-            </select>
-            <select
+            </select></Field>
+            <Field label="Any connection"><select
               value={campaignForm.audience.connectionType}
               onChange={(event) => updateAudienceField("connectionType", event.target.value)}
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
@@ -419,13 +420,13 @@ export default function Communications() {
               <option value="">Any connection</option>
               <option value="pppoe">PPPoE</option>
               <option value="static">Static</option>
-            </select>
-            <input
+            </select></Field>
+            <Field label="Audience search"><input
               value={campaignForm.audience.query}
               onChange={(event) => updateAudienceField("query", event.target.value)}
               placeholder="Audience search"
               style={{ padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: 12 }}
-            />
+            /></Field>
             <select
               value={campaignForm.audience.limit}
               onChange={(event) => updateAudienceField("limit", Number(event.target.value))}

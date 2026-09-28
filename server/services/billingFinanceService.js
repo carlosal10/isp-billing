@@ -24,7 +24,9 @@ const {
   resolvePlanDurationDays,
   resolveEntitlementAnchor,
 } = require('./paymentEntitlementService');
-const { syncCustomerAccessFromPayments } = require('./customerAccessService');
+const { enqueueAccessSync: syncCustomerAccessFromPayments } = require('./accessOutboxService');
+const { transactional } = require('./financialTransaction');
+const { createHash } = require('node:crypto');
 const { initiateSTKPush } = require('../utils/mpesa');
 
 const OPEN_INVOICE_STATUSES = ['issued', 'partially_paid', 'overdue'];
@@ -756,12 +758,17 @@ async function syncPaymentFinancials({ paymentId, actor = null, reason = null })
   const payment = await loadPaymentForFinance(paymentId);
   if (!payment) return null;
 
-  await reversePaymentFinancials(payment, reason || 'Payment financial sync');
+  const fingerprint = createHash('sha256').update(JSON.stringify([payment.amount, payment.currency, String(payment.customer?._id || payment.customer), String(payment.plan?._id || payment.plan), payment.status, payment.isDeleted])).digest('hex');
+  if (payment.isFinanciallyApplied && payment.financialFingerprint === fingerprint) return payment;
+  if (payment.isFinanciallyApplied) await reversePaymentFinancials(payment, reason || 'Payment financial sync');
   if (!SETTLED_PAYMENT_STATUSES.has(String(payment.status || '')) || payment.isDeleted) {
     return loadPaymentForFinance(paymentId);
   }
 
   await settlePaymentFinancials(payment);
+  payment.financialFingerprint = fingerprint;
+  await payment.save();
+  await syncCustomerAccessFromPayments({ tenantId: payment.tenantId, customerId: payment.customer?._id || payment.customer });
   return loadPaymentForFinance(paymentId);
 }
 
@@ -804,7 +811,7 @@ async function markInvoicePaidManually({ tenantId, invoiceId, actor = null, note
     tenantId,
     customerId: invoice.customer?._id || invoice.customer,
     debugId: `invoice-manual-${String(payment._id)}`,
-  }).catch(() => {});
+  });
 
   return {
     invoice: await Invoice.findById(invoice._id).populate('customer plan'),
@@ -1004,6 +1011,9 @@ async function reversePaymentStatus({
     throw err;
   }
 
+  if (!['Refunded', 'Reversed', 'Chargeback'].includes(nextStatus)) throw new Error('Invalid reversal status');
+  if (payment.status === nextStatus) return payment;
+  if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw Object.assign(new Error('Payment is already reversed'), { statusCode: 409 });
   await reversePaymentFinancials(payment, reason || nextStatus);
   payment.status = nextStatus;
   if (nextStatus === 'Refunded') {
@@ -1025,7 +1035,7 @@ async function reversePaymentStatus({
     tenantId,
     customerId: payment.customer?._id || payment.customer,
     debugId: `payment-status-${String(payment._id)}`,
-  }).catch(() => {});
+  });
   return payment;
 }
 
@@ -1224,19 +1234,19 @@ async function processCollections(now = new Date()) {
 }
 
 module.exports = {
-  applyAvailableCredits,
-  createProrationAdjustmentForPlanChange,
-  ensureCollectableInvoiceForPaymentStart,
-  ensureInvoiceGenerated,
-  ensureRenewalInvoiceForPayment,
-  issueInvoiceForPlan,
-  markInvoicePaidManually,
+  applyAvailableCredits: transactional(applyAvailableCredits),
+  createProrationAdjustmentForPlanChange: transactional(createProrationAdjustmentForPlanChange),
+  ensureCollectableInvoiceForPaymentStart: transactional(ensureCollectableInvoiceForPaymentStart),
+  ensureInvoiceGenerated: transactional(ensureInvoiceGenerated),
+  ensureRenewalInvoiceForPayment: transactional(ensureRenewalInvoiceForPayment),
+  issueInvoiceForPlan: transactional(issueInvoiceForPlan),
+  markInvoicePaidManually: transactional(markInvoicePaidManually),
   processCollections,
   processRecurringInvoices,
   recalculateCreditNote,
   recalculateInvoice,
   renderInvoiceHtml,
-  reversePaymentStatus,
-  syncPaymentFinancials,
+  reversePaymentStatus: transactional(reversePaymentStatus),
+  syncPaymentFinancials: transactional(syncPaymentFinancials),
   agingBucket,
 };

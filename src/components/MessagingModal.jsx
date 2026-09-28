@@ -4,7 +4,6 @@ import { FaTimes } from "react-icons/fa";
 import { api } from "../lib/apiClient";
 import "./MessagingModal.css";
 
-
 const TEMPLATES = [
   {
     id: "due_5",
@@ -177,10 +176,6 @@ export default function MessagingModal({ isOpen = false, onClose, defaults, stan
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState("");
 
-
-
-
-
   useEffect(() => {
     if (!visible || standalone) return;
     const onEsc = (e) => e.key === "Escape" && onClose?.();
@@ -231,7 +226,7 @@ export default function MessagingModal({ isOpen = false, onClose, defaults, stan
 
   const content = (
       <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
-         */}
+
         {!standalone ? (
           <button onClick={onClose} className="ps-close" aria-label="Close" >
             <FaTimes size={18} />

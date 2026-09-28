@@ -171,3 +171,10 @@ A change is done when:
 - Rollout and rollback are executable.
 - Support and runbook impact is documented.
 - No temporary flags, debugging logs, test secrets, or generated artifacts are accidentally committed.
+## Local release-candidate checks
+
+- `npm run ci:server` — environment, API contract, route security, privacy, and 171 server tests.
+- `npm run test:integration` — disposable MongoDB replica-set authorization, payment, portal, encryption, and WebSocket checks.
+- `npm run ci:client` — Vitest client tests and Vite production build.
+- `npm run test:browser` — Playwright workflow, screenshot, viewport, and accessibility checks using local staging.
+- `npm run security:dependencies` — dependency audit with high and critical severity as the blocking threshold.

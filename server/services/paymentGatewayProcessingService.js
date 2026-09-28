@@ -7,7 +7,8 @@ const PaymentGatewayEvent = require('../models/PaymentGatewayEvent');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const { computeExpiryDate } = require('./paymentEntitlementService');
-const { syncCustomerAccessFromPayments } = require('./customerAccessService');
+const { enqueueAccessSync: syncCustomerAccessFromPayments } = require('./accessOutboxService');
+const { transactional } = require('./financialTransaction');
 const {
   beginGatewayEventProcessing,
   finalizeGatewayEvent,
@@ -159,7 +160,7 @@ async function loadResolutionCustomer({ tenantId, customerId }) {
 async function runGatewayEventProcessing(gatewayEvent, options = {}) {
   const inProgress = await beginGatewayEventProcessing(gatewayEvent._id);
   try {
-    await processGatewayEvent(inProgress, options);
+    await transactional(processGatewayEvent)(inProgress, options);
   } catch (err) {
     await finalizeGatewayEvent(
       inProgress._id,
@@ -301,13 +302,14 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
 
   if (resultCode === 0) {
     const paidAt = parseMpesaTimestamp(transactionDate) || new Date();
-    payment.status = 'Success';
+    if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw createStatusError(409, 'Reversed payment cannot be settled');
+  payment.status = 'Success';
     if (mpesaReceipt) payment.transactionId = mpesaReceipt;
     if (amount) payment.amount = Number(amount);
     if (phone) payment.phoneNumber = String(phone);
     payment.validatedAt = paidAt;
     payment.validatedBy = 'mpesa-stk';
-    payment.expiryDate =
+    payment.expiryDate = payment.expiryDate ||
       computeExpiryDate({
         plan: payment.plan,
         customerExpiryDate: payment.customer?.expiryDate || null,
@@ -318,12 +320,12 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
       paymentId: payment._id,
       actor: { id: 'mpesa-stk' },
       reason: 'STK callback success',
-    }).catch(() => {});
+    });
     await syncCustomerAccessFromPayments({
       tenantId: payment.tenantId,
       customerId: payment.customer?._id || payment.customer,
       debugId: `stk-${String(payment._id)}`,
-    }).catch(() => {});
+    });
     await touchCorrelation();
 
     return finalizeGatewayEvent(
@@ -342,6 +344,9 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
     );
   }
 
+  if (['Success', 'Validated', 'Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) {
+    return finalizeGatewayEvent(gatewayEvent._id, buildEventPatch(eventPatch, { eventStatus: 'processed', tenantId: payment.tenantId, paymentId: payment._id }));
+  }
   payment.status = 'Failed';
   payment.validatedAt = new Date();
   payment.validatedBy = 'mpesa-stk';
@@ -350,7 +355,7 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
     paymentId: payment._id,
     actor: { id: 'mpesa-stk' },
     reason: 'STK callback failure',
-  }).catch(() => {});
+  });
   await touchCorrelation();
 
   return finalizeGatewayEvent(
@@ -548,13 +553,13 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
     paymentId: payment._id,
     actor: { id: 'mpesa-c2b' },
     reason: 'C2B confirmation success',
-  }).catch(() => {});
+  });
   await customer.save().catch(() => {});
   await syncCustomerAccessFromPayments({
     tenantId: customer.tenantId,
     customerId: customer._id,
     debugId: `c2b-${String(payment._id)}`,
-  }).catch(() => {});
+  });
 
     return finalizeGatewayEvent(
       gatewayEvent._id,
@@ -685,10 +690,16 @@ async function processStripeGatewayEvent(gatewayEvent, options = {}) {
   if (!payment.transactionId) {
     payment.transactionId = paymentIntent.id;
   }
+  if (payment.method !== 'stripe' || payment.transactionId !== paymentIntent.id ||
+      Number(payment.amount) !== Number(eventPatch.amount) ||
+      String(payment.currency || 'KES').toUpperCase() !== String(eventPatch.currency || '').toUpperCase()) {
+    throw createStatusError(409, 'Stripe amount, currency, or payment reference does not match');
+  }
+  if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw createStatusError(409, 'Reversed payment cannot be settled');
   payment.status = 'Success';
   payment.validatedAt = new Date();
   payment.validatedBy = 'stripe-webhook';
-  payment.expiryDate =
+  payment.expiryDate = payment.expiryDate ||
     computeExpiryDate({
       plan: payment.plan,
       customerExpiryDate: payment.customer?.expiryDate || null,
@@ -699,13 +710,13 @@ async function processStripeGatewayEvent(gatewayEvent, options = {}) {
     paymentId: payment._id,
     actor: { id: 'stripe-webhook' },
     reason: 'Stripe webhook success',
-  }).catch(() => {});
+  });
 
   await syncCustomerAccessFromPayments({
     tenantId: payment.tenantId,
     customerId: payment.customer?._id || payment.customer,
     debugId: `stripe-${String(payment._id)}`,
-  }).catch(() => {});
+  });
 
   return finalizeGatewayEvent(
     gatewayEvent._id,
@@ -727,6 +738,9 @@ async function processGatewayEvent(gatewayEvent, options = {}) {
   if (!gatewayEvent?._id) {
     throw createStatusError(400, 'Gateway event is required');
   }
+
+  const current = await PaymentGatewayEvent.findOneAndUpdate({ _id: gatewayEvent._id, eventStatus: { $ne: 'processed' } }, { $set: { processingStartedAt: new Date() } }, { new: true });
+  if (!current) return PaymentGatewayEvent.findById(gatewayEvent._id);
 
   if (gatewayEvent.provider === 'mpesa' && gatewayEvent.kind === 'stk-callback') {
     return processStkGatewayEvent(gatewayEvent, options);
@@ -802,7 +816,7 @@ async function resolveGatewayEvent({ tenantId, eventId, paymentId = null, custom
 
 module.exports = {
   buildScopedStkCandidateFilter,
-  processGatewayEvent,
+  processGatewayEvent: transactional(processGatewayEvent),
   retryGatewayEvent,
   resolveGatewayEvent,
 };

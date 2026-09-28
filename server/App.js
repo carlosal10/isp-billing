@@ -116,18 +116,17 @@ app.use((req, res, next) => {
 });
 
 // ----------------- MongoDB -----------------
-mongoose
-  .connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 })
-  .then(async () => {
+async function connectDatabase({ jobs = true } = {}) {
+    await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 });
     console.log("✅ Connected to MongoDB Atlas");
+    if (!jobs) return;
     const { registerJobs } = require("./jobs/register");
     const { syncScheduledJobStates } = require("./utils/scheduler");
     registerJobs();
     await syncScheduledJobStates().catch((err) => {
       console.warn("[scheduler] failed to sync persisted job state", err?.message || err);
     });
-  })
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+}
 
 // ----------------- Auth Middlewares -----------------
 const authenticate = (req, res, next) => {
@@ -433,7 +432,30 @@ app.use((err, req, res, next) => {
 // ----------------- Start -----------------
 const PORT = process.env.PORT || 5000;
 // IMPORTANT: use server.listen so Socket.IO works
-server.listen(PORT, () => console.log(`🚀 HTTP+WS server on http://localhost:${PORT}`));
-lifecycle.installSignalHandlers();
+async function start({ port = PORT, host, jobs = true, signals = true } = {}) {
+  await connectDatabase({ jobs });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => { server.removeListener('error', reject); resolve(); });
+  });
+  if (signals) lifecycle.installSignalHandlers();
+  return server;
+}
+
+async function stop() {
+  await new Promise((resolve) => io.close(resolve));
+  await shutdownMikrotikPool();
+  await mongoose.disconnect();
+}
+
+if (require.main === module) {
+  start().then(() => console.log(`HTTP+WS server listening on ${PORT}`)).catch((err) => {
+    console.error('Server startup failed:', err.message);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = app;
+module.exports.start = start;
+module.exports.stop = stop;
+module.exports.httpServer = server;

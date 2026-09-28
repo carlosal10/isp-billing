@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/apiClient";
@@ -208,20 +209,20 @@ export default function CustomerPrivacyCard({ customer, onUpdated }) {
           <CountGrid counts={plan.counts} />
 
           <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-            <input
+            <Field label="Type the confirmation phrase to enable anonymization"><input
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
               placeholder="Type the confirmation phrase to enable anonymization"
               disabled={isAnonymized}
               style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-            />
-            <input
+            /></Field>
+            <Field label="Reason for privacy anonymization"><input
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               placeholder="Reason for privacy anonymization"
               disabled={isAnonymized}
               style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-            />
+            /></Field>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>

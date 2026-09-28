@@ -6,7 +6,6 @@ import { api } from "../lib/apiClient";
 import "./PppoeModal.css"; // keeps your base modal tokens if any
 import "./StaticIpSetupModal.css";
 
-
 export default function StaticIpSetupModal({ isOpen = false, onClose, standalone = false }) {
   const visible = standalone || isOpen;
   const [segments, setSegments] = useState([]); // from /static/detect
@@ -26,10 +25,6 @@ export default function StaticIpSetupModal({ isOpen = false, onClose, standalone
   const [rollbackPreview, setRollbackPreview] = useState(null);
   const [cleaning, setCleaning] = useState(false);
   const [cleanPreview, setCleanPreview] = useState(null);
-
-
-
-
 
   // Persist seed options between sessions
   useEffect(() => {
@@ -247,7 +242,7 @@ export default function StaticIpSetupModal({ isOpen = false, onClose, standalone
 
   const content = (
       <div  className={`ps-modal staticip-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
-         */}
+
         {!standalone ? (
           <button className="ps-close" onClick={onClose} aria-label="Close" >
             <FaTimes size={18} />

@@ -58,6 +58,8 @@ jobs:
           node --check server/scripts/reissue-tokens.js
       - name: Run server tests
         run: npm run test:server
+      - name: Run database integration checks
+        run: npm run test:integration
       - name: Validate backup dry-run
         run: npm run backup:mongo:plan -- --label ci
 
@@ -79,3 +81,5 @@ jobs:
         run: npm ci
       - name: Run client CI
         run: npm run ci:client
+      - name: Dependency security gate
+        run: npm run security:dependencies

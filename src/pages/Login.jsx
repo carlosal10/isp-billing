@@ -198,7 +198,7 @@ export default function Login() {
 
       <section className="login-right">
         <form onSubmit={handleSubmit} className="login-form" aria-label="Sign in form">
-          <div className="login-mode-switch" role="tablist" aria-label="Login type">
+          <div className="login-mode-switch" role="group" aria-label="Login type">
             <button
               type="button"
               className={mode === "tenant" ? "active" : ""}
@@ -236,7 +236,7 @@ export default function Login() {
             {mode === "platform"
               ? "Use your platform-admin account to work the orphan payment queue."
               : mode === "customer"
-                ? "Use your ISP workspace, account number, and registered contact or portal PIN."
+                ? "Use your ISP workspace, account number, and portal PIN."
                 : "Use your tenant account to access billing, networking, and collections."}
           </div>
 
@@ -266,25 +266,16 @@ export default function Login() {
                 className="input"
               />
 
-              <label className="label" htmlFor="credential">
-                Registered Phone Or Email
-              </label>
-              <input
-                id="credential"
-                value={form.credential}
-                onChange={(e) => setForm({ ...form, credential: e.target.value })}
-                placeholder="0712345678 or you@example.com"
-                className="input"
-              />
-
               <label className="label" htmlFor="pin">
-                Portal PIN (Optional)
+                Portal PIN
               </label>
               <input
                 id="pin"
                 value={form.pin}
                 onChange={(e) => setForm({ ...form, pin: e.target.value })}
-                placeholder="Use this if your ISP issued one"
+                placeholder="Enter your PIN"
+                required
+                inputMode="numeric"
                 type="password"
                 autoComplete="current-password"
                 className="input"
@@ -322,6 +313,8 @@ export default function Login() {
             </>
           )}
 
+          {mode === "customer" && <Link to="/portal/setup">Set up or reset your PIN</Link>}
+
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? "Signing in..." : copy.submit}
           </button>
@@ -338,21 +331,6 @@ export default function Login() {
                 <Link to="/forgot-password">Forgot password?</Link>
                 <span className="sep">â€¢</span>
                 <Link to="/register">Create an account</Link>
-              </div>
-
-              <div className="sso-row">
-                <span className="sso-line" />
-                <span className="sso-label">or</span>
-                <span className="sso-line" />
-              </div>
-
-              <div className="sso-actions">
-                <button type="button" className="btn-ghost" onClick={() => alert("SSO stub")}>
-                  Continue with Google
-                </button>
-                <button type="button" className="btn-ghost" onClick={() => alert("SSO stub")}>
-                  Continue with Microsoft
-                </button>
               </div>
             </>
           ) : mode === "platform" ? (

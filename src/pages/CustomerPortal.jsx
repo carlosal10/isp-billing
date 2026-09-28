@@ -1,3 +1,4 @@
+import { Field } from "../components/ui/Field";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -436,7 +437,7 @@ export default function CustomerPortal() {
           <form onSubmit={submitPin} className="stacked-form" style={{ padding: 0 }}>
             {overview?.customer?.portalProfile?.hasPin ? (
               <div className="field">
-                <input
+                <Field label="Current PIN"><input
                   value={pinForm.currentPin}
                   onChange={(event) =>
                     setPinForm((current) => ({ ...current, currentPin: event.target.value }))
@@ -446,11 +447,11 @@ export default function CustomerPortal() {
                   inputMode="numeric"
                   autoComplete="current-password"
                   required
-                />
+                /></Field>
               </div>
             ) : null}
             <div className="field">
-              <input
+              <Field label="New PIN (4 to 8 digits)"><input
                 value={pinForm.newPin}
                 onChange={(event) =>
                   setPinForm((current) => ({ ...current, newPin: event.target.value }))
@@ -460,7 +461,7 @@ export default function CustomerPortal() {
                 inputMode="numeric"
                 autoComplete="new-password"
                 required
-              />
+              /></Field>
             </div>
             <button type="submit" className="primary" disabled={busyAction === "security:pin"}>
               {busyAction === "security:pin"
@@ -490,7 +491,7 @@ export default function CustomerPortal() {
         >
           <form onSubmit={submitMpesaPayment} className="stacked-form" style={{ padding: 0 }}>
             <div className="field">
-              <select
+              <Field label="Choose open invoice"><select
                 value={paymentForm.invoiceId}
                 onChange={(event) =>
                   setPaymentForm((current) => ({ ...current, invoiceId: event.target.value }))
@@ -502,16 +503,16 @@ export default function CustomerPortal() {
                     {invoice.invoiceNumber || "Draft invoice"} | {formatMoney(invoice.balanceDue, invoice.currency)}
                   </option>
                 ))}
-              </select>
+              </select></Field>
             </div>
             <div className="field">
-              <input
+              <Field label="M-Pesa phone number"><input
                 value={paymentForm.phone}
                 onChange={(event) =>
                   setPaymentForm((current) => ({ ...current, phone: event.target.value }))
                 }
                 placeholder="M-Pesa phone number"
-              />
+              /></Field>
             </div>
             <button
               type="submit"
@@ -673,32 +674,32 @@ export default function CustomerPortal() {
 
             <form onSubmit={submitTicket} className="stacked-form" style={{ padding: 0 }}>
               <div className="field">
-                <input
+                <Field label="What do you need help with?"><input
                   value={ticketForm.title}
                   onChange={(event) => setTicketForm((current) => ({ ...current, title: event.target.value }))}
                   placeholder="What do you need help with?"
                   required
-                />
+                /></Field>
               </div>
               <div className="field">
-                <input
+                <Field label="Category (billing, outage, install, etc.)"><input
                   value={ticketForm.category}
                   onChange={(event) => setTicketForm((current) => ({ ...current, category: event.target.value }))}
                   placeholder="Category (billing, outage, install, etc.)"
-                />
+                /></Field>
               </div>
               <div className="field">
-                <select
+                <Field label="Low"><select
                   value={ticketForm.priority}
                   onChange={(event) => setTicketForm((current) => ({ ...current, priority: event.target.value }))}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
-                </select>
+                </select></Field>
               </div>
               <div className="field">
-                <select
+                <Field label="No equipment selected"><select
                   value={ticketForm.assetId}
                   onChange={(event) => setTicketForm((current) => ({ ...current, assetId: event.target.value }))}
                 >
@@ -708,23 +709,23 @@ export default function CustomerPortal() {
                       {asset.assetTag} | {asset.name}
                     </option>
                   ))}
-                </select>
+                </select></Field>
               </div>
               <div className="field" style={{ gridColumn: "span 3" }}>
-                <textarea
+                <Field label="Describe the issue, what you have noticed, and when it started."><textarea
                   value={ticketForm.description}
                   onChange={(event) => setTicketForm((current) => ({ ...current, description: event.target.value }))}
                   rows={3}
                   placeholder="Describe the issue, what you have noticed, and when it started."
-                />
+                /></Field>
               </div>
               <div className="field" style={{ gridColumn: "span 2" }}>
-                <textarea
+                <Field label="Optional extra note for the support team"><textarea
                   value={ticketForm.note}
                   onChange={(event) => setTicketForm((current) => ({ ...current, note: event.target.value }))}
                   rows={2}
                   placeholder="Optional extra note for the support team"
-                />
+                /></Field>
               </div>
               <button type="submit" className="primary" disabled={busyAction === "ticket:create"}>
                 {busyAction === "ticket:create" ? "Submitting..." : "Submit Support Request"}

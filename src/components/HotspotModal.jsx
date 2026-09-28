@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 // src/components/HotspotModal.jsx
 import React, { useEffect, useState } from "react";
 import { FaTimes } from "react-icons/fa";
@@ -122,15 +123,15 @@ export default function HotspotModal({ isOpen = false, onClose, standalone = fal
         <form id="hotspotPlanForm" onSubmit={handleSubmit}>
           <fieldset>
             <legend>Plan Details</legend>
-            <input
+            <Field label="Plan Name"><input
               type="text"
               name="name"
               value={form.name}
               onChange={onChange}
               placeholder="Plan Name"
               required
-            />
-            <input
+            /></Field>
+            <Field label="Price (KES)"><input
               type="number"
               name="price"
               value={form.price}
@@ -139,50 +140,50 @@ export default function HotspotModal({ isOpen = false, onClose, standalone = fal
               min="0"
               step="1"
               required
-            />
-            <input
+            /></Field>
+            <Field label="Duration (e.g., 1h, 1d, 30d)"><input
               type="text"
               name="duration"
               value={form.duration}
               onChange={onChange}
               placeholder="Duration (e.g., 1h, 1d, 30d)"
               required
-            />
-            <input
+            /></Field>
+            <Field label="Speed (e.g., 2M/1M)"><input
               type="text"
               name="speed"
               value={form.speed}
               onChange={onChange}
               placeholder="Speed (e.g., 2M/1M)"
               required
-            />
+            /></Field>
           </fieldset>
 
           <fieldset>
             <legend>MikroTik Hotspot Settings</legend>
-            <input
+            <Field label="Hotspot Server"><input
               type="text"
               name="server"
               value={form.server}
               onChange={onChange}
               placeholder="Hotspot Server"
               required
-            />
-            <input
+            /></Field>
+            <Field label="Hotspot Profile"><input
               type="text"
               name="profile"
               value={form.profile}
               onChange={onChange}
               placeholder="Hotspot Profile"
               required
-            />
-            <input
+            /></Field>
+            <Field label="Shared Secret (optional)"><input
               type="text"
               name="secret"
               value={form.secret}
               onChange={onChange}
               placeholder="Shared Secret (optional)"
-            />
+            /></Field>
           </fieldset>
 
           <button type="submit" disabled={busy}>

@@ -1,9 +1,9 @@
+import { Field } from "./ui/Field";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FaTimes } from "react-icons/fa";
 import { MdContentCopy } from "react-icons/md";
 import { api } from "../lib/apiClient";
 import "./SmsSettingsModal.css"; // styles for this modal (ps-* base + sms-* helpers)
-
 
 const DEFAULT_SMS_SETTINGS = {
   enabled: false,
@@ -75,10 +75,6 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
   const [pick, setPick] = useState({ customerId: "", planId: "", dueAt: "" });
   const [created, setCreated] = useState({ url: "", token: "", shortUrl: "", shortPath: "" });
   const [sendMsg, setSendMsg] = useState("");
-
-
-
-
 
   const shortLink = useMemo(() => {
     if (!created) return "";
@@ -246,7 +242,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
 
   const content = (
       <div  className={`ps-modal ${standalone ? "tool-page-card" : "dialog-surface"}`}>
-         */}
+
         {!standalone ? (
           <button onClick={onClose} className="ps-close" aria-label="Close" >
             <FaTimes size={18} />
@@ -395,7 +391,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                           }))
                         }
                       />
-                      <input
+                      <Field label="From"><input
                         className="ps-input"
                         disabled={disabled}
                         placeholder="From"
@@ -406,7 +402,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                             twilio: { ...s.twilio, from: e.target.value },
                           }))
                         }
-                      />
+                      /></Field>
                     </div>
                   </div>
                 );
@@ -457,7 +453,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                           }))
                         }
                       />
-                      <input
+                      <Field label="From (Sender)"><input
                         className="ps-input"
                         disabled={disabled}
                         placeholder="From (Sender)"
@@ -471,7 +467,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                             },
                           }))
                         }
-                      />
+                      /></Field>
                     </div>
                     <label className="sms-check mt-8">
                       <input
@@ -541,7 +537,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                       />
                     </div>
                     <div className="ps-grid mt-8">
-                      <input
+                      <Field label="Sender / Shortcode"><input
                         className="ps-input"
                         disabled={disabled}
                         placeholder="Sender / Shortcode"
@@ -555,8 +551,8 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                             },
                           }))
                         }
-                      />
-                      <input
+                      /></Field>
+                      <Field label="API URL"><input
                         className="ps-input"
                         disabled={disabled}
                         placeholder="API URL"
@@ -570,7 +566,7 @@ export default function SmsSettingsModal({ isOpen = false, onClose, standalone =
                             },
                           }))
                         }
-                      />
+                      /></Field>
                     </div>
                   </div>
                 );

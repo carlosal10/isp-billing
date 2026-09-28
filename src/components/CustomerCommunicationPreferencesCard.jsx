@@ -1,3 +1,4 @@
+import { Field } from "./ui/Field";
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 
@@ -168,12 +169,12 @@ export default function CustomerCommunicationPreferencesCard({ customer, onUpdat
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
-          <input
+          <Field label="Language, e.g. en"><input
             value={form.preferredLanguage}
             onChange={(event) => setForm((current) => ({ ...current, preferredLanguage: event.target.value }))}
             placeholder="Language, e.g. en"
             style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-          />
+          /></Field>
           <input
             type="datetime-local"
             value={form.doNotContactUntil}
@@ -205,12 +206,12 @@ export default function CustomerCommunicationPreferencesCard({ customer, onUpdat
               onChange={(event) => setQuiet("end", event.target.value)}
               style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
             />
-            <input
+            <Field label="Timezone"><input
               value={form.quietHours.timezone}
               onChange={(event) => setQuiet("timezone", event.target.value)}
               placeholder="Timezone"
               style={{ padding: "10px 12px", border: "1px solid #e6eaf2", borderRadius: 10 }}
-            />
+            /></Field>
           </div>
         </div>
       </div>

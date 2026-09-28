@@ -33,13 +33,13 @@ async function restoreCustomerAccess({ customer, plan, debugId }) {
   }
 
   if (customer?.connectionType === 'pppoe') {
-    await enablePppoeSecret(customer).catch(() => {});
-    await applyCustomerQueue(customer, plan).catch(() => {});
+    await enablePppoeSecret(customer);
+    await applyCustomerQueue(customer, plan);
     console.log(`[${debugId}] customer access restored`, { ...context, action: 'enable-pppoe' });
     return;
   }
 
-  await applyCustomerQueue(customer, plan).catch(() => {});
+  await applyCustomerQueue(customer, plan);
   console.log(`[${debugId}] customer access restored`, { ...context, action: 'apply-generic' });
 }
 
@@ -58,12 +58,12 @@ async function suspendCustomerAccess({ customer, debugId }) {
   }
 
   if (customer?.connectionType === 'pppoe') {
-    await disablePppoeSecret(customer).catch(() => {});
+    await disablePppoeSecret(customer);
     console.log(`[${debugId}] customer access suspended`, { ...context, action: 'disable-pppoe' });
     return;
   }
 
-  await disableCustomerQueue(customer).catch(() => {});
+  await disableCustomerQueue(customer);
   console.log(`[${debugId}] customer access suspended`, { ...context, action: 'disable-generic' });
 }
 
@@ -97,6 +97,7 @@ async function syncCustomerAccessFromPayments({ tenantId, customerId, debugId = 
     customer: customerId,
     isDeleted: { $ne: true },
     status: { $in: ['Success', 'Validated'] },
+    isFinanciallyApplied: true,
   })
     .populate('plan', 'duration durationDays')
     .lean();
@@ -128,9 +129,7 @@ async function syncCustomerAccessFromPayments({ tenantId, customerId, debugId = 
     else customer.expiryDate = undefined;
   }
 
-  await customer.save().catch((err) => {
-    console.warn(`[${debugId}] customer access save failed:`, err?.message || err);
-  });
+  await customer.save();
 
   return syncCustomerNetworkState({ customer, debugId });
 }
