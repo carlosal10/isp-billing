@@ -64,7 +64,7 @@ export default function App() {
 
   const toggleSidebar = () => setSidebarOpen((open) => !open);
   const isPayRoute =
-    typeof window !== "undefined" && window.location.pathname.startsWith("/pay");
+    typeof window !== "undefined" && /^\/pay(?:\/|$)/.test(window.location.pathname);
   if (isPayRoute) {
     return (
       <Router>
