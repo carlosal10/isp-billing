@@ -57,6 +57,20 @@ After a restore:
 
 ## Operating Policy
 
+### Repeatable local restore and rollback drill
+
+Install `mongodump` and `mongorestore` from the [official MongoDB Database Tools archive](https://www.mongodb.com/try/download/database-tools/releases/archive), then run `npm run test:restore`. Set `MONGODUMP_BIN` and `MONGORESTORE_BIN` to their absolute paths if they are not on PATH. This command creates two disposable replica sets; it never accepts an existing deployment URI. It seeds invoices and a settled payment, imports a provider statement, backs up the data, exercises the legacy configuration promotion, and restores the earlier snapshot into the second database. It compares every document and index and checks ledger balances. The output includes the retained archive path.
+
+On Windows with limited system-drive space, set `TEMP`, `TMP`, and `MONGOMS_DOWNLOAD_DIR` to task-specific directories on a drive with sufficient space. These are process-scoped overrides; do not relocate a live database.
+
+### Deployment rollback
+
+Before deployment, pause financial writers and scheduled jobs, record the running application commit and encryption-key IDs, and take a consistent backup. Keep the corresponding encryption keys outside the database archive. Verify the archive by restoring it into an isolated database before resuming writes.
+
+If a migration must be rolled back, pause writers again. Restore the pre-migration snapshot into a separate database, verify tenant records, payment/invoice allocations, ledger account balances and indexes, and deploy the matching earlier application commit against that verified database. Reconcile any provider events received after the snapshot before reopening collection flows. Do not switch to stale legacy M-Pesa settings while retaining newer canonical records; that is not a consistent rollback.
+
+The local drill proves the procedure for a small, quiescent dataset. It does not establish production recovery time, backup consistency under concurrent production writes, or production recovery-point objectives.
+
 - Store production backups outside the repository and outside the app host when possible.
 - Encrypt archives at rest when moving them to external storage.
 - Test restore into a non-production database at least monthly.

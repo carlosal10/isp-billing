@@ -31,12 +31,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install
         run: npm ci
       - name: Validate environment contract
         run: npm run env:check
+      - name: Check tracked source for credential patterns
+        run: node scripts/check-secrets.js
       - name: Validate API contract coverage
         run: npm run api:contract:audit
       - name: Validate route security classification
@@ -62,6 +64,13 @@ jobs:
         run: npm run test:integration
       - name: Validate backup dry-run
         run: npm run backup:mongo:plan -- --label ci
+      - name: Install MongoDB tools for restore verification
+        run: |
+          curl --fail --silent --show-error --location https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-x86_64-100.19.0.tgz -o "$RUNNER_TEMP/mongo-tools.tgz"
+          tar -xzf "$RUNNER_TEMP/mongo-tools.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/mongodb-database-tools-ubuntu2404-x86_64-100.19.0/bin" >> "$GITHUB_PATH"
+      - name: Verify backup and restore in isolated databases
+        run: npm run test:restore
 
   client:
     name: Client Build
@@ -75,7 +84,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install
         run: npm ci
@@ -83,3 +92,15 @@ jobs:
         run: npm run ci:client
       - name: Dependency security gate
         run: npm run security:dependencies
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser journeys and accessibility
+        run: npm run test:browser
+      - name: Save browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-report
+          path: |
+            playwright-report/
+            test-results/

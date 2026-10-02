@@ -46,6 +46,8 @@ services:
     envVars:
       - key: REACT_APP_API_URL
         sync: false
+      - key: REQUIRE_PUBLIC_API_URL
+        value: "true"
     routes:
       - type: rewrite
         source: /*

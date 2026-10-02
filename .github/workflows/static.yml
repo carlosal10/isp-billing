@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   build:
+    if: vars.REACT_APP_API_URL != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,14 +30,15 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install
         run: npm ci
       - name: Build client
         env:
           CI: true
-          REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL || 'http://localhost:5000/api' }}
+          REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL }}
+          REQUIRE_PUBLIC_API_URL: 'true'
         run: npm run build
       - name: Setup Pages
         uses: actions/configure-pages@v5
