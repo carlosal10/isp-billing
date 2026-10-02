@@ -1,7 +1,5 @@
 'use strict';
 
-const PaymentConfig = require('../models/PaymentConfig');
-const MpesaSettings = require('../models/MpesaSettings');
 const Payment = require('../models/Payment');
 const PaymentGatewayEvent = require('../models/PaymentGatewayEvent');
 const Customer = require('../models/customers');
@@ -33,34 +31,7 @@ function parseMpesaTimestamp(ts) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-async function resolveMpesaConfig(shortcode) {
-  if (!shortcode) return null;
-  const code = String(shortcode).trim();
-  if (!code) return null;
-
-  const config = await PaymentConfig.findOne({
-    provider: 'mpesa',
-    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
-  }).lean();
-  if (config) return config;
-
-  const settings = await MpesaSettings.findOne({
-    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
-  }).lean();
-  if (!settings) return null;
-
-  return {
-    provider: 'mpesa',
-    ispId: settings.ispId || null,
-    businessName: settings.businessName || null,
-    payMethod:
-      settings.payMethod ||
-      (settings.buyGoodsTill ? 'buygoods' : 'paybill'),
-    environment: settings.environment || 'sandbox',
-    paybillShortcode: settings.paybillShortcode || null,
-    buyGoodsTill: settings.buyGoodsTill || null,
-  };
-}
+const { resolveMpesaShortcode: resolveMpesaConfig } = require('../services/mpesaConfigurationService');
 
 function normalizeMsisdn(msisdn) {
   if (!msisdn) return null;
@@ -159,6 +130,7 @@ async function loadResolutionCustomer({ tenantId, customerId }) {
 
 async function runGatewayEventProcessing(gatewayEvent, options = {}) {
   const inProgress = await beginGatewayEventProcessing(gatewayEvent._id);
+  if (!inProgress) return PaymentGatewayEvent.findById(gatewayEvent._id).lean();
   try {
     await transactional(processGatewayEvent)(inProgress, options);
   } catch (err) {
@@ -301,9 +273,12 @@ async function processStkGatewayEvent(gatewayEvent, options = {}) {
   if (!payment.merchantRequestId && merchantRequestId) payment.merchantRequestId = merchantRequestId;
 
   if (resultCode === 0) {
+    if (!mpesaReceipt || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) !== Number(payment.amount) || payment.currency !== 'KES') {
+      return finalizeGatewayEvent(gatewayEvent._id, buildEventPatch(eventPatch, { eventStatus: 'rejected', tenantId: payment.tenantId, paymentId: payment._id, processingError: 'Receipt amount or currency does not match the payment' }));
+    }
     const paidAt = parseMpesaTimestamp(transactionDate) || new Date();
     if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw createStatusError(409, 'Reversed payment cannot be settled');
-  payment.status = 'Success';
+    payment.status = 'Success';
     if (mpesaReceipt) payment.transactionId = mpesaReceipt;
     if (amount) payment.amount = Number(amount);
     if (phone) payment.phoneNumber = String(phone);
@@ -478,6 +453,12 @@ async function processC2bGatewayEvent(gatewayEvent, options = {}) {
     method: 'mpesa',
   }).lean();
   if (existing) {
+    if (String(existing.customer) !== String(customer._id) || Number(existing.amount) !== amount || existing.currency !== 'KES' || existing.isDeleted) {
+      return finalizeGatewayEvent(gatewayEvent._id, buildEventPatch(tenantPatch, { eventStatus: 'rejected', paymentId: existing._id, processingError: 'Receipt conflicts with an existing payment' }));
+    }
+    if (['Success', 'Validated'].includes(existing.status) && !existing.isFinanciallyApplied) {
+      await syncPaymentFinancials({ paymentId: existing._id, reason: 'Recover existing C2B receipt' });
+    }
     return finalizeGatewayEvent(
       gatewayEvent._id,
       buildEventPatch(tenantPatch, {

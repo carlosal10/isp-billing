@@ -11,7 +11,7 @@ function configureTestEnvironment() {
 }
 async function createTestDatabase() {
   const { MongoMemoryReplSet } = require('mongodb-memory-server');
-  const replica = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } });
+  const replica = await MongoMemoryReplSet.create({ binary: { version: process.env.MONGOMS_VERSION || '8.2.6' }, replSet: { count: 1, storageEngine: 'wiredTiger' } });
   process.env.MONGO_URI = replica.getUri('isp_readiness_test');
   return replica;
 }

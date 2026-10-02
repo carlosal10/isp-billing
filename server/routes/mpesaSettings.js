@@ -1,7 +1,8 @@
 // mpesaSettings.js
 const express = require('express');
 const router = express.Router();
-const MpesaSettings = require('../models/MpesaSettings'); // see schema note below
+const PaymentConfig = require('../models/PaymentConfig');
+const { getMpesaConfig } = require('../services/mpesaConfigurationService');
 const requireRole = require('../middleware/requireRole');
 const {
   sanitizePaymentConfigInput,
@@ -47,7 +48,7 @@ function buildUpdateDoc(body = {}) {
   const $unset = {};
   if (payMethod) {
     const inactive = payMethod === 'paybill' ? GROUPS.buygoods : GROUPS.paybill;
-    for (const k of inactive) $unset[k] = '';
+    for (const k of inactive) { $unset[k] = ''; delete $set[k]; }
   }
 
   return { $set, $setOnInsert, ...(Object.keys($unset).length ? { $unset } : {}) };
@@ -58,16 +59,17 @@ router.post('/settings', async (req, res) => {
   try {
     const ispId = resolveTenant(req);
     if (!ispId) return res.status(401).json({ success: false, message: 'Missing tenant context' });
-    const filter = { ispId };
+    await getMpesaConfig(ispId);
+    const filter = { ispId, provider: 'mpesa' };
 
     const update = buildUpdateDoc(req.body);
     update.$set.updatedAt = new Date();
     update.$set.ispId = ispId;
 
-    const doc = await MpesaSettings.findOneAndUpdate(
+    const doc = await PaymentConfig.findOneAndUpdate(
       filter,
       update,
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
     ).lean();
 
     return res.json({ success: true, message: 'Settings saved', settings: serializePaymentConfig({ ...doc, provider: 'mpesa' }, 'mpesa') });
@@ -82,8 +84,7 @@ router.get('/settings', async (req, res) => {
   try {
     const ispId = resolveTenant(req);
     if (!ispId) return res.status(401).json({ success: false, message: 'Missing tenant context' });
-    const filter = { ispId };
-    const settings = await MpesaSettings.findOne(filter).lean();
+    const settings = (await getMpesaConfig(ispId))?.toObject();
     if (!settings) return res.status(404).json({ success: false, message: 'Settings not found' });
     res.json({ success: true, settings: serializePaymentConfig({ ...settings, provider: 'mpesa' }, 'mpesa') });
   } catch (err) {

@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const Customer = require('../models/customers');
 const Plan = require('../models/plan');
 const CreditNote = require('../models/CreditNote');
+const AuditLog = require('../models/AuditLog');
 const InvoiceAllocation = require('../models/InvoiceAllocation');
 const BillingLedgerEntry = require('../models/BillingLedgerEntry');
 const { createLedgerBatch, reverseLedgerBatch } = require('./billingLedgerService');
@@ -31,6 +32,10 @@ const { initiateSTKPush } = require('../utils/mpesa');
 
 const OPEN_INVOICE_STATUSES = ['issued', 'partially_paid', 'overdue'];
 const SETTLED_PAYMENT_STATUSES = new Set(['Success', 'Validated']);
+function paymentFingerprint(payment) {
+  return createHash('sha256').update(JSON.stringify([payment.amount, payment.currency,
+    toObjectIdString(payment.customer), toObjectIdString(payment.plan), toObjectIdString(payment.invoice), payment.status, payment.isDeleted])).digest('hex');
+}
 
 function toObjectIdString(value) {
   if (!value) return null;
@@ -70,16 +75,14 @@ async function ensureCreditNoteNumber(creditNote) {
 
 async function findPlan(planRef, tenantId = null) {
   if (!planRef) return null;
-  if (typeof planRef === 'object' && planRef._id) return planRef;
-  const filter = { _id: planRef };
+  const filter = { _id: planRef._id || planRef };
   if (tenantId) filter.tenantId = tenantId;
   return Plan.findOne(filter);
 }
 
 async function findCustomer(customerRef, tenantId = null) {
   if (!customerRef) return null;
-  if (typeof customerRef === 'object' && customerRef._id) return customerRef;
-  const filter = { _id: customerRef };
+  const filter = { _id: customerRef._id || customerRef };
   if (tenantId) filter.tenantId = tenantId;
   return Customer.findOne(filter);
 }
@@ -202,6 +205,7 @@ async function reverseLedgerForSource({ tenantId, filter, reason }) {
   const rows = await BillingLedgerEntry.find({
     tenantId,
     reversedAt: null,
+    sourceType: { $ne: 'reversal' },
     ...filter,
   })
     .select({ batchId: 1 })
@@ -307,7 +311,7 @@ async function applyCreditNoteToInvoices(creditNote, openInvoices) {
     return { appliedTotal: 0, allocations: [] };
   }
   const candidates = openInvoices
-    .filter((invoice) => OPEN_INVOICE_STATUSES.includes(invoice.status))
+    .filter((invoice) => OPEN_INVOICE_STATUSES.includes(invoice.status) && invoice.currency === creditNote.currency)
     .map((invoice) => ({
       itemId: toObjectIdString(invoice._id),
       outstanding: roundCurrency(invoice.balanceDue),
@@ -418,6 +422,16 @@ async function buildInvoiceDraft({
   lineItems = [],
   metadata = {},
 }) {
+  const invalid = message => { throw Object.assign(new Error(message), { statusCode: 400 }); };
+  if (!Number.isFinite(Number(total)) || Number(total) < 0) invalid('Invoice amount must be a non-negative number');
+  for (const date of [issueDate, dueDate, servicePeriodStart, servicePeriodEnd].filter(value => value != null)) {
+    if (!Number.isFinite(+new Date(date))) invalid('Invoice dates must be valid');
+  }
+  if (servicePeriodStart && servicePeriodEnd && new Date(servicePeriodEnd) < new Date(servicePeriodStart)) invalid('Service period end must follow its start');
+  for (const item of lineItems) {
+    if (!item || typeof item.description !== 'string' || !item.description.trim() ||
+      [item.quantity ?? 1, item.unitPrice ?? 0, item.amount ?? 0].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) invalid('Invoice lines require a description and non-negative amounts');
+  }
   const invoice = new Invoice({
     tenantId,
     customer: customer._id || customer,
@@ -468,7 +482,9 @@ async function buildInvoiceDraft({
 async function ensureRenewalInvoiceForPayment(payment) {
   let invoice = null;
   if (payment.invoice) {
-    invoice = payment.invoice;
+    invoice = await Invoice.findOne({ _id: payment.invoice._id || payment.invoice, tenantId: payment.tenantId,
+      customer: payment.customer?._id || payment.customer, currency: payment.currency || 'KES' });
+    if (!invoice) throw new Error('Invoice does not belong to this customer, tenant, or currency');
   } else {
     invoice = await Invoice.findOne({ sourcePayment: payment._id, tenantId: payment.tenantId });
     if (!invoice) {
@@ -493,6 +509,7 @@ async function ensureRenewalInvoiceForPayment(payment) {
   const customer = await findCustomer(payment.customer, payment.tenantId);
   const plan = await findPlan(payment.plan, payment.tenantId);
   if (!customer || !plan) return null;
+  if (payment.currency !== 'KES') throw new Error('Automatic plan invoicing requires KES; link a matching currency invoice');
 
   const price = roundCurrency(plan.price || payment.amount || 0);
   const durationDays = resolvePlanDurationDays(plan);
@@ -550,8 +567,9 @@ async function issueInvoiceForPlan({
   const customer = await findCustomer(customerId, tenantId);
   const plan = await findPlan(planId, tenantId);
   if (!customer || !plan) {
-    throw new Error('Customer or plan not found');
+    throw Object.assign(new Error('Customer or plan not found'), { statusCode: 404 });
   }
+  if (total != null && (!Number.isFinite(Number(total)) || Number(total) < 0)) throw Object.assign(new Error('Invoice amount must be a non-negative number'), { statusCode: 400 });
 
   const invoice = await buildInvoiceDraft({
     tenantId,
@@ -624,6 +642,9 @@ async function ensureCollectableInvoiceForPaymentStart({
 }
 
 async function settlePaymentFinancials(payment) {
+  const customer = await findCustomer(payment.customer, payment.tenantId);
+  const plan = await findPlan(payment.plan, payment.tenantId);
+  if (!customer || !plan) throw new Error('Payment customer or plan not found in tenant');
   const paymentTotal = roundCurrency(payment.amount || 0);
   if (paymentTotal <= 0) {
     payment.allocatedAmount = 0;
@@ -646,6 +667,7 @@ async function settlePaymentFinancials(payment) {
   const openInvoices = await Invoice.find({
     tenantId: payment.tenantId,
     customer: payment.customer?._id || payment.customer,
+    currency: payment.currency || 'KES',
     status: { $in: OPEN_INVOICE_STATUSES },
   }).sort({ dueDate: 1, createdAt: 1 });
 
@@ -691,6 +713,7 @@ async function settlePaymentFinancials(payment) {
       customer: payment.customer?._id || payment.customer,
       sourcePayment: payment._id,
       sourceInvoice: payment.invoice?._id || payment.invoice || invoice?._id || null,
+      currency: payment.currency || 'KES',
       amount: allocationPlan.remaining,
       remainingAmount: allocationPlan.remaining,
       reason: 'Unapplied payment credit',
@@ -758,7 +781,7 @@ async function syncPaymentFinancials({ paymentId, actor = null, reason = null })
   const payment = await loadPaymentForFinance(paymentId);
   if (!payment) return null;
 
-  const fingerprint = createHash('sha256').update(JSON.stringify([payment.amount, payment.currency, String(payment.customer?._id || payment.customer), String(payment.plan?._id || payment.plan), payment.status, payment.isDeleted])).digest('hex');
+  const fingerprint = paymentFingerprint(payment);
   if (payment.isFinanciallyApplied && payment.financialFingerprint === fingerprint) return payment;
   if (payment.isFinanciallyApplied) await reversePaymentFinancials(payment, reason || 'Payment financial sync');
   if (!SETTLED_PAYMENT_STATUSES.has(String(payment.status || '')) || payment.isDeleted) {
@@ -766,7 +789,7 @@ async function syncPaymentFinancials({ paymentId, actor = null, reason = null })
   }
 
   await settlePaymentFinancials(payment);
-  payment.financialFingerprint = fingerprint;
+  payment.financialFingerprint = paymentFingerprint(payment);
   await payment.save();
   await syncCustomerAccessFromPayments({ tenantId: payment.tenantId, customerId: payment.customer?._id || payment.customer });
   return loadPaymentForFinance(paymentId);
@@ -794,6 +817,7 @@ async function markInvoicePaidManually({ tenantId, invoiceId, actor = null, note
     invoice: invoice._id,
     plan: invoice.plan?._id || invoice.plan,
     amount: invoice.balanceDue,
+    currency: invoice.currency,
     method: 'manual',
     status: 'Validated',
     transactionId: `${invoice.invoiceNumber || invoice._id}-MANUAL-${Date.now()}`,
@@ -1014,6 +1038,7 @@ async function reversePaymentStatus({
   if (!['Refunded', 'Reversed', 'Chargeback'].includes(nextStatus)) throw new Error('Invalid reversal status');
   if (payment.status === nextStatus) return payment;
   if (['Refunded', 'Reversed', 'Chargeback'].includes(payment.status)) throw Object.assign(new Error('Payment is already reversed'), { statusCode: 409 });
+  if (!SETTLED_PAYMENT_STATUSES.has(payment.status)) throw Object.assign(new Error('Only settled payments can be reversed'), { statusCode: 409 });
   await reversePaymentFinancials(payment, reason || nextStatus);
   payment.status = nextStatus;
   if (nextStatus === 'Refunded') {
@@ -1036,6 +1061,7 @@ async function reversePaymentStatus({
     customerId: payment.customer?._id || payment.customer,
     debugId: `payment-status-${String(payment._id)}`,
   });
+  await AuditLog.create({ tenantId, actor: String(paymentActorLabel(actor) || 'system'), action: 'finance.payment.adjustment', payload: { paymentId: String(payment._id), status: nextStatus, amount: payment.amount, currency: payment.currency, reason } });
   return payment;
 }
 

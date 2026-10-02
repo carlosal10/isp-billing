@@ -16,6 +16,28 @@ const AuditLog = require('../models/AuditLog');
 const { financialTransaction } = require('../services/financialTransaction');
 const { syncPaymentFinancials } = require('../services/billingFinanceService');
 const Payment = require('../models/Payment');
+const Statement = require('../models/ProviderStatement');
+const { importStatement, getStatementReport, acknowledgeDiscrepancy } = require('../services/providerReconciliationService');
+function statementError(err, res, next) {
+  if (err.statusCode || err.name === 'CastError') return res.status(err.statusCode || 400).json({ error: err.message });
+  next(err);
+}
+router.get('/statements', requireRole('owner', 'admin'), async (req, res, next) => {
+  try { res.json(await Statement.find({ tenantId: req.tenantId }).select('-rows -acknowledgements').sort({ createdAt: -1 }).limit(50).lean()); }
+  catch (err) { statementError(err, res, next); }
+});
+router.post('/statements', requireRole('owner', 'admin'), async (req, res, next) => {
+  try { const { provider, start, end, rows } = req.body || {}; res.status(201).json(await importStatement({ provider, start, end, rows, tenantId: req.tenantId, actor: String(req.user.sub) })); }
+  catch (err) { statementError(err, res, next); }
+});
+router.get('/statements/:id', requireRole('owner', 'admin'), async (req, res, next) => {
+  try { res.json(await getStatementReport(req.tenantId, req.params.id)); }
+  catch (err) { statementError(err, res, next); }
+});
+router.post('/statements/:id/acknowledge', requireRole('owner', 'admin'), async (req, res, next) => {
+  try { await acknowledgeDiscrepancy({ tenantId: req.tenantId, id: req.params.id, key: req.body?.key, reason: req.body?.reason, actor: String(req.user.sub) }); res.json({ ok: true }); }
+  catch (err) { statementError(err, res, next); }
+});
 
 router.get('/reconciliation', requireRole('owner', 'admin'), async (req, res, next) => {
   try { res.json(await getReconciliation(req.tenantId)); } catch (err) { next(err); }

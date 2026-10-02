@@ -614,6 +614,75 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: OK }
+  /finance/statements:
+    get:
+      summary: List the latest 50 provider statement imports (owner or admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Statement metadata without receipt rows }
+    post:
+      summary: Import gross provider receipts for an exclusive UTC date range (owner or admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, start, end, rows]
+              properties:
+                provider: { type: string, enum: [mpesa, stripe, paypal] }
+                start: { type: string, format: date-time }
+                end: { type: string, format: date-time }
+                rows:
+                  type: array
+                  maxItems: 2000
+                  items:
+                    type: object
+                    required: [reference, amount, currency, occurredAt]
+                    properties:
+                      reference: { type: string, maxLength: 160 }
+                      amount: { type: number, exclusiveMinimum: 0 }
+                      currency: { type: string, pattern: '^[A-Z]{3}$' }
+                      occurredAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Imported statement or existing identical import }
+        '400': { description: Invalid rows or period }
+  /finance/statements/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Compare statement with current tenant receipts by currency
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Totals, per-reference discrepancies and investigation history }
+        '404': { description: Statement not found in tenant }
+  /finance/statements/{id}/acknowledge:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      summary: Record an investigation without modifying money or hiding discrepancies
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, reason]
+              properties:
+                key: { type: string }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200': { description: Investigation saved and audited }
+        '400': { description: Invalid reason or stale discrepancy }
+        '404': { description: Statement not found in tenant }
   /finance/invoice-aging:
     get:
       summary: Get open invoice aging buckets and invoice-level aging rows

@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const PaymentConfig = require('../models/PaymentConfig');
+const { getMpesaConfig } = require('../services/mpesaConfigurationService');
 const requireRole = require('../middleware/requireRole');
 const {
   normalizePaymentProvider,
@@ -23,6 +24,7 @@ router.post('/:provider', async (req, res) => {
 
     const ispId = String(tenantId);
     const settings = sanitizePaymentConfigInput(provider, req.body || {});
+    if (provider === 'mpesa') await getMpesaConfig(ispId);
     const existing = await PaymentConfig.findOne({ ispId, provider });
     if (existing) {
       Object.assign(existing, settings);
@@ -44,7 +46,7 @@ router.get('/:provider', async (req, res) => {
     const ispId = String(req.tenantId);
     const provider = normalizePaymentProvider(req.params.provider);
     if (!provider) return res.status(400).json({ error: 'Unsupported payment provider' });
-    const config = await PaymentConfig.findOne({ ispId, provider }).lean();
+    const config = provider === 'mpesa' ? (await getMpesaConfig(ispId))?.toObject() : await PaymentConfig.findOne({ ispId, provider }).lean();
     res.json(serializePaymentConfig(config, provider));
   } catch (err) {
     console.error('Payment config load error:', err);
