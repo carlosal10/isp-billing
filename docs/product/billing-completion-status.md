@@ -29,6 +29,8 @@ Local evidence is produced by:
 
 Windows verification uses installed Edge via `PLAYWRIGHT_CHANNEL=msedge`. CI installs Chromium. Database tools are MongoDB Database Tools 100.19.0; the disposable replica set uses MongoDB 8.2.6. Windows artifacts and tool caches are stored under `D:\isp-billing-tests` to avoid exhausting C:. The browser screenshots live under the ignored `artifacts/ui` directory. These are automated accessibility checks and workflow coverage, not a certification of the entire site's WCAG conformance.
 
+On October 3, the first Linux CI run passed the client build and browser checks and exposed a capitalization mismatch in the router model path used by the route audit. The policy now uses the exact Git-tracked filename, and all 32 policy paths were checked against Git. Moment was updated to 2.31.0 for [GHSA-4p3w-j4w9-5jqw](https://github.com/advisories/GHSA-4p3w-j4w9-5jqw); the updated dependency audit reports zero findings.
+
 ## Operating boundary
 
 - Statement imports accept normalized gross successful receipts before fees, at most 2,000 rows and a maximum 93-day period. End timestamps are exclusive. Internal comparisons fail rather than silently truncate beyond 10,000 payments. List views retain the latest 50 imports; reports persist in MongoDB.

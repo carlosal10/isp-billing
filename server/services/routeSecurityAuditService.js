@@ -149,7 +149,7 @@ const ROUTE_MODULE_POLICIES = Object.freeze([
     reason: 'Payment-provider credentials must be encrypted before persistence and unique per tenant/provider.',
   },
   {
-    file: 'server/models/MikroTikConnection.js',
+    file: 'server/models/MikrotikConnection.js',
     requiredSnippets: ['password: { type: String, required: true, set: encryptField }'],
     reason: 'Router passwords must be encrypted before persistence.',
   },
