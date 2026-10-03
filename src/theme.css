@@ -206,6 +206,13 @@ td input[type="checkbox"] { min-width:0; }
 }
 
 /* Workflow workspaces */
+.tool-page-card button.primary { background:var(--brand-navy-2) !important; color:white !important; box-shadow:none !important; }
+.statement-import { margin:20px 0; border:1px solid var(--line); border-radius:8px; padding:14px; }
+.statement-import summary { cursor:pointer; font-weight:600; color:var(--ink); }
+.statement-form { display:grid; gap:16px; margin-top:18px; }
+.statement-result { margin-top:24px; }
+.statement-result .table-scroll { margin-bottom:20px; }
+.statement-result td { overflow-wrap:anywhere; max-width:340px; }
 .workspace-page { max-width:1280px; margin:0 auto; padding:28px; }
 .workspace-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
 .workspace-header h1 { margin:6px 0 10px; }

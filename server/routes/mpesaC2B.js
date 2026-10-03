@@ -1,8 +1,6 @@
 // Mpesa C2B (Customer to Business) routes
 const express = require('express');
 const router = express.Router();
-const PaymentConfig = require('../models/PaymentConfig');
-const MpesaSettings = require('../models/MpesaSettings');
 const Customer = require('../models/customers');
 const {
   hashValue,
@@ -14,34 +12,7 @@ const {
 } = require('../services/paymentGatewayEventService');
 const { processGatewayEvent } = require('../services/paymentGatewayProcessingService');
 
-async function resolveConfig(shortcode) {
-  if (!shortcode) return null;
-  const code = String(shortcode).trim();
-  if (!code) return null;
-
-  const config = await PaymentConfig.findOne({
-    provider: 'mpesa',
-    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
-  }).lean();
-  if (config) return config;
-
-  const settings = await MpesaSettings.findOne({
-    $or: [{ paybillShortcode: code }, { buyGoodsTill: code }],
-  }).lean();
-  if (!settings) return null;
-
-  return {
-    provider: 'mpesa',
-    ispId: settings.ispId || null,
-    businessName: settings.businessName || null,
-    payMethod:
-      settings.payMethod ||
-      (settings.buyGoodsTill ? 'buygoods' : 'paybill'),
-    environment: settings.environment || 'sandbox',
-    paybillShortcode: settings.paybillShortcode || null,
-    buyGoodsTill: settings.buyGoodsTill || null,
-  };
-}
+const { resolveMpesaShortcode: resolveConfig } = require('../services/mpesaConfigurationService');
 
 function normalizeMsisdn(msisdn) {
   if (!msisdn) return null;

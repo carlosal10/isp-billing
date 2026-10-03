@@ -2,7 +2,9 @@
 
 ## Current implementation checkpoint
 
-The local Phase 1 exit checks and the first Phase 2 finance-recovery vertical slice are complete. The next release gate is staging validation with real provider credentials, a production-like backup/restore rehearsal, MikroTik lab validation, and named operational owners. Local evidence is recorded in `docs/product/phase-1-security-status.md`.
+The billing completion batch fixes invoice pricing, overpayment reversal accounting, tenant/currency validation, and the staff billing route. It adds provider receipt comparison, canonical M-Pesa configuration, fault-injection coverage, and enforced browser/restore checks. The next implementation batch is Phase 3 network orchestration. Evidence and the exact support boundary are recorded in `docs/product/billing-completion-status.md`.
+
+This is a local engineering checkpoint, not production launch approval. Live provider acceptance, a deployment-specific restore rehearsal, MikroTik lab validation, operational ownership, the remaining site-wide UI workflows, and the controlled pilot remain release gates. PayPal currently supports manually recorded receipts and statement comparison; its unused checkout helpers are not a verified online payment integration.
 
 ## Product goal
 

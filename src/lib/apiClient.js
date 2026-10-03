@@ -23,9 +23,7 @@ function normalizeApiBase(value) {
 
 export const API_BASE = normalizeApiBase(
   process.env.REACT_APP_API_URL ||
-    (typeof window !== "undefined" && window.location.hostname === "localhost"
-      ? "http://localhost:5000/api"
-      : "https://isp-billing-server.onrender.com/api")
+    '/api'
 );
 
 export const PLATFORM_API_BASE = API_BASE.replace(/\/api\/?$/, "/platform-api");

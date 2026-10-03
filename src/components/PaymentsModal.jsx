@@ -1,4 +1,5 @@
 import { Field } from "./ui/Field";
+import { Modal } from "./ui/Modal";
 import "./PaymentsModal.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
@@ -81,6 +82,9 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
   const [financeLoading, setFinanceLoading] = useState(false);
   const [financeError, setFinanceError] = useState("");
   const [runningPaymentActionId, setRunningPaymentActionId] = useState(null);
+  const [lifecycle, setLifecycle] = useState(null);
+  const [lifecycleReason, setLifecycleReason] = useState('');
+  const [lifecycleError, setLifecycleError] = useState('');
   const [selectedPaymentAuditId, setSelectedPaymentAuditId] = useState(null);
   const [selectedPaymentAudit, setSelectedPaymentAudit] = useState(null);
   const [paymentAuditLoading, setPaymentAuditLoading] = useState(false);
@@ -702,7 +706,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
   const markInvoicePaid = async (id) => {
     try {
       await api.put(`/invoices/${id}/pay`);
-      alert("Invoice marked as paid!");
+      setAdjustToast({ type: 'success', message: 'Invoice settled and ledger updated.' });
       await fetchPayments();
       await fetchInvoices();
       if (canViewFinance) await fetchFinanceReports();
@@ -817,7 +821,12 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
     }
   };
 
-  const runPaymentLifecycleAction = async (payment, action) => {
+  const runPaymentLifecycleAction = (payment, action) => {
+    setLifecycle({ payment, action }); setLifecycleReason(''); setLifecycleError('');
+  };
+  const confirmPaymentLifecycleAction = async (event) => {
+    event.preventDefault();
+    const { payment, action } = lifecycle;
     if (!payment?._id) return;
     const actionLabel =
       action === "refund"
@@ -825,8 +834,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
         : action === "reverse"
           ? "reverse"
           : "chargeback";
-    const reason = window.prompt(`Reason for ${actionLabel}ing this payment?`, "");
-    if (reason === null) return;
+    const reason = lifecycleReason;
     setRunningPaymentActionId(`${action}:${payment._id}`);
     try {
       await api.post(`/payments/${payment._id}/${action}`, {
@@ -838,8 +846,9 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
         await fetchFinanceReports();
       }
       await refreshSelectedAudits();
+      setLifecycle(null);
     } catch (err) {
-      alert(getErrMsg(err, `Failed to ${actionLabel} payment`));
+      setLifecycleError(getErrMsg(err, `Failed to ${actionLabel} payment`));
     } finally {
       setRunningPaymentActionId(null);
     }
@@ -1574,6 +1583,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
           </span>
         ) : null}
 
+        {standalone && <header className="workspace-header"><div><span className="eyebrow">BILLING OPERATIONS</span><h1>Billing workspace</h1><p>Manage customer payments, issue invoices, and review financial activity.</p></div></header>}
         {/* Tabs */}
         <div className="tabs" >
           <button className={activeTab === "payments" ? "active" : ""} onClick={() => setActiveTab("payments")}>
@@ -1607,7 +1617,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 Export
               </button>
             </div>
-            <div className="table-wrapper">
+            <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -1715,7 +1725,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 {customerResults.length > 0 && (
                   <ul className="search-dropdown">
                     {customerResults.map((c) => (
-                      <li
+                      <li role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } }}
                         key={c._id}
                         onClick={() => {
                           setManualPayment((prev) => ({
@@ -1749,22 +1759,22 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <Field label="Amount (KES) — optional (defaults to plan price)"><input
+                <Field label="Amount (KES)" hint="Optional; defaults to the customer's plan price."><input
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Amount (KES) — optional (defaults to plan price)"
+                  placeholder="0.00"
                   value={manualPayment.amount}
                   onChange={(e) => setManualPayment((p) => ({ ...p, amount: e.target.value }))}
                 /></Field>
               </div>
 
               <div className="field">
-                <Field label="Select Method (default: Manual)"><select
+                <Field label="Payment method"><select
                   value={manualPayment.method}
                   onChange={(e) => setManualPayment((p) => ({ ...p, method: e.target.value }))}
                 >
-                  <option value="">Select Method (default: Manual)</option>
+                  <option value="">Manual (default)</option>
                   <option value="manual">Manual (Cash/Bank)</option>
                   <option value="mpesa">M-Pesa</option>
                   <option value="stripe">Stripe</option>
@@ -1793,7 +1803,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 {adjustResults.length > 0 && (
                   <ul className="search-dropdown">
                     {adjustResults.map((c) => (
-                      <li
+                      <li role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } }}
                         key={`adjust-${c._id}`}
                         onClick={() => {
                           setAdjustForm((prev) => ({
@@ -1847,8 +1857,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <label>Backdate To (optional)</label>
-                <Field label="Date"><input
+                <Field label="Backdate to (optional)"><input
                   type="date"
                   value={adjustForm.backdateTo}
                   onChange={(e) => setAdjustForm((p) => ({ ...p, backdateTo: e.target.value }))}
@@ -1857,18 +1866,16 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <label>Goodwill Days (optional)</label>
-                <input
+                <Field label="Goodwill days (optional)"><input
                   type="number"
                   step="1"
                   value={adjustForm.extendDays}
                   onChange={(e) => setAdjustForm((p) => ({ ...p, extendDays: e.target.value }))}
-                />
+                /></Field>
                 <p className="help-text">Adds (or subtracts) days to the computed expiry after backdating.</p>
               </div>
 
               <div className="field">
-                <label>Adjustment Notes (optional)</label>
                 <Field label="Reason for adjustment"><input
                   type="text"
                   value={adjustForm.notes}
@@ -1904,7 +1911,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 {invoiceResults.length > 0 && (
                   <ul className="search-dropdown">
                     {invoiceResults.map((customer) => (
-                      <li
+                      <li role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } }}
                         key={`invoice-${customer._id}`}
                         onClick={() => {
                           setInvoiceForm((prev) => ({
@@ -1989,7 +1996,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <Field label="Date"><input
+                <Field label="Invoice due date"><input
                   type="date"
                   value={invoiceForm.dueDate}
                   onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
@@ -1998,7 +2005,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <Field label="Date"><input
+                <Field label="Service period start"><input
                   type="date"
                   value={invoiceForm.servicePeriodStart}
                   onChange={(e) =>
@@ -2009,7 +2016,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <Field label="Date"><input
+                <Field label="Service period end"><input
                   type="date"
                   value={invoiceForm.servicePeriodEnd}
                   onChange={(e) =>
@@ -2020,7 +2027,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
 
               <div className="field">
-                <Field label="Manual"><select
+                <Field label="Billing reason"><select
                   value={invoiceForm.billingReason}
                   onChange={(e) =>
                     setInvoiceForm((prev) => ({ ...prev, billingReason: e.target.value }))
@@ -2038,7 +2045,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 {invoiceSaving ? "Issuing..." : "Issue Invoice"}
               </button>
             </form>
-            <div className="table-wrapper">
+            <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -2155,7 +2162,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 </div>
 
                 <h3>Invoice Aging</h3>
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -2190,7 +2197,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 </div>
 
                 <h3>Customer Credits</h3>
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -2225,7 +2232,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
                 </div>
 
                 <h3>Recent Ledger</h3>
-                <div className="table-wrapper">
+                <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -2382,7 +2389,7 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
               </div>
             )}
 
-            <div className="table-wrapper">
+            <div className="table-wrapper" tabIndex={0} role="region" aria-label="Billing records">
               <table className="data-table gateway-table">
                 <thead>
                   <tr>
@@ -2783,6 +2790,14 @@ export default function PaymentsModal({ isOpen = false, onClose, standalone = fa
         )}
 
         {/* ===== Confirm Delete ===== */}
+        <Modal open={!!lifecycle} title="Record payment adjustment" onClose={() => { if (!runningPaymentActionId) setLifecycle(null); }}>
+          {lifecycle && <form className="statement-form" onSubmit={confirmPaymentLifecycleAction}>
+            <p>Record a {lifecycle.action} for {lifecycle.payment.currency || 'KES'} {Number(lifecycle.payment.amount).toFixed(2)}. This updates the ledger and service eligibility. Complete any provider refund separately before recording it here.</p>
+            {lifecycleError && <p role="alert" className="ui-field-error">{lifecycleError}</p>}
+            <Field label="Adjustment reason" hint="Include the provider reference or investigation outcome for the audit history."><textarea required minLength={5} maxLength={500} value={lifecycleReason} onChange={e => setLifecycleReason(e.target.value)} /></Field>
+            <div className="form-actions"><button type="submit" disabled={!!runningPaymentActionId}>{runningPaymentActionId ? 'Recording…' : 'Record adjustment'}</button><button type="button" className="secondary" disabled={!!runningPaymentActionId} onClick={() => setLifecycle(null)}>Cancel</button></div>
+          </form>}
+        </Modal>
         {confirm.open && (
           <div className="confirm-overlay" onMouseDown={(e) => e.target === e.currentTarget && setConfirm({ open: false, id: null, loading: false, message: "" })}>
             <div className="confirm-dialog">

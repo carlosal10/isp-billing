@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function useDialogFocus(open, ref, onClose) {
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open || !ref.current) return undefined;
     const surface = ref.current;
@@ -11,7 +13,7 @@ export function useDialogFocus(open, ref, onClose) {
       .filter(element => element.getClientRects().length);
     (focusable()[0] || surface).focus();
     function keydown(event) {
-      if (event.key === 'Escape') { event.preventDefault(); onClose?.(); }
+      if (event.key === 'Escape') { event.preventDefault(); close.current?.(); }
       if (event.key !== 'Tab') return;
       const elements = focusable();
       const first = elements[0], last = elements[elements.length - 1];
@@ -21,5 +23,5 @@ export function useDialogFocus(open, ref, onClose) {
     }
     surface.addEventListener('keydown', keydown);
     return () => { document.body.style.overflow = overflow; surface.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus(); };
-  }, [open, ref, onClose]);
+  }, [open, ref]);
 }

@@ -11,8 +11,9 @@ const PROVIDERS = [
   { key: "paypal", label: "PayPal", icon: <FaPaypal /> },
 ];
 
-function TextInput({ value, onChange, placeholder, type = "text", required = true }) {
+function TextInput({ label, value, onChange, placeholder, type = "text", required = true }) {
   return (
+    <Field label={label}>
     <input
       type={type}
       autoComplete={type === "password" ? "new-password" : undefined}
@@ -21,7 +22,7 @@ function TextInput({ value, onChange, placeholder, type = "text", required = tru
       onChange={(e) => onChange(e.target.value)}
       className="ps-input"
       required={required}
-    />
+    /></Field>
   );
 }
 
@@ -241,7 +242,7 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
             {activeTab === "mpesa" ? (
               <>
                 {/* payMethod */}
-                <Field label="Paybill"><select
+                <Field label="Collection method"><select
                   className="ps-input"
                   value={formData.mpesa.payMethod || "paybill"}
                   onChange={(e) => onChange("mpesa", "payMethod", e.target.value)}
@@ -251,7 +252,7 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
                 </select></Field>
 
                 {/* environment */}
-                <Field label="Sandbox"><select
+                <Field label="Environment"><select
                   className="ps-input"
                   value={formData.mpesa.environment || "sandbox"}
                   onChange={(e) => onChange("mpesa", "environment", e.target.value)}
@@ -269,6 +270,7 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
                     return (
                       <TextInput
                         key={field}
+                        label={labelize(field)}
                         placeholder={configured ? `${labelize(field)} configured — enter to replace` : labelize(field)}
                         type={credential ? "password" : "text"}
                         required={credential ? !configured : true}
@@ -285,6 +287,7 @@ export default function PaymentIntegrationsModal({ isOpen = false, onClose, ispI
                 return (
                   <TextInput
                     key={field}
+                    label={labelize(field)}
                     placeholder={configured ? `${labelize(field)} configured — enter to replace` : labelize(field)}
                     type={credential ? "password" : "text"}
                     required={credential ? !configured : true}

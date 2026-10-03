@@ -89,7 +89,7 @@ router.post('/issue', requireRole('owner', 'admin'), async (req, res) => {
     return res.status(201).json({ ok: true, invoice: serializeInvoice(invoice) });
   } catch (err) {
     console.error('invoice issue error:', err);
-    return res.status(500).json({ error: err?.message || 'Failed to issue invoice' });
+    return res.status(err.statusCode || (err.name === 'CastError' ? 400 : 500)).json({ error: err?.message || 'Failed to issue invoice' });
   }
 });
 
@@ -131,7 +131,6 @@ router.post('/:id/generate', requireRole('owner', 'admin'), async (req, res) => 
 
 router.get('/:id/pdf', async (req, res) => {
   try {
-    await recalculateInvoice(req.params.id).catch(() => null);
     const invoice = await Invoice.findOne({ _id: req.params.id, tenantId: req.tenantId })
       .populate('customer', 'name accountNumber phone email')
       .populate('plan', 'name price duration');

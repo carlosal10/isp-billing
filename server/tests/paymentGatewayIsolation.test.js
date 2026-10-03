@@ -14,6 +14,7 @@ correlation.findStkCorrelation = async () => null;
 correlation.markStkCorrelationCallback = async () => null;
 const Payment = require('../models/Payment');
 const PaymentConfig = require('../models/PaymentConfig');
+const Legacy = require('../models/MpesaSettings');
 const Customer = require('../models/customers');
 const { processGatewayEvent } = require('../services/paymentGatewayProcessingService');
 
@@ -34,7 +35,8 @@ test('uncorrelated public STK callback cannot search payments by phone and amoun
 });
 
 test('C2B confirmation never searches another tenant when the account is missing', async (t) => {
-  t.mock.method(PaymentConfig, 'findOne', () => ({ lean: async () => ({ ispId: 'tenant-a' }) }));
+  t.mock.method(Legacy, 'find', () => ({ select: () => ({ lean: async () => [] }) }));
+  t.mock.method(PaymentConfig, 'find', () => ({ limit: () => ({ lean: async () => [{ ispId: 'tenant-a' }] }) }));
   let lookups = 0;
   t.mock.method(Customer, 'findOne', async (filter) => {
     lookups += 1;
@@ -53,7 +55,8 @@ test('C2B confirmation never searches another tenant when the account is missing
 });
 
 test('C2B confirmation rejects a shortcode with no tenant binding', async (t) => {
-  t.mock.method(PaymentConfig, 'findOne', () => ({ lean: async () => ({ ispId: null }) }));
+  t.mock.method(Legacy, 'find', () => ({ select: () => ({ lean: async () => [] }) }));
+  t.mock.method(PaymentConfig, 'find', () => ({ limit: () => ({ lean: async () => [{ ispId: null }] }) }));
   t.mock.method(Customer, 'findOne', () => assert.fail('Unbound shortcode cannot look up customers'));
   const result = await processGatewayEvent({
     _id: 'event-c', provider: 'mpesa', kind: 'c2b-confirmation',

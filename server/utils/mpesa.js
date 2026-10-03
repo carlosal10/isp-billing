@@ -1,6 +1,6 @@
 // utils/mpesa.js
 const axios = require('axios');
-const PaymentConfig = require('../models/PaymentConfig');
+const { getMpesaConfig } = require('../services/mpesaConfigurationService');
 const { decryptPaymentConfig } = require('../security/fieldEncryption');
 
 // Lightweight masking helpers for logging (avoid leaking secrets)
@@ -79,7 +79,7 @@ async function getAccessToken({ consumerKey, consumerSecret, environment }) {
  */
 async function initiateSTKPush({ ispId, amount, phone, accountReference, callbackURL }) {
   // Load per-tenant config
-  const storedConfig = await PaymentConfig.findOne({ ispId, provider: 'mpesa' }).lean();
+  const storedConfig = (await getMpesaConfig(ispId))?.toObject();
   if (!storedConfig) throw new Error('M-Pesa configuration not found');
   const cfg = decryptPaymentConfig(storedConfig);
 
