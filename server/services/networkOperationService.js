@@ -54,6 +54,20 @@ async function applyPppoeAssignment(assignment) {
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', username, verified: result.verified };
 }
 
+async function applyPppoeFup(assignment, operation) {
+  if (assignment.authenticationMode === 'radius') throw new Error('RADIUS PPPoE FUP requires CoA/profile integration');
+  const username = String(assignment.username || '').trim(); if (!username) throw new Error('PPPoE assignment has no username');
+  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
+  const rows = await sendCommand('/ppp/secret/print', [word('name', username)], context); const secret = Array.isArray(rows) ? rows[0] : null;
+  if (!secret?.['.id']) throw new Error('PPPoE user was not found on the selected router');
+  const rate = operation.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation.desiredState?.restoreRate;
+  if (!rate) throw new Error('No PPPoE restore rate is configured');
+  await sendCommand('/ppp/secret/set', [word('numbers', secret['.id']), word('rate-limit', rate)], context);
+  const verifyRows = await sendCommand('/ppp/secret/print', [word('name', username)], context); const verified = Array.isArray(verifyRows) ? verifyRows[0] : null;
+  if (!verified?.['.id'] || String(verified['rate-limit'] || '') !== rate) throw new Error('Router did not confirm PPPoE rate limit');
+  return { state: operation.operationType === 'fup.apply' ? 'throttled' : 'present', username, rateLimit: rate, verified: true };
+}
+
 async function configureRadiusForAssignment(assignment) {
   if (assignment.authenticationMode !== 'radius') throw new Error('RADIUS operation requires authenticationMode=radius');
   if (!assignment.radiusServerId) throw new Error('RADIUS assignment has no radiusServerId');
@@ -105,6 +119,7 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
       if (!assignment) throw new Error('Network assignment no longer exists');
       let observed;
       if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
+      else if (assignment.accessType === 'pppoe' && ['fup.apply', 'fup.restore'].includes(operation.operationType)) observed = await applyPppoeFup(assignment, operation);
       else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
       else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
       else if (assignment.accessType === 'hotspot') observed = await applyHotspotAssignment(assignment);
@@ -126,4 +141,4 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
-module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyHotspotAssignment, configureRadiusForAssignment };
+module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyPppoeFup, applyHotspotAssignment, configureRadiusForAssignment };
