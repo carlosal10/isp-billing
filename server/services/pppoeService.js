@@ -36,8 +36,10 @@ function createPppoeService(send = (...args) => manager.sendCommand(...args)) {
     async password(context, username, password) {
       const row = await find(context, username);
       await call(context, '/ppp/secret/set', ['=.id=' + row['.id'], '=password=' + password]);
-      const verified = await find(context, username);
-      if (verified.password !== password) throw fail(502, 'The router did not confirm the new password. Check API permissions.');
+      // RouterOS never returns secret passwords from /ppp/secret/print. A
+      // successful re-read confirms that the secret still exists; the new
+      // password is intentionally never echoed or compared locally.
+      await find(context, username);
     },
     async remove(context, username) {
       const row = await find(context, username);
