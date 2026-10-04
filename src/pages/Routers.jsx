@@ -52,6 +52,13 @@ export default function Routers() {
       setHealth(current => ({ ...current, [id]: { connected: false, error: err.response?.data?.error || 'Health check failed' } }));
     } finally { setHealthLoading(current => ({ ...current, [id]: false })); }
   }
+  const sessionSummary = sessions.reduce((summary, row) => {
+    const last = row.lastEventAt ? new Date(row.lastEventAt).getTime() : 0;
+    const stale = !last || Date.now() - last > 15 * 60 * 1000;
+    summary.total += 1; summary.active += row.status === 'active' && !stale ? 1 : 0; summary.stale += stale ? 1 : 0;
+    try { summary.upload += BigInt(row.uploadBytes || 0); summary.download += BigInt(row.downloadBytes || 0); } catch (_) { /* ignore malformed counters */ }
+    return summary;
+  }, { total: 0, active: 0, stale: 0, upload: 0n, download: 0n });
   return <main className="workspace-page network-workspace">
     <header className="workspace-header"><div><span className="eyebrow">NETWORK OPERATIONS</span><h1>Network workspace</h1><p>Manage router connections and inspect subscriber accounting.</p></div>
       {canManage && <button onClick={() => setEditing({})}>Add router</button>}</header>
@@ -74,7 +81,7 @@ export default function Routers() {
     {tab === 'accounting' && <section className="workspace-card"><h2>RADIUS session accounting</h2><p>Latest 100 session snapshots received from your trusted RADIUS integration. Accounting records report usage; they do not authenticate or disconnect subscribers.</p>
       <div className="network-select"><Field label="Accounting router"><select value={selected || ''} onChange={event => setSelected(event.target.value)}><option value="">Select a router</option>{rows.map(row => <option key={idOf(row)} value={idOf(row)}>{row.name}</option>)}</select></Field></div>
       <button className="secondary" onClick={() => setRefresh(value => value + 1)} disabled={!selected || loadingSessions}>Refresh accounting</button>
-      {loadingSessions ? <p role="status">Loading accounting…</p> : sessions.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="RADIUS sessions"><table><thead><tr><th>Subscriber</th><th>State</th><th>Upload bytes</th><th>Download bytes</th><th>Last event</th></tr></thead><tbody>{sessions.map(row => <tr key={row._id}><td>{row.username}<small>{row.framedIp || 'No address reported'}</small></td><td>{row.status}</td><td>{BigInt(row.uploadBytes).toLocaleString()}</td><td>{BigInt(row.downloadBytes).toLocaleString()}</td><td>{new Date(row.lastEventAt).toLocaleString()}</td></tr>)}</tbody></table></div>
+      {loadingSessions ? <p role="status">Loading accounting…</p> : sessions.length ? <><div className="network-metrics" aria-label="Accounting summary"><article><strong>{sessionSummary.active}</strong><small>Active sessions</small></article><article><strong>{sessionSummary.stale}</strong><small>Stale snapshots</small></article><article><strong>{sessionSummary.upload.toLocaleString()}</strong><small>Reported upload bytes</small></article><article><strong>{sessionSummary.download.toLocaleString()}</strong><small>Reported download bytes</small></article></div><div className="table-scroll" tabIndex={0} role="region" aria-label="RADIUS sessions"><table><thead><tr><th>Subscriber</th><th>State</th><th>Upload bytes</th><th>Download bytes</th><th>Last event</th></tr></thead><tbody>{sessions.map(row => { const stale = !row.lastEventAt || Date.now() - new Date(row.lastEventAt).getTime() > 15 * 60 * 1000; return <tr key={row._id}><td>{row.username}<small>{row.framedIp || 'No address reported'}</small></td><td><strong className={stale ? 'network-health-bad' : 'network-health-ok'}>{stale ? 'Stale' : row.status}</strong></td><td>{BigInt(row.uploadBytes || 0).toLocaleString()}</td><td>{BigInt(row.downloadBytes || 0).toLocaleString()}</td><td>{row.lastEventAt ? new Date(row.lastEventAt).toLocaleString() : 'No event time'}</td></tr>; })}</tbody></table></div></>
         : <p className="empty-state">No accounting snapshots received for this router. Connect your RADIUS exporter using an API key with the accounting scope.</p>}
       <p className="network-note">An active session becomes stale after 15 minutes without a newer event. Stale is not proof of disconnection. Records are retained for 90 days.</p>
     </section>}

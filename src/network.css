@@ -17,6 +17,10 @@
 .network-health-ok, .network-health-bad { font-size: 13px; }
 .network-health-ok { color: #15803d; }
 .network-health-bad { color: #b91c1c; }
+.network-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.network-metrics article { border: 1px solid #dce4ed; border-radius: 10px; padding: 13px 14px; background: #f8fafc; }
+.network-metrics strong { display: block; color: #0f172a; font-size: 19px; line-height: 1.2; }
+.network-metrics small { display: block; margin-top: 5px; color: #64748b; font-size: 12px; }
 .network-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .network-guide article { border: 1px solid #dce4ed; background: #f8fafc; border-radius: 12px; padding: 18px; }
 .network-guide h3 { font-size: 15px; margin: 0 0 8px; }
@@ -24,4 +28,4 @@
 .network-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .network-tabs button[aria-pressed=true] { background: #1d4ed8; color: white; border-color: #1d4ed8; }
 .network-select { max-width: 360px; margin-bottom: 18px; }
-@media (max-width: 700px) { .network-form-grid, .network-guide { grid-template-columns: minmax(0, 1fr); } .network-workspace .workspace-header { flex-direction: column; gap: 14px; } }
+@media (max-width: 700px) { .network-form-grid, .network-guide, .network-metrics { grid-template-columns: minmax(0, 1fr); } .network-workspace .workspace-header { flex-direction: column; gap: 14px; } }
