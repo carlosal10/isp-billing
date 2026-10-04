@@ -15,6 +15,8 @@ const networkOperationSchema = new mongoose.Schema({
   observedState: { type: mongoose.Schema.Types.Mixed, default: {} },
   lastError: { type: String, trim: true, default: null },
   nextAttemptAt: { type: Date, default: Date.now, index: true },
+  leaseUntil: { type: Date, default: null },
+  leaseToken: { type: String, default: null, select: false },
   completedAt: { type: Date, default: null },
   actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true, versionKey: false });
