@@ -13,7 +13,7 @@ export default function Routers() {
   const { role } = useAuth(), { servers, reload, selected, setSelected } = useServer();
   const [tab, setTab] = useState('routers'), [editing, setEditing] = useState(null), [removing, setRemoving] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
-  const [sessions, setSessions] = useState([]), [loadingSessions, setLoadingSessions] = useState(false), [operations, setOperations] = useState([]), [loadingOperations, setLoadingOperations] = useState(false), [refresh, setRefresh] = useState(0);
+  const [sessions, setSessions] = useState([]), [loadingSessions, setLoadingSessions] = useState(false), [operations, setOperations] = useState([]), [loadingOperations, setLoadingOperations] = useState(false), [health, setHealth] = useState({}), [healthLoading, setHealthLoading] = useState({}), [refresh, setRefresh] = useState(0);
   const canManage = ['owner', 'admin'].includes(role);
   const rows = Array.isArray(servers) ? servers : [];
   useEffect(() => {
@@ -42,6 +42,16 @@ export default function Routers() {
     catch (err) { setError(err.response?.data?.error || 'The operation could not be completed.'); }
     finally { setBusy(false); }
   }
+  async function checkHealth(row) {
+    const id = idOf(row);
+    setHealthLoading(current => ({ ...current, [id]: true })); setError('');
+    try {
+      const { data } = await api.get('/mikrotik/status', { params: { serverId: id }, timeout: 20000 });
+      setHealth(current => ({ ...current, [id]: data }));
+    } catch (err) {
+      setHealth(current => ({ ...current, [id]: { connected: false, error: err.response?.data?.error || 'Health check failed' } }));
+    } finally { setHealthLoading(current => ({ ...current, [id]: false })); }
+  }
   return <main className="workspace-page network-workspace">
     <header className="workspace-header"><div><span className="eyebrow">NETWORK OPERATIONS</span><h1>Network workspace</h1><p>Manage router connections and inspect subscriber accounting.</p></div>
       {canManage && <button onClick={() => setEditing({})}>Add router</button>}</header>
@@ -54,8 +64,9 @@ export default function Routers() {
       {rows.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="Router inventory"><table><thead><tr><th>Router</th><th>Management address</th><th>Last verified</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={idOf(row)}>
         <td><strong>{row.name}</strong><small>{row.site || 'No site assigned'}{row.primary ? ' · Default' : ''}</small></td>
         <td>{row.host}:{row.port}<small>{row.tls ? 'TLS verified on connect' : 'Private network API'}</small></td>
-        <td>{row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toLocaleString() : 'Not verified'}</td>
+        <td>{(() => { const status = health[idOf(row)]; return status ? <><strong className={status.connected ? 'network-health-ok' : 'network-health-bad'}>{status.connected ? 'Connected' : 'Unavailable'}</strong><small>{status.connected ? [status.identity, status.uptime].filter(Boolean).join(' · ') || 'Router responded' : status.error || 'No response'}</small></> : <small>Not checked in this session</small>; })()}</td>
         <td><div className="network-actions"><button className="secondary" disabled={busy} onClick={() => action(() => api.post('/mikrotik/servers/' + idOf(row) + '/test', {}, { timeout: 20000 }), response => 'Connection verified: ' + response.data.identity)}>Test {row.name}</button>
+          <button className="secondary" disabled={healthLoading[idOf(row)]} onClick={() => checkHealth(row)}>{healthLoading[idOf(row)] ? 'Checking…' : 'Health'}</button>
           {canManage && <><button className="secondary" onClick={() => setEditing(row)}>Edit {row.name}</button><button className="secondary" onClick={() => setRemoving(row)}>Remove {row.name}</button></>}</div></td>
       </tr>)}</tbody></table></div> : <div className="empty-state"><h3>Connect your first router</h3><p>Use its LAN or tunnel address if the billing server has a private route to it.</p><button className="secondary" onClick={() => setTab('guide')}>View connection guide</button></div>}
       <div className="form-actions"><Link to="/pppoe">Manage local PPPoE users →</Link></div>

@@ -14,6 +14,9 @@
 .network-workspace .table-scroll { overflow-x: auto; }
 .network-workspace td { vertical-align: middle; }
 .network-workspace td small { display: block; margin-top: 4px; color: #475569; }
+.network-health-ok, .network-health-bad { font-size: 13px; }
+.network-health-ok { color: #15803d; }
+.network-health-bad { color: #b91c1c; }
 .network-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .network-guide article { border: 1px solid #dce4ed; background: #f8fafc; border-radius: 12px; padding: 18px; }
 .network-guide h3 { font-size: 15px; margin: 0 0 8px; }
