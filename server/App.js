@@ -153,6 +153,7 @@ const opsHealthRoutes = require("./routes/opsHealth");
 const serviceOperationsRoutes = require("./routes/serviceOperations");
 const supportOperationsRoutes = require("./routes/supportOperations");
 const usageLogsRoutes = require("./routes/usageLogs");
+const networkAssignmentsRoutes = require("./routes/networkAssignments");
 const statsRoutes = require("./routes/Stats");
 
 // Auth (HYBRID SPLIT)
@@ -307,6 +308,7 @@ app.use("/api/ops-health", authenticate, attachTenant, opsHealthRoutes);
 app.use("/api/service-ops", authenticate, attachTenant, serviceOperationsRoutes);
 app.use("/api/support", authenticate, attachTenant, supportOperationsRoutes);
 app.use("/api/usageLogs", authenticate, attachTenant, usageLogsRoutes);
+app.use("/api/network/assignments", authenticate, attachTenant, networkAssignmentsRoutes);
 app.use("/api/stats", authenticate, attachTenant, statsRoutes);
 app.use("/api/tenant", authenticate, attachTenant, tenantRoutes);
 app.use("/api/account", authenticate, attachTenant, accountRoutes);

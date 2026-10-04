@@ -53,7 +53,7 @@ exports.connectHotspotUser = async (req, res) => {
       server: plan.mikrotikServer,
       profile: plan.mikrotikProfile,
       username,
-      password,
+      passwordEncrypted: password,
       macAddress: mac,
       comment: `Hotspot ${phone}`,
     });

@@ -1,5 +1,6 @@
 // models/HotspotAccess.js
 const mongoose = require('mongoose');
+const { encryptField } = require('../security/fieldEncryption');
 
 const hotspotAccessSchema = new mongoose.Schema(
   {
@@ -10,7 +11,8 @@ const hotspotAccessSchema = new mongoose.Schema(
     macAddress: String,
     planId: { type: mongoose.Schema.Types.ObjectId, ref: 'HotspotPlan' },
     username: String,
-    password: String,
+    // Credentials are returned once at activation time, but never stored in plaintext.
+    passwordEncrypted: { type: String, set: encryptField, select: false },
     expiresAt: Date,
   },
   { timestamps: true }
