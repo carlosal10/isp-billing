@@ -1576,18 +1576,6 @@ paths:
         '403': { description: Insufficient role or scope }
         '404': { description: Tenant resource not found }
         '409': { description: Conflict or stale generation }
-  /network/assignments/operations:
-    get:
-      summary: Durable tenant network operations
-      security:
-        - bearerAuth: []
-      responses:
-        '200': { description: Success }
-        '201': { description: Created }
-        '400': { description: Invalid policy or fields }
-        '403': { description: Insufficient role or scope }
-        '404': { description: Tenant resource not found }
-        '409': { description: Conflict or stale generation }
   /network/radius-servers:
     get:
       summary: Encrypted RADIUS configuration; shared secrets are never returned
@@ -1874,6 +1862,27 @@ paths:
         '403': { description: Insufficient role or scope }
         '404': { description: Tenant resource not found }
         '409': { description: Conflict or stale generation }
+  /network/assignments/operations:
+    get:
+      summary: List network operations for the tenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+  /network/assignments/operations/{id}/retry:
+    post:
+      summary: Retry a failed or dead-letter network operation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Operation queued }
+        '403': { description: Insufficient role }
+        '404': { description: Retryable operation not found }
 components:
   securitySchemes:
     bearerAuth:

@@ -89,4 +89,15 @@ router.get('/operations', requireRole('owner', 'admin'), async (req, res) => {
   res.json({ ok: true, items });
 });
 
+router.post('/operations/:id/retry', requireRole('owner', 'admin'), async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ ok: false, error: 'Invalid operation id' });
+  const operation = await NetworkOperation.findOneAndUpdate(
+    tenantFilter(req, { _id: req.params.id, status: { $in: ['failed', 'dead-letter'] } }),
+    { $set: { status: 'pending', attempts: 0, nextAttemptAt: new Date(), lastError: null }, $unset: { leaseUntil: 1, leaseToken: 1 } },
+    { new: true }
+  );
+  if (!operation) return res.status(404).json({ ok: false, error: 'Retryable operation not found' });
+  res.json({ ok: true, operation });
+});
+
 module.exports = router;
