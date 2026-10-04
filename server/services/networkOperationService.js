@@ -107,6 +107,19 @@ async function applyHotspotAssignment(assignment) {
   return { state: enabled ? 'present' : 'suspended', username, verified: true };
 }
 
+async function applyHotspotFup(assignment, operation) {
+  const username = String(assignment.username || '').trim(); if (!username) throw new Error('Hotspot assignment has no username');
+  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
+  const rows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context); const user = Array.isArray(rows) ? rows[0] : null;
+  if (!user?.['.id']) throw new Error('Hotspot user was not found on the selected router');
+  const rate = operation.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation.desiredState?.restoreRate;
+  if (!rate) throw new Error('No hotspot restore rate is configured');
+  await sendCommand('/ip/hotspot/user/set', [word('numbers', user['.id']), word('rate-limit', rate)], context);
+  const verifyRows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context); const verified = Array.isArray(verifyRows) ? verifyRows[0] : null;
+  if (!verified?.['.id'] || String(verified['rate-limit'] || '') !== rate) throw new Error('Router did not confirm hotspot rate limit');
+  return { state: operation.operationType === 'fup.apply' ? 'throttled' : 'present', username, rateLimit: rate, verified: true };
+}
+
 async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   const summary = { completed: 0, retried: 0, failed: 0, unsupported: 0 };
   for (let index = 0; index < Math.min(limit, 100); index += 1) {
@@ -122,6 +135,7 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
       else if (assignment.accessType === 'pppoe' && ['fup.apply', 'fup.restore'].includes(operation.operationType)) observed = await applyPppoeFup(assignment, operation);
       else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
       else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
+      else if (assignment.accessType === 'hotspot' && ['fup.apply', 'fup.restore'].includes(operation.operationType)) observed = await applyHotspotFup(assignment, operation);
       else if (assignment.accessType === 'hotspot') observed = await applyHotspotAssignment(assignment);
       else {
         await NetworkOperation.updateOne(claim, { $set: { status: 'failed', lastError: `${assignment.accessType} provisioning adapter is not enabled yet` }, $unset: { leaseUntil: 1, leaseToken: 1 } });
@@ -141,4 +155,4 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
-module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyPppoeFup, applyHotspotAssignment, configureRadiusForAssignment };
+module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyPppoeFup, applyHotspotAssignment, applyHotspotFup, configureRadiusForAssignment };
