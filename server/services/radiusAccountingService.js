@@ -3,6 +3,8 @@ const { z } = require('zod');
 const { isIP } = require('node:net');
 const Router = require('../models/MikrotikConnection');
 const Session = require('../models/RadiusSession');
+const UsageCounter = require('../models/UsageCounter');
+const NetworkAssignment = require('../models/NetworkAssignment');
 const { financialTransaction } = require('./financialTransaction');
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 const counter = z.string().regex(/^\d{1,20}$/).refine(v => BigInt(v) <= 18446744073709551615n);
@@ -29,6 +31,8 @@ async function ingestAccounting(tenantId, input, sourceKeyId) {
   const apply = () => financialTransaction(async () => {
     let session = await Session.findOne(query);
     if (session && session.username !== row.username) throw fail(409, 'Session key is already assigned to another username.');
+    const previousUpload = session?.uploadBytes || '0';
+    const previousDownload = session?.downloadBytes || '0';
     if (!session) session = new Session({ ...query, username: row.username, status: 'active',
       startedAt: new Date(row.occurredAt.getTime() - row.sessionSeconds * 1000) });
     // Cumulative counters are max-merged, never summed. Duplicates and delayed
@@ -49,6 +53,21 @@ async function ingestAccounting(tenantId, input, sourceKeyId) {
     session.sourceKeyId = sourceKeyId;
     session.expiresAt = new Date(session.lastEventAt.getTime() + 90 * 86400000);
     await session.save();
+    const assignment = await NetworkAssignment.findOne({ tenantId, routerId: row.routerId, username: row.username, status: { $ne: 'released' } }).select('_id customerId accessType').lean();
+    const bucketStart = new Date(Date.UTC(row.occurredAt.getUTCFullYear(), row.occurredAt.getUTCMonth(), row.occurredAt.getUTCDate()));
+    const delta = (current, previous) => BigInt(current) >= BigInt(previous) ? (BigInt(current) - BigInt(previous)).toString() : '0';
+    const usageFilter = { tenantId, routerId: row.routerId, sessionKey: row.sessionKey, bucketStart };
+    const usage = await UsageCounter.findOne(usageFilter);
+    const add = (current, previous, existing) => (BigInt(existing || '0') + BigInt(delta(current, previous))).toString();
+    if (usage) {
+      usage.inputBytes = add(row.uploadBytes, previousUpload, usage.inputBytes);
+      usage.outputBytes = add(row.downloadBytes, previousDownload, usage.outputBytes);
+      usage.customerId = assignment?.customerId || null; usage.assignmentId = assignment?._id || null;
+      usage.counterResetDetected = usage.counterResetDetected || BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload);
+      usage.lastEventAt = row.occurredAt; await usage.save();
+    } else {
+      await UsageCounter.create({ ...usageFilter, customerId: assignment?.customerId || null, assignmentId: assignment?._id || null, serviceType: assignment?.accessType || 'pppoe', source: 'radius', lastEventAt: row.occurredAt, inputBytes: delta(row.uploadBytes, previousUpload), outputBytes: delta(row.downloadBytes, previousDownload), counterResetDetected: BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload) });
+    }
     return { id: String(session._id), status: session.status };
   });
   try { return await apply(); } catch (error) { if (error.code === 11000) return apply(); throw error; }
