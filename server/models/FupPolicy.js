@@ -5,6 +5,7 @@ const schema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   includedBytes: { type: String, required: true, match: /^\d+$/ },
   period: { type: String, enum: ['monthly', 'rolling-30d'], default: 'monthly' },
+  measurement: { type: String, enum: ['combined', 'upload', 'download'], default: 'combined' },
   warningPercent: { type: Number, default: 80, min: 1, max: 100 },
   throttlePercent: { type: Number, default: 100, min: 1, max: 1000 },
   throttleDownload: { type: String, default: '2M' },

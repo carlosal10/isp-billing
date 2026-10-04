@@ -21,14 +21,14 @@ async function applyStaticAssignment(assignment, operation) {
   const context = { tenantId, serverId, timeoutMs: 10000 };
   const fupRate = operation?.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation?.operationType === 'fup.restore' ? operation.desiredState?.restoreRate : null;
   if (assignment.desiredState === 'absent' || assignment.status === 'released') {
-    const rows = await sendCommand('/queue/simple/print', [word('name', name)], context);
+    const rows = await sendCommand('/queue/simple/print', ['?name=' + name], context);
     for (const row of Array.isArray(rows) ? rows : []) {
       const id = row['.id'] || row.id || row.numbers;
       if (id) await sendCommand('/queue/simple/remove', [word('numbers', id)], context);
     }
     return { state: 'absent' };
   }
-  const rows = await sendCommand('/queue/simple/print', [word('name', name)], context);
+  const rows = await sendCommand('/queue/simple/print', ['?name=' + name], context);
   const existing = Array.isArray(rows) ? rows[0] : null;
   if (existing) {
     const id = existing['.id'] || existing.id || existing.numbers;
@@ -36,7 +36,7 @@ async function applyStaticAssignment(assignment, operation) {
   } else {
     const words = [word('name', name), word('target', target), word('comment', `Billing assignment ${assignment._id}`)]; if (fupRate) words.push(word('max-limit', fupRate)); await sendCommand('/queue/simple/add', words, context);
   }
-  const verify = await sendCommand('/queue/simple/print', [word('name', name)], context);
+  const verify = await sendCommand('/queue/simple/print', ['?name=' + name], context);
   if (!Array.isArray(verify) || !verify.length) throw new Error('Router did not confirm static queue');
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', queueName: name, target };
 }
@@ -50,22 +50,8 @@ async function applyPppoeAssignment(assignment) {
     await service.remove(context, username);
     return { state: 'absent', username };
   }
-  const result = await service.setEnabled(context, [username], assignment.desiredState !== 'suspended');
+  const result = await service.setEnabled(context, [username], assignment.desiredState !== 'suspended' && assignment.fup?.desired !== 'blocked');
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', username, verified: result.verified };
-}
-
-async function applyPppoeFup(assignment, operation) {
-  if (assignment.authenticationMode === 'radius') throw new Error('RADIUS PPPoE FUP requires CoA/profile integration');
-  const username = String(assignment.username || '').trim(); if (!username) throw new Error('PPPoE assignment has no username');
-  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
-  const rows = await sendCommand('/ppp/secret/print', [word('name', username)], context); const secret = Array.isArray(rows) ? rows[0] : null;
-  if (!secret?.['.id']) throw new Error('PPPoE user was not found on the selected router');
-  const rate = operation.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation.desiredState?.restoreRate;
-  if (!rate) throw new Error('No PPPoE restore rate is configured');
-  await sendCommand('/ppp/secret/set', [word('numbers', secret['.id']), word('rate-limit', rate)], context);
-  const verifyRows = await sendCommand('/ppp/secret/print', [word('name', username)], context); const verified = Array.isArray(verifyRows) ? verifyRows[0] : null;
-  if (!verified?.['.id'] || String(verified['rate-limit'] || '') !== rate) throw new Error('Router did not confirm PPPoE rate limit');
-  return { state: operation.operationType === 'fup.apply' ? 'throttled' : 'present', username, rateLimit: rate, verified: true };
 }
 
 async function configureRadiusForAssignment(assignment) {
@@ -80,13 +66,13 @@ async function configureRadiusForAssignment(assignment) {
   const values = [word('address', radius.host), word('secret', secret), word('service', 'ppp,hotspot'), word('authentication-port', radius.authenticationPort), word('accounting-port', radius.accountingPort), word('timeout', `${Math.ceil(radius.timeoutMs / 1000)}s`), word('comment', `Billing RADIUS ${radius.name}`)];
   if (existing && (existing['.id'] || existing.id)) await sendCommand('/radius/set', [word('numbers', existing['.id'] || existing.id), ...values], context);
   else await sendCommand('/radius/add', values, context);
-  const verified = await sendCommand('/radius/print', [word('address', radius.host)], context);
+  const verified = await sendCommand('/radius/print', ['?address=' + radius.host], context);
   if (!Array.isArray(verified) || !verified.length) throw new Error('Router did not confirm RADIUS configuration');
   if (assignment.pppProfile) {
-    const profiles = await sendCommand('/ppp/profile/print', [word('name', assignment.pppProfile)], context);
+    const profiles = await sendCommand('/ppp/profile/print', ['?name=' + assignment.pppProfile], context);
     const profile = Array.isArray(profiles) ? profiles[0] : null;
     if (!profile?.['.id']) throw new Error('PPP profile for RADIUS assignment was not found');
-    await sendCommand('/ppp/profile/set', [word('numbers', profile['.id']), word('use-radius', 'yes'), word('accounting', 'yes'), word('interim-update', `${radius.interimAccountingInterval}s`)], context);
+    await sendCommand('/ppp/aaa/set', [word('use-radius', 'yes'), word('accounting', 'yes'), word('interim-update', `${radius.interimAccountingInterval}s`)], context);
   }
   return { state: 'present', radiusServerId: String(radius._id), verified: true };
 }
@@ -95,36 +81,23 @@ async function applyHotspotAssignment(assignment) {
   const username = String(assignment.username || '').trim();
   if (!username) throw new Error('Hotspot assignment has no username');
   const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
-  const rows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context);
+  const rows = await sendCommand('/ip/hotspot/user/print', ['?name=' + username], context);
   const user = Array.isArray(rows) ? rows[0] : null;
   if (!user?.['.id']) throw new Error('Hotspot user was not found on the selected router');
-  const enabled = assignment.desiredState !== 'suspended' && assignment.desiredState !== 'absent' && assignment.status !== 'released';
+  const enabled = assignment.fup?.desired !== 'blocked' && assignment.desiredState !== 'suspended' && assignment.desiredState !== 'absent' && assignment.status !== 'released';
   await sendCommand('/ip/hotspot/user/set', [word('numbers', user['.id']), word('disabled', enabled ? 'no' : 'yes')], context);
-  const verifiedRows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context);
+  const verifiedRows = await sendCommand('/ip/hotspot/user/print', ['?name=' + username], context);
   const verified = Array.isArray(verifiedRows) ? verifiedRows[0] : null;
   const disabled = String(verified?.disabled || 'no').toLowerCase();
   if (!verified?.['.id'] || (enabled && ['yes', 'true'].includes(disabled)) || (!enabled && !['yes', 'true'].includes(disabled))) throw new Error('Router did not confirm hotspot access state');
   return { state: enabled ? 'present' : 'suspended', username, verified: true };
 }
 
-async function applyHotspotFup(assignment, operation) {
-  const username = String(assignment.username || '').trim(); if (!username) throw new Error('Hotspot assignment has no username');
-  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
-  const rows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context); const user = Array.isArray(rows) ? rows[0] : null;
-  if (!user?.['.id']) throw new Error('Hotspot user was not found on the selected router');
-  const rate = operation.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation.desiredState?.restoreRate;
-  if (!rate) throw new Error('No hotspot restore rate is configured');
-  await sendCommand('/ip/hotspot/user/set', [word('numbers', user['.id']), word('rate-limit', rate)], context);
-  const verifyRows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context); const verified = Array.isArray(verifyRows) ? verifyRows[0] : null;
-  if (!verified?.['.id'] || String(verified['rate-limit'] || '') !== rate) throw new Error('Router did not confirm hotspot rate limit');
-  return { state: operation.operationType === 'fup.apply' ? 'throttled' : 'present', username, rateLimit: rate, verified: true };
-}
-
 async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   const summary = { completed: 0, retried: 0, failed: 0, unsupported: 0 };
   for (let index = 0; index < Math.min(limit, 100); index += 1) {
     const leaseToken = crypto.randomUUID();
-    const operation = await NetworkOperation.findOneAndUpdate({ status: { $in: ['pending', 'processing'] }, nextAttemptAt: { $lte: now }, $or: [{ leaseUntil: null }, { leaseUntil: { $lte: now } }] }, { $set: { status: 'processing', leaseToken, leaseUntil: new Date(now.getTime() + 120000) }, $inc: { attempts: 1 } }, { sort: { nextAttemptAt: 1 }, new: true }).lean();
+    const operation = await NetworkOperation.findOneAndUpdate({ operationType: { $nin: ['fup.apply', 'fup.restore'] }, status: { $in: ['pending', 'processing'] }, nextAttemptAt: { $lte: now }, $or: [{ leaseUntil: null }, { leaseUntil: { $lte: now } }] }, { $set: { status: 'processing', leaseToken, leaseUntil: new Date(now.getTime() + 120000) }, $inc: { attempts: 1 } }, { sort: { nextAttemptAt: 1 }, new: true }).lean();
     if (!operation) break;
     const claim = { _id: operation._id, leaseToken };
     try {
@@ -132,10 +105,8 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
       if (!assignment) throw new Error('Network assignment no longer exists');
       let observed;
       if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
-      else if (assignment.accessType === 'pppoe' && ['fup.apply', 'fup.restore'].includes(operation.operationType)) observed = await applyPppoeFup(assignment, operation);
       else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
       else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
-      else if (assignment.accessType === 'hotspot' && ['fup.apply', 'fup.restore'].includes(operation.operationType)) observed = await applyHotspotFup(assignment, operation);
       else if (assignment.accessType === 'hotspot') observed = await applyHotspotAssignment(assignment);
       else {
         await NetworkOperation.updateOne(claim, { $set: { status: 'failed', lastError: `${assignment.accessType} provisioning adapter is not enabled yet` }, $unset: { leaseUntil: 1, leaseToken: 1 } });
@@ -155,4 +126,6 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
+const applyPppoeFup = (a, op) => require('./fupEnforcementService').createFupEnforcer()(a, op);
+const applyHotspotFup = applyPppoeFup;
 module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyPppoeFup, applyHotspotAssignment, applyHotspotFup, configureRadiusForAssignment };

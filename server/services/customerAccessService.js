@@ -19,6 +19,8 @@ async function resolvePlan(customer) {
 }
 
 async function restoreCustomerAccess({ customer, plan, debugId }) {
+  const blocked = await require('../models/NetworkAssignment').exists({ tenantId: customer.tenantId, customerId: customer._id, status: { $ne: 'released' }, 'fup.desired': 'blocked' });
+  if (blocked) { await suspendCustomerAccess({ customer, debugId }); return; }
   const tenantId = String(customer?.tenantId || '');
   const context = {
     tenantId,

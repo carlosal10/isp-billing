@@ -6,6 +6,7 @@ const AuditLog = require('../models/AuditLog');
 const { hashKey } = require('../middleware/apiKey');
 
 const API_KEY_SCOPES = [
+  { key: 'network:fup', label: 'RADIUS FUP policy integration', description: 'Read subscriber authorization overlays and acknowledge enforcement by RADIUS.' },
   { key: 'customers:read', label: 'Read Customers', description: 'Read customer profiles, account numbers, and service metadata.' },
   { key: 'customers:write', label: 'Write Customers', description: 'Create or update customer records.' },
   { key: 'invoices:read', label: 'Read Invoices', description: 'Read invoice status, balances, and billing metadata.' },

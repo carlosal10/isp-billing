@@ -42,6 +42,16 @@ function handleRouteError(res, err, fallbackMessage) {
 
 router.use(apiKeyAuth);
 
+router.get('/v1/network/fup-policy', requireApiKeyScope('network:fup'), async (req, res) => {
+  try { res.json(await require('../services/radiusFupService').radiusPolicy(req.tenantId, req.query.routerId, req.query.username)); }
+  catch (error) { res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Policy lookup failed' }); }
+});
+router.post('/v1/network/fup-policy/acknowledge', requireApiKeyScope('network:fup'), async (req, res) => {
+  if (req.body.authorizationVerified !== true) return res.status(400).json({ error: 'Confirm the policy is enforced by RADIUS authorization' });
+  try { res.json(await require('../services/radiusFupService').acknowledgeRadiusPolicy(req.tenantId, req.body.assignmentId, req.body.generation)); }
+  catch (error) { res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Policy acknowledgment failed' }); }
+});
+
 const accountingLimiter = require('express-rate-limit')({ windowMs: 60000, limit: 600, keyGenerator: req => String(req.apiKey._id), standardHeaders: true, legacyHeaders: false });
 router.post('/v1/network/accounting', requireApiKeyScope('network:accounting'), accountingLimiter, async (req, res) => {
   try {

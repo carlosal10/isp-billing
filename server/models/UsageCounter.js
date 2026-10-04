@@ -12,6 +12,7 @@ const schema = new mongoose.Schema({
   outputBytes: { type: String, default: '0' },
   source: { type: String, enum: ['radius', 'router-poll', 'queue'], required: true },
   counterResetDetected: { type: Boolean, default: false },
+  eventsInitialized: { type: Boolean, default: false },
   lastEventAt: Date,
 }, { timestamps: true, versionKey: false });
 schema.index({ tenantId: 1, routerId: 1, sessionKey: 1, bucketStart: 1 }, { unique: true });

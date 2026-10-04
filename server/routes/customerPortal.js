@@ -22,6 +22,9 @@ router.use(requirePortalAuth);
 router.get('/overview', async (req, res) => {
   try {
     const overview = await getPortalOverview(req.tenantId, req.portalCustomerId);
+    const assignments = await require('../models/NetworkAssignment').find({ tenantId: req.tenantId, customerId: req.portalCustomerId, fupPolicyId: { $ne: null }, status: { $ne: 'released' } }).select('_id fup').lean();
+    const states = await require('../models/FupState').find({ tenantId: req.tenantId, customerId: req.portalCustomerId, assignmentId: { $in: assignments.map(a => a._id) } }).sort({ lastEvaluatedAt: -1 }).limit(100).lean();
+    overview.fairUsage = assignments.map(a => { const state = states.find(s => String(s.assignmentId) === String(a._id)); return { id: String(a._id), state: state?.state || 'normal', confirmed: a.fup?.applied || 'normal', consumedBytes: state?.consumedBytes || '0', periodEnd: state?.periodEnd || null, lastEvaluatedAt: state?.lastEvaluatedAt || null }; });
     overview.tenant = {
       ...(overview.tenant || {}),
       name: req.user?.tenantName || overview.tenant?.name || null,

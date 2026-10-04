@@ -6,5 +6,5 @@ scheduleJob({
   name: 'network-operations',
   cronExpr: process.env.NETWORK_OPERATIONS_CRON || '* * * * *',
   noOverlap: true,
-  task: async () => processNetworkOperations({ limit: Number(process.env.NETWORK_OPERATIONS_BATCH || 20) }),
+  task: async () => ({ assignments: await processNetworkOperations({ limit: Number(process.env.NETWORK_OPERATIONS_BATCH || 20) }), fup: await require('../services/fupOperationService').processFupOperations() }),
 });

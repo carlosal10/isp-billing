@@ -1512,6 +1512,368 @@ paths:
       summary: Public STK paylink starter
       responses:
         '200': { description: OK }
+  /network/assignments:
+    get:
+      summary: Tenant network assignments
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+    post:
+      summary: Tenant network assignments
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/assignments/{id}:
+    patch:
+      summary: Update or release an assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+    delete:
+      summary: Update or release an assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/assignments/operations:
+    get:
+      summary: Durable tenant network operations
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/radius-servers:
+    get:
+      summary: Encrypted RADIUS configuration; shared secrets are never returned
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+    post:
+      summary: Encrypted RADIUS configuration; shared secrets are never returned
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/radius-servers/{id}:
+    patch:
+      summary: Update RADIUS configuration; fupIntegration is disabled or rest
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+    delete:
+      summary: Update RADIUS configuration; fupIntegration is disabled or rest
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/usage/customer/{customerId}:
+    get:
+      summary: Customer usage history with decimal-string byte totals
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: customerId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/usage/daily:
+    get:
+      summary: Daily usage totals
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies:
+    get:
+      summary: Fair usage policies; writes require owner or admin
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+    post:
+      summary: Fair usage policies; writes require owner or admin
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/status:
+    get:
+      summary: Requested and confirmed enforcement; paginate 100 assignments with after
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/{id}:
+    patch:
+      summary: Validate and update a policy; disabling queues restoration
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/assignments/{id}:
+    put:
+      summary: Attach policyId or null to remove; evaluates immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/assignments/{id}/evaluate:
+    post:
+      summary: Evaluate current usage
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/assignments/{id}/override:
+    post:
+      summary: Temporary exemption; send until and reason; null until clears it
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/assignments/{id}/retry:
+    post:
+      summary: Retry the current failed FUP generation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /network/fup-policies/notices/{id}/acknowledge:
+    post:
+      summary: Acknowledge a tenant usage notice
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /integration/v1/network/fup-policy:
+    get:
+      summary: RADIUS overlay; network:fup scope; requires routerId and username
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
+  /integration/v1/network/fup-policy/acknowledge:
+    post:
+      summary: Verify RADIUS enforcement; assignmentId, generation and authorizationVerified true
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Success }
+        '201': { description: Created }
+        '400': { description: Invalid policy or fields }
+        '403': { description: Insufficient role or scope }
+        '404': { description: Tenant resource not found }
+        '409': { description: Conflict or stale generation }
 components:
   securitySchemes:
     bearerAuth:

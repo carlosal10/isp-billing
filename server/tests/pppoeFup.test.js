@@ -1,3 +1,7 @@
 'use strict';
-const assert = require('node:assert/strict'); const { test } = require('node:test');
-test('PPPoE FUP adapter requires local authentication', async () => { const { applyPppoeFup } = require('../services/networkOperationService'); await assert.rejects(() => applyPppoeFup({ authenticationMode: 'radius' }, { operationType: 'fup.apply' }), /CoA/); });
+const assert=require('node:assert/strict');const {test}=require('node:test');
+const {createFupEnforcer}=require('../services/fupEnforcementService');
+test('PPPoE FUP cannot silently use a local secret for RADIUS',async()=>{
+ const run=createFupEnforcer({loadRadius:async()=>null});
+ await assert.rejects(()=>run({authenticationMode:'radius',accessType:'pppoe',tenantId:'t',routerId:'r'},{desiredState:{fupState:'blocked'}}),/RADIUS FUP/);
+});

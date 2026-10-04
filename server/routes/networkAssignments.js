@@ -7,6 +7,7 @@ const requireRole = require('../middleware/requireRole');
 const NetworkAssignment = require('../models/NetworkAssignment');
 const NetworkOperation = require('../models/NetworkOperation');
 const Customer = require('../models/customers');
+const FupPolicy = require('../models/FupPolicy');
 const MikroTikConnection = require('../models/MikrotikConnection');
 
 function tenantFilter(req, extra = {}) { return { tenantId: req.tenantId, ...extra }; }
@@ -33,6 +34,7 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
   }
   if (!['pppoe', 'static', 'hotspot'].includes(accessType)) return res.status(400).json({ ok: false, error: 'Unsupported accessType' });
   try {
+    if (req.body.fupPolicyId && !await FupPolicy.exists({ _id: req.body.fupPolicyId, tenantId: req.tenantId })) return res.status(404).json({ error: 'FUP policy not found' });
     const [customer, routerRecord] = await Promise.all([
       Customer.findOne({ _id: customerId, tenantId: req.tenantId }).select('_id connectionType').lean(),
       MikroTikConnection.findOne({ _id: routerId, tenant: req.tenantId }).select('_id').lean(),
@@ -42,7 +44,9 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
     if (accessType !== 'hotspot' && customer.connectionType !== accessType) {
       return res.status(409).json({ ok: false, error: `Customer connection type is ${customer.connectionType}; it cannot receive a ${accessType} assignment` });
     }
-    const assignment = await NetworkAssignment.create({ ...req.body, tenantId: req.tenantId, customerId, routerId, accessType });
+    const permitted = ['username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'fupPolicyId', 'authenticationMode', 'radiusServerId', 'pppProfile'];
+    const input = Object.fromEntries(permitted.filter(k => req.body[k] !== undefined).map(k => [k, req.body[k]]));
+    const assignment = await NetworkAssignment.create({ ...input, tenantId: req.tenantId, customerId, routerId, accessType });
     const operation = await NetworkOperation.create({
       tenantId: req.tenantId, routerId, customerId, assignmentId: assignment._id,
       operationType: 'assignment.provision', idempotencyKey: `assignment:${assignment._id}:provision`,
@@ -59,11 +63,13 @@ router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ ok: false, error: 'Invalid assignment id' });
   const allowed = ['status', 'desiredState', 'username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'fupPolicyId', 'metadata', 'authenticationMode', 'radiusServerId', 'pppProfile'];
   const update = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+  if (update.fupPolicyId && !await FupPolicy.exists({ _id: update.fupPolicyId, tenantId: req.tenantId })) return res.status(404).json({ error: 'FUP policy not found' });
   const assignment = await NetworkAssignment.findOneAndUpdate(tenantFilter(req, { _id: req.params.id }), { $set: update }, { new: true, runValidators: true });
   if (!assignment) return res.status(404).json({ ok: false, error: 'Assignment not found' });
   if (Object.keys(update).some((key) => ['status', 'desiredState', 'username', 'ipAddress', 'policyId'].includes(key))) {
     await NetworkOperation.create({ tenantId: req.tenantId, routerId: assignment.routerId, customerId: assignment.customerId, assignmentId: assignment._id, operationType: 'assignment.reconcile', idempotencyKey: `assignment:${assignment._id}:reconcile:${assignment.updatedAt.getTime()}`, desiredState: update, actorId: actorId(req) });
   }
+  if ('fupPolicyId' in update) await require('../services/fupEvaluationService').evaluateFup({ tenantId: req.tenantId, assignmentId: assignment._id });
   res.json({ ok: true, assignment });
 });
 

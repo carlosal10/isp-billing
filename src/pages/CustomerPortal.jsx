@@ -535,6 +535,7 @@ export default function CustomerPortal() {
           ) : null}
         </SectionCard>
 
+        {overview?.fairUsage?.length > 0 && <SectionCard title="Data usage and fair usage" subtitle="Your recorded usage and current speed policy."><div>{overview.fairUsage.map(item => <p key={item.id}><strong>{formatToken(item.state)}</strong> · {BigInt(item.consumedBytes).toLocaleString()} bytes used · Current policy: {formatToken(item.confirmed)}{item.periodEnd && <> · Next window boundary: {formatDateTime(item.periodEnd)}</>}</p>)}</div></SectionCard>}
         <SectionCard title="Invoices" subtitle="Review your recent invoices and outstanding balances.">
           <div className="table-wrapper">
             <table className="data-table">

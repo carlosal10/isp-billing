@@ -27,7 +27,7 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
 
 router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ ok: false, error: 'Invalid RADIUS server id' });
-  const allowed = ['name', 'host', 'authenticationPort', 'accountingPort', 'sharedSecret', 'protocol', 'timeoutMs', 'retries', 'interimAccountingInterval', 'enabled'];
+  const allowed = ['name', 'host', 'authenticationPort', 'accountingPort', 'sharedSecret', 'protocol', 'timeoutMs', 'retries', 'interimAccountingInterval', 'enabled', 'fupIntegration'];
   const update = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
   update.updatedBy = actor(req);
   const item = await RadiusServer.findOneAndUpdate({ _id: req.params.id, tenantId: req.tenantId }, { $set: update }, { new: true, runValidators: true }).select('-sharedSecret');

@@ -2,6 +2,7 @@
 const { z } = require('zod');
 const { isIP } = require('node:net');
 const Router = require('../models/MikrotikConnection');
+const UsageEvent = require('../models/UsageEvent');
 const Session = require('../models/RadiusSession');
 const UsageCounter = require('../models/UsageCounter');
 const NetworkAssignment = require('../models/NetworkAssignment');
@@ -31,8 +32,10 @@ async function ingestAccounting(tenantId, input, sourceKeyId) {
   const apply = () => financialTransaction(async () => {
     let session = await Session.findOne(query);
     if (session && session.username !== row.username) throw fail(409, 'Session key is already assigned to another username.');
+    const previousTime = session?.lastEventAt;
     const previousUpload = session?.uploadBytes || '0';
     const previousDownload = session?.downloadBytes || '0';
+    if (previousTime && row.occurredAt > previousTime && (BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload))) throw fail(409, 'Counter reset requires a new accounting session key');
     if (!session) session = new Session({ ...query, username: row.username, status: 'active',
       startedAt: new Date(row.occurredAt.getTime() - row.sessionSeconds * 1000) });
     // Cumulative counters are max-merged, never summed. Duplicates and delayed
@@ -53,21 +56,27 @@ async function ingestAccounting(tenantId, input, sourceKeyId) {
     session.sourceKeyId = sourceKeyId;
     session.expiresAt = new Date(session.lastEventAt.getTime() + 90 * 86400000);
     await session.save();
-    const assignment = await NetworkAssignment.findOne({ tenantId, routerId: row.routerId, username: row.username, status: { $ne: 'released' } }).select('_id customerId accessType').lean();
+    const assignments = await NetworkAssignment.find({ tenantId, routerId: row.routerId, username: row.username, status: { $ne: 'released' } }).select('_id customerId accessType').limit(2).lean();
+    if (assignments.length > 1) throw fail(409, 'Username has multiple assignments on this router');
+    const assignment = assignments[0];
+    if (assignment) await UsageEvent.updateMany({ tenantId, routerId: row.routerId, sessionKey: row.sessionKey, assignmentId: null }, { $set: { assignmentId: assignment._id, customerId: assignment.customerId } });
     const bucketStart = new Date(Date.UTC(row.occurredAt.getUTCFullYear(), row.occurredAt.getUTCMonth(), row.occurredAt.getUTCDate()));
     const delta = (current, previous) => BigInt(current) >= BigInt(previous) ? (BigInt(current) - BigInt(previous)).toString() : '0';
     const usageFilter = { tenantId, routerId: row.routerId, sessionKey: row.sessionKey, bucketStart };
     const usage = await UsageCounter.findOne(usageFilter);
     const add = (current, previous, existing) => (BigInt(existing || '0') + BigInt(delta(current, previous))).toString();
     if (usage) {
+      await require('./usageEventMigrationService').initializeUsageEvents(usage);
       usage.inputBytes = add(row.uploadBytes, previousUpload, usage.inputBytes);
       usage.outputBytes = add(row.downloadBytes, previousDownload, usage.outputBytes);
       usage.customerId = assignment?.customerId || null; usage.assignmentId = assignment?._id || null;
       usage.counterResetDetected = usage.counterResetDetected || BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload);
       usage.lastEventAt = row.occurredAt; await usage.save();
     } else {
-      await UsageCounter.create({ ...usageFilter, customerId: assignment?.customerId || null, assignmentId: assignment?._id || null, serviceType: assignment?.accessType || 'pppoe', source: 'radius', lastEventAt: row.occurredAt, inputBytes: delta(row.uploadBytes, previousUpload), outputBytes: delta(row.downloadBytes, previousDownload), counterResetDetected: BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload) });
+      await UsageCounter.create({ ...usageFilter, eventsInitialized: true, customerId: assignment?.customerId || null, assignmentId: assignment?._id || null, serviceType: assignment?.accessType || 'pppoe', source: 'radius', lastEventAt: row.occurredAt, inputBytes: delta(row.uploadBytes, previousUpload), outputBytes: delta(row.downloadBytes, previousDownload), counterResetDetected: BigInt(row.uploadBytes) < BigInt(previousUpload) || BigInt(row.downloadBytes) < BigInt(previousDownload) });
     }
+    const uploadDelta = delta(row.uploadBytes, previousUpload), downloadDelta = delta(row.downloadBytes, previousDownload);
+    if (uploadDelta !== '0' || downloadDelta !== '0') await UsageEvent.create({ tenantId, routerId: row.routerId, assignmentId: assignment?._id || null, customerId: assignment?.customerId || null, sessionKey: row.sessionKey, source: 'radius', occurredAt: previousTime && previousTime > row.occurredAt ? previousTime : row.occurredAt, uploadBytes: uploadDelta, downloadBytes: downloadDelta });
     return { id: String(session._id), status: session.status };
   });
   try { return await apply(); } catch (error) { if (error.code === 11000) return apply(); throw error; }

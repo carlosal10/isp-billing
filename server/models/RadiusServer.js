@@ -14,6 +14,7 @@ const schema = new mongoose.Schema({
   retries: { type: Number, default: 2, min: 0, max: 10 },
   interimAccountingInterval: { type: Number, default: 300, min: 60, max: 86400 },
   enabled: { type: Boolean, default: true, index: true },
+  fupIntegration: { type: String, enum: ['disabled', 'rest'], default: 'disabled' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true, versionKey: false });

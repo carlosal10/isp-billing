@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useServer } from '../context/ServerContext';
 import { Modal } from '../components/ui/Modal';
 import { Field } from '../components/ui/Field';
+import FupPanel from '../components/FupPanel';
 import RouterConnectionForm from '../components/RouterConnectionForm';
 import '../network.css';
 const idOf = row => String(row.id || row._id);
@@ -35,9 +36,10 @@ export default function Routers() {
   return <main className="workspace-page network-workspace">
     <header className="workspace-header"><div><span className="eyebrow">NETWORK OPERATIONS</span><h1>Network workspace</h1><p>Manage router connections and inspect subscriber accounting.</p></div>
       {canManage && <button onClick={() => setEditing({})}>Add router</button>}</header>
-    <nav className="network-tabs" aria-label="Network views">{[['routers', 'Routers'], ['accounting', 'RADIUS accounting'], ['guide', 'Connection guide']].map(([key, label]) => <button key={key} className="secondary" aria-pressed={tab === key} onClick={() => { setTab(key); setError(''); setMessage(''); }}>{label}</button>)}</nav>
+    <nav className="network-tabs" aria-label="Network views">{[['routers', 'Routers'], ['accounting', 'RADIUS accounting'], ['fup', 'Fair usage'], ['guide', 'Connection guide']].map(([key, label]) => <button key={key} className="secondary" aria-pressed={tab === key} onClick={() => { setTab(key); setError(''); setMessage(''); }}>{label}</button>)}</nav>
     {error && <div role="alert" className="notice error">{error}</div>}
     {message && <div role="status" className="notice">{message}</div>}
+    {tab === 'fup' && <FupPanel canManage={canManage} />}
     {tab === 'routers' && <section className="workspace-card"><h2>Router inventory</h2><p>A successful test verifies API access from the billing server. A saved address alone does not confirm connectivity.</p>
       {rows.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="Router inventory"><table><thead><tr><th>Router</th><th>Management address</th><th>Last verified</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={idOf(row)}>
         <td><strong>{row.name}</strong><small>{row.site || 'No site assigned'}{row.primary ? ' · Default' : ''}</small></td>

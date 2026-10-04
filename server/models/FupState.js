@@ -9,6 +9,9 @@ const schema = new mongoose.Schema({
   consumedBytes: { type: String, default: '0' },
   state: { type: String, enum: ['normal', 'warned', 'throttled', 'blocked', 'overridden'], default: 'normal', index: true },
   lastEvaluatedAt: Date, appliedAt: Date, restoredAt: Date,
+  generation: Number,
+  enforcement: { type: String, enum: ['pending', 'applied', 'failed'], default: 'pending' },
+  lastError: String,
 }, { timestamps: true, versionKey: false });
 schema.index({ tenantId: 1, assignmentId: 1, periodStart: 1 }, { unique: true });
 module.exports = mongoose.model('FupState', schema);
