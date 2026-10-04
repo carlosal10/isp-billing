@@ -76,6 +76,22 @@ async function configureRadiusForAssignment(assignment) {
   return { state: 'present', radiusServerId: String(radius._id), verified: true };
 }
 
+async function applyHotspotAssignment(assignment) {
+  const username = String(assignment.username || '').trim();
+  if (!username) throw new Error('Hotspot assignment has no username');
+  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
+  const rows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context);
+  const user = Array.isArray(rows) ? rows[0] : null;
+  if (!user?.['.id']) throw new Error('Hotspot user was not found on the selected router');
+  const enabled = assignment.desiredState !== 'suspended' && assignment.desiredState !== 'absent' && assignment.status !== 'released';
+  await sendCommand('/ip/hotspot/user/set', [word('numbers', user['.id']), word('disabled', enabled ? 'no' : 'yes')], context);
+  const verifiedRows = await sendCommand('/ip/hotspot/user/print', [word('name', username)], context);
+  const verified = Array.isArray(verifiedRows) ? verifiedRows[0] : null;
+  const disabled = String(verified?.disabled || 'no').toLowerCase();
+  if (!verified?.['.id'] || (enabled && ['yes', 'true'].includes(disabled)) || (!enabled && !['yes', 'true'].includes(disabled))) throw new Error('Router did not confirm hotspot access state');
+  return { state: enabled ? 'present' : 'suspended', username, verified: true };
+}
+
 async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   const summary = { completed: 0, retried: 0, failed: 0, unsupported: 0 };
   for (let index = 0; index < Math.min(limit, 100); index += 1) {
@@ -90,6 +106,7 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
       if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
       else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
       else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
+      else if (assignment.accessType === 'hotspot') observed = await applyHotspotAssignment(assignment);
       else {
         await NetworkOperation.updateOne(claim, { $set: { status: 'failed', lastError: `${assignment.accessType} provisioning adapter is not enabled yet` }, $unset: { leaseUntil: 1, leaseToken: 1 } });
         summary.unsupported += 1;
@@ -108,4 +125,4 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
-module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, configureRadiusForAssignment };
+module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, applyHotspotAssignment, configureRadiusForAssignment };
