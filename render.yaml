@@ -6,7 +6,7 @@ services:
     buildCommand: npm ci
     startCommand: npm run start:server
     healthCheckPath: /health
-    autoDeploy: false
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -42,7 +42,7 @@ services:
     env: static
     buildCommand: npm ci && npm run build
     staticPublishPath: build
-    autoDeploy: false
+    autoDeploy: true
     envVars:
       - key: REACT_APP_API_URL
         sync: false
