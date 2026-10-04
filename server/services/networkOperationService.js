@@ -19,6 +19,7 @@ async function applyStaticAssignment(assignment, operation) {
   const name = `billing-${assignment._id}`;
   const target = ip.includes('/') ? ip : `${ip}/32`;
   const context = { tenantId, serverId, timeoutMs: 10000 };
+  const fupRate = operation?.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : null;
   if (assignment.desiredState === 'absent' || assignment.status === 'released') {
     const rows = await sendCommand('/queue/simple/print', [word('name', name)], context);
     for (const row of Array.isArray(rows) ? rows : []) {
@@ -31,9 +32,9 @@ async function applyStaticAssignment(assignment, operation) {
   const existing = Array.isArray(rows) ? rows[0] : null;
   if (existing) {
     const id = existing['.id'] || existing.id || existing.numbers;
-    await sendCommand('/queue/simple/set', [word('numbers', id), word('target', target), word('comment', `Billing assignment ${assignment._id}`)], context);
+    const words = [word('numbers', id), word('target', target), word('comment', `Billing assignment ${assignment._id}`)]; if (fupRate) words.push(word('max-limit', fupRate)); await sendCommand('/queue/simple/set', words, context);
   } else {
-    await sendCommand('/queue/simple/add', [word('name', name), word('target', target), word('comment', `Billing assignment ${assignment._id}`)], context);
+    const words = [word('name', name), word('target', target), word('comment', `Billing assignment ${assignment._id}`)]; if (fupRate) words.push(word('max-limit', fupRate)); await sendCommand('/queue/simple/add', words, context);
   }
   const verify = await sendCommand('/queue/simple/print', [word('name', name)], context);
   if (!Array.isArray(verify) || !verify.length) throw new Error('Router did not confirm static queue');

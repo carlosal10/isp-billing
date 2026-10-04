@@ -8,6 +8,7 @@ function registerJobs() {
 
   require('./accessRecovery');
   require('./networkOperations');
+  require('./fupEvaluation');
   require('./exports');
   require('./historyRetention');
   require('./privacyRetention');
