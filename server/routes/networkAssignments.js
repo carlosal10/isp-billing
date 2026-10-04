@@ -57,7 +57,7 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
 
 router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ ok: false, error: 'Invalid assignment id' });
-  const allowed = ['status', 'desiredState', 'username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'metadata', 'authenticationMode', 'radiusServerId', 'pppProfile'];
+  const allowed = ['status', 'desiredState', 'username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'fupPolicyId', 'metadata', 'authenticationMode', 'radiusServerId', 'pppProfile'];
   const update = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
   const assignment = await NetworkAssignment.findOneAndUpdate(tenantFilter(req, { _id: req.params.id }), { $set: update }, { new: true, runValidators: true });
   if (!assignment) return res.status(404).json({ ok: false, error: 'Assignment not found' });

@@ -19,6 +19,7 @@ const networkAssignmentSchema = new mongoose.Schema({
   vlanId: { type: Number, min: 1, max: 4094, default: null },
   profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null },
   policyId: { type: mongoose.Schema.Types.ObjectId, ref: 'BandwidthPolicy', default: null },
+  fupPolicyId: { type: mongoose.Schema.Types.ObjectId, ref: 'FupPolicy', default: null, index: true },
   metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   lastSynchronizedAt: { type: Date, default: null },
   lastError: { type: String, trim: true, default: null },
