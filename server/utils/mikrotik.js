@@ -42,7 +42,9 @@ function normalizeRows(res) {
  *  - returns raw sendCommand result (caller normalizes) or throws
  */
 async function safeSend(path, words = [], options = {}) {
-  const retries = options.retries ?? DEFAULT_SEND_RETRIES;
+  // A timed-out write may already have reached the router. Only reads can
+  // be retried blindly; callers must reconcile state before repeating writes.
+  const retries = /\/(print|getall)$/.test(path) ? (options.retries ?? DEFAULT_SEND_RETRIES) : 0;
   const startBackoff = options.backoffMs ?? DEFAULT_SEND_BACKOFF_MS;
   let attempt = 0;
   let lastErr;

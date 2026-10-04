@@ -42,6 +42,16 @@ function handleRouteError(res, err, fallbackMessage) {
 
 router.use(apiKeyAuth);
 
+const accountingLimiter = require('express-rate-limit')({ windowMs: 60000, limit: 600, keyGenerator: req => String(req.apiKey._id), standardHeaders: true, legacyHeaders: false });
+router.post('/v1/network/accounting', requireApiKeyScope('network:accounting'), accountingLimiter, async (req, res) => {
+  try {
+    const result = await require('../services/radiusAccountingService').ingestAccounting(req.tenantId, req.body, req.apiKey._id);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Accounting could not be stored. Retry this snapshot.' });
+  }
+});
+
 router.get('/v1/health', (req, res) => {
   res.json({
     ok: true,

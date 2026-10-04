@@ -1,213 +1,56 @@
-import { Field } from "./ui/Field";
-// src/components/PppoeModal.jsx
-import React, { useEffect, useState } from "react";
-import { FaTimes } from "react-icons/fa";
-import { MdAdd } from "react-icons/md";
-import { AiOutlineEdit } from "react-icons/ai";
-import { RiDeleteBinLine } from "react-icons/ri";
-import { api } from "../lib/apiClient"; // ✅ use authenticated axios
-import "./PppoeModal.css";
-
-
+import React, { useEffect, useState } from 'react';
+import { api } from '../lib/apiClient';
+import { useServer } from '../context/ServerContext';
+import { useAuth } from '../context/AuthContext';
+import { Field } from './ui/Field';
+import { Modal } from './ui/Modal';
+import '../network.css';
 export default function PppoeModal({ isOpen = false, onClose, standalone = false }) {
-  const visible = standalone || isOpen;
-  const [profiles, setProfiles] = useState([]);
-  const [loadingProfiles, setLoadingProfiles] = useState(true);
-  const [msg, setMsg] = useState("");
-
-  // add
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [profile, setProfile] = useState("");
-
-  // update
-  const [updateUser, setUpdateUser] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-
-  // remove
-const [removeUser, setRemoveUser] = useState("");
-
-const [loading, setLoading] = useState(false);
-
-
-
-
-
-  // Load PPPoE profiles from backend (protected route)
+  const visible = standalone || isOpen, { selected, servers, setSelected } = useServer(), { role } = useAuth();
+  const [profiles, setProfiles] = useState([]), [loadingProfiles, setLoadingProfiles] = useState(false), [refresh, setRefresh] = useState(0);
+  const [operation, setOperation] = useState('add'), [username, setUsername] = useState(''), [password, setPassword] = useState(''), [profile, setProfile] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState(''), [confirm, setConfirm] = useState(false);
   useEffect(() => {
-    if (!visible) return;
-    let mounted = true;
-    (async () => {
-      setLoadingProfiles(true);
-      setMsg("");
-      try {
-        const { data } = await api.get("/pppoe/profiles");
-        const list = Array.isArray(data?.profiles) ? data.profiles : [];
-        if (!mounted) return;
-        setProfiles(list);
-        setProfile(list[0]?.name || "");
-      } catch (err) {
-        console.error("Error fetching profiles:", err);
-        setMsg(err?.response?.data?.error || err?.message || "Failed to fetch profiles");
-        setProfiles([]);
-      } finally {
-        if (mounted) setLoadingProfiles(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [visible]);
-
-  if (!visible) return null;
-
-  // ---- helpers ----
-  const showOk = (t) => setMsg(`✅ ${t}`);
-  const showErr = (t) => setMsg(`❌ ${t}`);
-
-  // Add PPPoE user
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMsg("");
+    setProfiles([]); setProfile(''); setError(''); setMessage('');
+    if (!visible || !selected) return;
+    let disposed = false; setLoadingProfiles(true);
+    api.get('/pppoe/profiles', { headers: { 'x-isp-server': selected } }).then(({ data }) => {
+      if (!disposed) { setProfiles(data.profiles || []); setProfile(data.profiles?.[0]?.name || ''); }
+    }).catch(err => { if (!disposed) setError(err.response?.data?.error || 'Could not load profiles from the selected router.'); })
+      .finally(() => { if (!disposed) setLoadingProfiles(false); });
+    return () => { disposed = true; };
+  }, [visible, selected, refresh]);
+  async function execute() {
+    setBusy(true); setError(''); setMessage('');
+    const options = { headers: { 'x-isp-server': selected }, timeout: 60000 };
     try {
-      await api.post("/pppoe", { username, password, profile });
-      showOk("User added");
-      setUsername("");
-      setPassword("");
+      if (operation === 'add') await api.post('/pppoe', { username: username.trim(), password, profile }, options);
+      if (operation === 'password') await api.put('/pppoe/update/' + encodeURIComponent(username.trim()), { password }, options);
+      if (operation === 'remove') await api.delete('/pppoe/remove/' + encodeURIComponent(username.trim()), options);
+      setMessage(operation === 'remove' ? 'User removed and active sessions disconnected.' : operation === 'password' ? 'Password updated and verified. Existing sessions retain their current connection.' : 'Local PPPoE user created and verified.');
+      setPassword(''); setUsername(''); setConfirm(false);
     } catch (err) {
-      console.error("Add user error:", err);
-      showErr(err?.response?.data?.error || err?.message || "Add failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update PPPoE user password
-  const handleUpdateUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMsg("");
-    try {
-      await api.put(`/pppoe/update/${encodeURIComponent(updateUser)}`, {
-        password: newPassword,
-      });
-      showOk("Password updated");
-      setUpdateUser("");
-      setNewPassword("");
-    } catch (err) {
-      console.error("Update user error:", err);
-      showErr(err?.response?.data?.error || err?.message || "Update failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Remove PPPoE user
-  const handleRemoveUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMsg("");
-    try {
-      await api.delete(`/pppoe/remove/${encodeURIComponent(removeUser)}`);
-      showOk("User removed");
-      setRemoveUser("");
-    } catch (err) {
-      console.error("Remove user error:", err);
-      showErr(err?.response?.data?.error || err?.message || "Remove failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const content = (
-      <div  className={`modal-content ${standalone ? "tool-page-card" : "dialog-surface"}`}>
-        {!standalone ? (
-          <span className="close" onClick={onClose} >
-            <FaTimes />
-          </span>
-        ) : null}
-
-        <h2>Manage PPPoE Users</h2>
-        {msg && <p className="status-msg">{msg}</p>}
-
-        {/* Add User */}
-        <form id="addUserForm" onSubmit={handleAddUser}>
-          <Field label="Username"><input
-            type="text"
-            placeholder="Username"
-            required
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          /></Field>
-          <Field label="Password"><input
-            type="password"
-            placeholder="Password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          /></Field>
-
-          <select
-            required
-            value={profile}
-            onChange={(e) => setProfile(e.target.value)}
-            disabled={loadingProfiles}
-          >
-            {loadingProfiles ? (
-              <option>Loading profiles...</option>
-            ) : profiles.length === 0 ? (
-              <option>No profiles available</option>
-            ) : (
-              profiles.map((p) => (
-                <option key={p.id || p.name} value={p.name}>
-                  {p.name} {p.rateLimit ? `(${p.rateLimit})` : ""}
-                </option>
-              ))
-            )}
-          </select>
-
-          <button type="submit" disabled={loading || loadingProfiles}>
-            <MdAdd className="inline-icon" /> {loading ? "Adding..." : "Add User"}
-          </button>
-        </form>
-
-        {/* Update User */}
-        <form id="updateUserForm" onSubmit={handleUpdateUser}>
-          <Field label="Username"><input
-            type="text"
-            placeholder="Username"
-            required
-            value={updateUser}
-            onChange={(e) => setUpdateUser(e.target.value)}
-          /></Field>
-          <Field label="New Password"><input
-            type="password"
-            placeholder="New Password"
-            required
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          /></Field>
-          <button type="submit" disabled={loading}>
-            <AiOutlineEdit className="inline-icon" />{" "}
-            {loading ? "Updating..." : "Update Password"}
-          </button>
-        </form>
-
-        {/* Remove User */}
-        <form id="removeUserForm" onSubmit={handleRemoveUser}>
-          <Field label="Username"><input
-            type="text"
-            placeholder="Username"
-            required
-            value={removeUser}
-            onChange={(e) => setRemoveUser(e.target.value)}
-          /></Field>
-          <button type="submit" className="remove-btn" disabled={loading}>
-            <RiDeleteBinLine className="inline-icon" />{" "}
-            {loading ? "Removing..." : "Remove User"}
-          </button>
-        </form>
-      </div>
-  );
-
-  return standalone ? <section className="tool-page-shell">{content}</section> : <div className="modal-overlay">{content}</div>;
+      const data = err.response?.data;
+      setError((data?.error || 'The operation could not be confirmed.') + (data?.outcomeUnknown ? ' The command may have reached the router. Inspect its state before retrying.' : ''));
+      setConfirm(false);
+    } finally { setBusy(false); }
+  }
+  const canManage = ['owner', 'admin'].includes(role);
+  const content = <>
+    <p className="network-note">Manage local RouterOS PPP secrets on one selected router. For RADIUS-managed subscribers, change access in your RADIUS service instead.</p>
+    <div className="network-select"><Field label="PPPoE router"><select value={selected || ''} disabled={busy} onChange={event => setSelected(event.target.value)}><option value="">Select a router</option>{servers.map(row => <option key={row.id || row._id} value={row.id || row._id}>{row.name}</option>)}</select></Field></div>
+    {!canManage ? <p>Owner or administrator access is required to modify PPPoE users.</p> : <>
+      <nav className="network-tabs" aria-label="PPPoE operations">{[['add', 'Add user'], ['password', 'Change password'], ['remove', 'Remove user']].map(([value, label]) => <button key={value} className="secondary" disabled={busy} aria-pressed={operation === value} onClick={() => { setOperation(value); setPassword(''); setError(''); setMessage(''); }}>{label}</button>)}</nav>
+      <form className="network-form" onSubmit={event => { event.preventDefault(); if (operation === 'remove') setConfirm(true); else execute(); }}>
+        <div className="network-form-grid"><Field label="PPPoE username"><input value={username} onChange={event => setUsername(event.target.value)} required maxLength={128} autoComplete="off" /></Field>
+        {operation !== 'remove' && <Field label={operation === 'password' ? 'New PPPoE password' : 'PPPoE password'}><input type="password" value={password} onChange={event => setPassword(event.target.value)} required maxLength={256} autoComplete="new-password" /></Field>}
+        {operation === 'add' && <Field label="PPP profile"><select value={profile} required disabled={loadingProfiles} onChange={event => setProfile(event.target.value)}><option value="">{loadingProfiles ? 'Loading profiles…' : 'Select a profile'}</option>{profiles.map(row => <option key={row.id || row.name} value={row.name}>{row.name}{row.rateLimit ? ' · ' + row.rateLimit : ''}</option>)}</select></Field>}</div>
+        <div className="form-actions"><button type="submit" disabled={busy || !selected || (operation === 'add' && (!profile || loadingProfiles))}>{busy ? 'Applying…' : operation === 'add' ? 'Create local user' : operation === 'password' ? 'Update password' : 'Review removal'}</button>
+        {operation === 'add' && <button type="button" className="secondary" disabled={busy || loadingProfiles || !selected} onClick={() => setRefresh(value => value + 1)}>Reload profiles</button>}</div>
+      </form>
+    </>}
+    {error && <div role="alert" className="notice error">{error}</div>}{message && <div role="status" className="notice">{message}</div>}
+    <Modal open={confirm} onClose={() => { if (!busy) setConfirm(false); }} title="Remove PPPoE user"><p>Disable and remove {username} from the selected router, disconnecting all matching active sessions?</p><div className="form-actions"><button disabled={busy} onClick={execute}>Confirm user removal</button><button className="secondary" disabled={busy} onClick={() => setConfirm(false)}>Cancel</button></div></Modal>
+  </>;
+  return standalone ? <main className="workspace-page network-workspace"><header className="workspace-header"><div><span className="eyebrow">SUBSCRIBER ACCESS</span><h1>PPPoE users</h1><p>Create and maintain local subscriber credentials.</p></div></header><section className="workspace-card">{content}</section></main> : <Modal open={isOpen} onClose={onClose} title="PPPoE users">{content}</Modal>;
 }

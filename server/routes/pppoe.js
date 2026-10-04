@@ -2,7 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const { sendCommand } = require('../utils/mikrotikConnectionManager');
+const service = require('../services/pppoeService');
+const { pickServerId } = require('../services/mikrotikSupport');
+const { connectionDiagnostic } = require('../services/routerConnectionDiagnostics');
 
 const limiter = rateLimit({ windowMs: 5000, max: 20, standardHeaders: true });
 
@@ -25,12 +27,11 @@ function normalizeProfiles(raw) {
 router.get('/profiles', limiter, async (req, res) => {
   const tenantId = req.tenantId;
   try {
-    const rows = await sendCommand('/ppp/profile/print', [], { tenantId, timeoutMs: 10000 });
-    const profiles = normalizeProfiles(rows);
+    const profiles = await service.profiles({ tenantId, serverId: pickServerId(req) });
     return res.json({ profiles });
   } catch (err) {
     console.error('pppoe/profiles error:', err?.message || err);
-    return res.json({ profiles: [], error: String(err?.message || err) });
+    return res.status(502).json({ profiles: [], error: connectionDiagnostic(err).message });
   }
 });
 

@@ -1,233 +1,86 @@
-// routes/mikrotikServers.js
-// CRUD + test endpoints for tenant MikroTik servers.
-// Improvements:
-// - consistent tenant checks + error shapes
-// - honor per-request server selector (headers / ?serverId)
-// - defensive DB operations and error classification
-// - best-effort connectivity test after create/update
-
+'use strict';
 const express = require('express');
-const router = express.Router();
 const { z } = require('zod');
-const MikroTikConnection = require('../models/MikrotikConnection');
-const { sendCommand } = require('../utils/mikrotikConnectionManager');
+const Router = require('../models/MikrotikConnection');
+const manager = require('../utils/mikrotikConnectionManager');
 const requireRole = require('../middleware/requireRole');
-
+const { validRouterHost, connectionDiagnostic } = require('../services/routerConnectionDiagnostics');
+const router = express.Router();
 const CreateBody = z.object({
-  name: z.string().min(1).max(60),
-  host: z.string().min(1),
+  name: z.string().trim().min(1).max(60), host: z.string().trim().refine(validRouterHost),
   port: z.number().int().min(1).max(65535).optional(),
-  username: z.string().min(1),
-  password: z.string().min(1),
-  tls: z.boolean().optional(),
-  primary: z.boolean().optional(),
-  site: z.string().max(120).optional(),
-  tags: z.array(z.string()).optional(),
+  username: z.string().trim().min(1).max(128), password: z.string().min(1).max(512),
+  tls: z.boolean().optional(), primary: z.boolean().optional(),
+  site: z.string().trim().max(120).optional(), tags: z.array(z.string().max(60)).max(20).optional(),
 });
-const UpdateBody = CreateBody.partial();
-
-// helper: pick server id override from headers/query
-function pickServerId(req) {
-  const headers = req.headers || {};
-  const get = (k) => (headers[k] ?? headers[k.toLowerCase()] ?? null);
-  const raw = get('x-isp-server') || get('x-router-id') || req.query?.serverId || req.query?.server || null;
-  if (!raw) return null;
-  const s = String(raw).trim();
-  // allow typical id characters only (alphanumeric, dash, underscore, dot)
-  if (!/^[\w\-.]+$/.test(s)) return null;
-  return s;
+function report(res, error) {
+  if (error?.code === 11000) return res.status(409).json({ ok: false, error: 'A router with this name or address already exists.' });
+  if (['CastError', 'ValidationError'].includes(error?.name)) return res.status(400).json({ ok: false, error: 'Invalid router settings or identifier.' });
+  const diagnostic = connectionDiagnostic(error);
+  return res.status(502).json({ ok: false, reason: diagnostic.code, error: diagnostic.message });
 }
-
-
-// GET / - list servers for this tenant
+async function verify(tenantId, record) {
+  const out = await manager.sendCommand('/system/identity/print', [], { tenantId, serverId: String(record._id), timeoutMs: 12000, retryCount: 1 });
+  const identity = Array.isArray(out) ? out[0]?.name : null;
+  if (!identity) throw new Error('Router did not return an identity');
+  await Router.updateOne({ tenant: tenantId, _id: record._id }, { $set: { lastVerifiedAt: new Date() } });
+  return identity;
+}
 router.get('/', async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
-
-    const rows = await MikroTikConnection.find({ tenant: tenantId })
-      .sort({ primary: -1, name: 1 })
-      .lean();
-
-    const out = (rows || []).map((r) => ({
-      id: String(r._id),
-      name: r.name,
-      host: r.host,
-      port: r.port,
-      tls: !!r.tls,
-      primary: !!r.primary,
-      site: r.site || null,
-      tags: r.tags || [],
-      lastVerifiedAt: r.lastVerifiedAt || null,
-    }));
-
-    return res.json({ ok: true, count: out.length, servers: out });
-  } catch (e) {
-    console.error('mikrotikServers.list error:', e?.message || e);
-    return res.status(500).json({ ok: false, error: e?.message || 'List failed' });
-  }
+    const rows = await Router.find({ tenant: req.tenantId }).select('-password -username').sort({ primary: -1, name: 1 }).lean();
+    res.json({ ok: true, servers: rows.map(r => ({ id: String(r._id), name: r.name, host: r.host, port: r.port, tls: r.tls,
+      primary: r.primary, site: r.site, tags: r.tags, lastVerifiedAt: r.lastVerifiedAt || null })) });
+  } catch (error) { report(res, error); }
 });
-
-// POST / - create server
 router.post('/', requireRole('owner', 'admin'), async (req, res) => {
+  const parsed = CreateBody.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: 'Enter a valid router name, address and API credentials.' });
   try {
-    const tenantId = req.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
-
-    const parsed = CreateBody.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Invalid payload', details: parsed.error.format() });
     const body = parsed.data;
-
-    if (body.primary === true) {
-      await MikroTikConnection.updateMany({ tenant: tenantId, primary: true }, { $set: { primary: false } });
-    }
-
-    const doc = await MikroTikConnection.create({
-      tenant: tenantId,
-      name: body.name.trim(),
-      host: String(body.host).trim(),
-      port: Number(body.port || (body.tls ? 8729 : 8728)),
-      username: body.username.trim(),
-      password: String(body.password),
-      tls: !!body.tls,
-      primary: !!body.primary,
-      site: body.site || undefined,
-      tags: body.tags || [],
-      createdBy: req.user?.sub || null,
-      updatedBy: req.user?.sub || null,
-    });
-
-    // best-effort connectivity test (serverId override irrelevant here)
-    let identity = null;
-    try {
-      const out = await sendCommand('/system/identity/print', [], { tenantId, serverId: String(doc._id), timeoutMs: 10000 });
-      identity = Array.isArray(out) && out[0]?.name || null;
-      await MikroTikConnection.updateOne({ _id: doc._id }, { $set: { lastVerifiedAt: new Date() } });
-    } catch (connectErr) {
-      // ignore test failure (record still created); return identity null and log
-      console.warn('mikrotikServers.create test failed:', connectErr?.message || connectErr);
-    }
-
-    return res.status(201).json({ ok: true, id: String(doc._id), identity });
-  } catch (e) {
-    console.error('mikrotikServers.create error:', e?.message || e);
-    const dup = e?.code === 11000;
-    return res.status(dup ? 409 : 500).json({ ok: false, error: e?.message || 'Create failed' });
-  }
+    const record = await Router.create({ ...body, port: body.port || (body.tls ? 8729 : 8728),
+      tenant: req.tenantId, createdBy: req.user?.sub, updatedBy: req.user?.sub });
+    if (body.primary) await Router.updateMany({ tenant: req.tenantId, _id: { $ne: record._id }, primary: true }, { $set: { primary: false } });
+    let identity = null, diagnostic = null;
+    try { identity = await verify(req.tenantId, record); } catch (error) { diagnostic = connectionDiagnostic(error); }
+    return res.status(201).json({ ok: true, id: String(record._id), verified: !!identity, identity, diagnostic });
+  } catch (error) { report(res, error); }
 });
-
-// PUT /:id - update server
 router.put('/:id', requireRole('owner', 'admin'), async (req, res) => {
+  const parsed = CreateBody.partial().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: 'Invalid router settings.' });
   try {
-    const tenantId = req.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
-
-    const id = String(req.params.id || '');
-    if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
-
-    const parsed = UpdateBody.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Invalid payload', details: parsed.error.format() });
-    const body = parsed.data;
-
-    const update = {};
-    for (const k of ['name', 'host', 'username', 'password', 'site']) {
-      if (body[k] !== undefined) update[k] = String(body[k]).trim();
-    }
-    if (body.port !== undefined) update.port = Number(body.port);
-    if (body.tls !== undefined) update.tls = !!body.tls;
-    if (Array.isArray(body.tags)) update.tags = body.tags;
-    if (body.primary === true) {
-      await MikroTikConnection.updateMany({ tenant: tenantId, primary: true }, { $set: { primary: false } });
-      update.primary = true;
-    } else if (body.primary === false) {
-      update.primary = false;
-    }
-    update.updatedBy = req.user?.sub || null;
-
-    const doc = await MikroTikConnection.findOneAndUpdate({ _id: id, tenant: tenantId }, { $set: update }, { new: true });
-    if (!doc) return res.status(404).json({ ok: false, error: 'Not found' });
-
-    // optional connectivity test if caller provides ?verify=true
-    if (String(req.query?.verify || 'false').toLowerCase() === 'true') {
-      try {
-        const out = await sendCommand('/system/identity/print', [], { tenantId, serverId: pickServerId(req) || id, timeoutMs: 10000 });
-        const identity = Array.isArray(out) && out[0]?.name || null;
-        await MikroTikConnection.updateOne({ _id: doc._id }, { $set: { lastVerifiedAt: new Date() } });
-        return res.json({ ok: true, identity });
-      } catch (verifyErr) {
-        console.warn('mikrotikServers.update verify failed:', verifyErr?.message || verifyErr);
-        const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(String(verifyErr?.message || verifyErr));
-        return res.status(upstream ? 502 : 500).json({ ok: false, error: verifyErr?.message || 'Verify failed' });
-      }
-    }
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('mikrotikServers.update error:', e?.message || e);
-    const dup = e?.code === 11000;
-    return res.status(dup ? 409 : 500).json({ ok: false, error: e?.message || 'Update failed' });
-  }
+    const existing = await Router.findOne({ _id: req.params.id, tenant: req.tenantId });
+    if (!existing) return res.status(404).json({ ok: false, error: 'Router not found.' });
+    const update = { ...parsed.data, updatedBy: req.user?.sub };
+    if (update.tls !== undefined && update.port === undefined && [8728, 8729].includes(existing.port)) update.port = update.tls ? 8729 : 8728;
+    const connectionChanged = ['host', 'port', 'username', 'password', 'tls'].some(key => update[key] !== undefined);
+    if (connectionChanged) update.lastVerifiedAt = null;
+    const record = await Router.findOneAndUpdate({ _id: existing._id, tenant: req.tenantId }, { $set: update }, { new: true, runValidators: true });
+    if (update.primary) await Router.updateMany({ tenant: req.tenantId, _id: { $ne: record._id }, primary: true }, { $set: { primary: false } });
+    if (connectionChanged) await manager.invalidate(req.tenantId, record._id);
+    if (req.query.verify === 'true') return res.json({ ok: true, verified: true, identity: await verify(req.tenantId, record) });
+    res.json({ ok: true });
+  } catch (error) { report(res, error); }
 });
-
-// DELETE /:id - delete server
 router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
-
-    const id = String(req.params.id || '');
-    if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
-
-    const doc = await MikroTikConnection.findOneAndDelete({ _id: id, tenant: tenantId });
-    if (!doc) return res.status(404).json({ ok: false, error: 'Not found' });
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('mikrotikServers.delete error:', e?.message || e);
-    return res.status(500).json({ ok: false, error: e?.message || 'Delete failed' });
-  }
+    const record = await Router.findOneAndDelete({ _id: req.params.id, tenant: req.tenantId });
+    if (!record) return res.status(404).json({ ok: false, error: 'Router not found.' });
+    await manager.invalidate(req.tenantId, record._id);
+    res.json({ ok: true });
+  } catch (error) { report(res, error); }
 });
-
-// POST /:id/test - test server connectivity
 router.post('/:id/test', async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Missing tenant (x-isp-id)' });
-
-    const id = String(req.params.id || '');
-    if (!id) return res.status(400).json({ ok: false, error: 'Missing id' });
-
-    // allow header/query override but validate it belongs to tenant
-    const override = pickServerId(req);
-    let serverDoc = null;
-    if (override) {
-      serverDoc = await MikroTikConnection.findOne({ _id: override, tenant: tenantId }).lean();
-      if (!serverDoc) {
-        // header provided a server that doesn't belong to tenant — reject
-        return res.status(403).json({ ok: false, error: 'serverId override invalid or not found' });
-      }
-    } else {
-      serverDoc = await MikroTikConnection.findOne({ _id: id, tenant: tenantId }).lean();
-      if (!serverDoc) return res.status(404).json({ ok: false, error: 'Server not found' });
-    }
-
-    const serverIdToUse = String(serverDoc._id);
-    const out = await sendCommand('/system/identity/print', [], { tenantId, serverId: serverIdToUse, timeoutMs: 10000 });
-    const identity = Array.isArray(out) && out[0]?.name || null;
-
-    try {
-      await MikroTikConnection.updateOne({ _id: serverIdToUse, tenant: tenantId }, { $set: { lastVerifiedAt: new Date() } });
-    } catch (uErr) {
-      // ignore update errors
-    }
-
-    return res.json({ ok: true, identity });
-  } catch (e) {
-    console.error('mikrotikServers.test error:', e?.message || e);
-    const msg = e?.message || 'Test failed';
-    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(String(msg));
-    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
-  }
+    // The path identifies the router being tested. A global UI selection cannot override it.
+    const record = await Router.findOne({ _id: req.params.id, tenant: req.tenantId });
+    if (!record) return res.status(404).json({ ok: false, error: 'Router not found.' });
+    res.json({ ok: true, verified: true, identity: await verify(req.tenantId, record) });
+  } catch (error) { report(res, error); }
 });
-
 module.exports = router;
+router.get('/:id/sessions', async (req, res) => {
+  try { res.json({ sessions: await require('../services/radiusAccountingService').listSessions(req.tenantId, req.params.id), limit: 100, staleAfterSeconds: 900 }); }
+  catch (error) { if (error.statusCode) return res.status(error.statusCode).json({ error: error.message }); report(res, error); }
+});

@@ -13,6 +13,7 @@ const API_KEY_SCOPES = [
   { key: 'payments:write', label: 'Write Payments', description: 'Create payment requests or post external payment updates.' },
   { key: 'support:write', label: 'Write Support', description: 'Create support tickets or customer service requests.' },
   { key: 'network:read', label: 'Read Network', description: 'Read service/network status for operational integrations.' },
+  { key: 'network:accounting', label: 'Write RADIUS Accounting', description: 'Submit trusted RADIUS session snapshots. Does not authorize subscribers or change billing.' },
 ];
 
 const DEFAULT_SCOPES = ['customers:read', 'invoices:read', 'payments:read'];

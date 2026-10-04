@@ -41,6 +41,15 @@ On October 3, the first Linux CI run passed the client build and browser checks 
 - No production database, payment-provider account or router was used in local tests. Network failure recovery tests use a substitute router operation; real RouterOS outcomes belong to the next batch.
 - Acknowledging an exception is not settlement proof. A launch gate requires a reconciled period, reviewed exceptions and verified provider statements from the intended deployment.
 
+## Network foundation delivered next
+
+- Router management now uses strict tenant and router selection. An explicit router ID never silently falls back to another router. Credential or endpoint changes retire pooled connections, and stalled sockets are destroyed rather than reused.
+- Connection diagnostics distinguish authentication, TLS, DNS, refusal, timeout and unreachable-network failures. A cloud/DDNS hostname is explained as naming only; private routers require a VPN or another route from the billing server.
+- RouterOS 7.18 `!empty` replies are handled as successful empty results. Read-only commands may retry; writes are not blindly retried after an uncertain timeout.
+- PPPoE operations now carry the selected router context, validate profiles, use RouterOS word arguments consistently, verify state after writes, disconnect active sessions on removal, and audit administrative changes.
+- A RADIUS accounting ingestion path stores cumulative 64-bit counters idempotently per tenant/router/session. It exposes stale-session status without treating stale data as proof of disconnection. An API key requires the dedicated `network:accounting` scope.
+- The network workspace includes a compact router form, explicit connection guide, PPPoE workflow, and RADIUS accounting view.
+
 ## Next batch: network orchestration
 
 1. Durable router operations with desired state, attempt history and verifiable outcome.

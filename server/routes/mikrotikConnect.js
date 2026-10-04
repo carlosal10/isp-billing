@@ -14,7 +14,7 @@ const {
 const MikroTikConnection = require("../models/MikrotikConnection");
 const RouterEvent = require("../models/RouterEvent");
 const requireRole = require("../middleware/requireRole");
-const { decryptField } = require('../security/fieldEncryption');
+const { validRouterHost, connectionDiagnostic } = require('../services/routerConnectionDiagnostics');
 
 function isMacAddress(value) {
   return /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(String(value || "").trim());
@@ -22,7 +22,7 @@ function isMacAddress(value) {
 
 // ------------------------------ Validation schemas ------------------------------
 const ConnectBody = z.object({
-  host: z.string().min(3).max(256),
+  host: z.string().trim().refine(validRouterHost),
   port: z.number().int().min(1).max(65535).optional(),
   user: z.string().min(1).max(128),
   password: z.string().min(1).max(512),
@@ -33,70 +33,7 @@ const ConnectBody = z.object({
 });
 
 // ------------------------------ Config loader ------------------------------
-setConfigLoader(async (tenantId, selector = {}) => {
-  if (!tenantId) return undefined;
-
-  let rec = null;
-
-  // Strict lookup by ID (selector.id may be string or ObjectId)
-  if (selector?.id) {
-    try {
-      rec = await MikroTikConnection.findOne({
-        _id: selector.id,
-        tenant: tenantId
-      }).lean();
-    } catch (e) {
-      // ignore lookup errors; fallback to other selectors
-    }
-  }
-
-  // Named router
-  if (!rec && selector?.name) {
-    rec = await MikroTikConnection.findOne({
-      tenant: tenantId,
-      name: String(selector.name).trim()
-    }).lean();
-  }
-
-  // Host lookup — exact host+port match preferred
-  if (!rec && selector?.host) {
-    const hostTrim = String(selector.host).trim();
-    const portFilter = selector.port ? { port: selector.port } : {};
-    rec = await MikroTikConnection.findOne({
-      tenant: tenantId,
-      host: hostTrim,
-      ...portFilter
-    }).lean();
-  }
-
-  // Primary router
-  if (!rec) {
-    rec = await MikroTikConnection.findOne({
-      tenant: tenantId,
-      primary: true
-    }).lean();
-  }
-
-  // Fallback to any router for this tenant
-  if (!rec) {
-    rec = await MikroTikConnection.findOne({ tenant: tenantId }).lean();
-  }
-
-  if (!rec) return undefined;
-
-  // normalize port and tls
-  const tls = !!rec.tls;
-  const port = Number(rec.port) || (tls ? 8729 : 8728);
-
-  return {
-    host: String(rec.host),
-    port,
-    user: String(rec.username),
-    password: decryptField(rec.password),
-    tls,
-    timeout: Number(rec.timeout) || 15000
-  };
-});
+setConfigLoader(require('../services/routerConfigurationService').loadRouterConfig);
 
 // ------------------------------ Audit logger ------------------------------
 setAuditLogger(async (entry) => {
@@ -177,7 +114,7 @@ router.post("/", requireRole('owner', 'admin'), async (req, res) => {
     const doc = await MikroTikConnection.findOneAndUpdate(
       { tenant: tenantId, name },
       { $set: upsertDoc },
-      { new: true, upsert: true }
+      { new: true, upsert: true, runValidators: true }
     );
 
     // validate we have an id
@@ -212,15 +149,7 @@ router.post("/", requireRole('owner', 'admin'), async (req, res) => {
         verifyError = "no-identity";
       }
     } catch (err) {
-      // Map high-level network/auth errors to friendly reasons
-      const msg = String(err?.message || err || '');
-      if (/username|password|authentication|login failure|invalid user/i.test(msg)) {
-        verifyError = "auth";
-      } else if (/timeout|Connect timeout|timed out|EHOSTUNREACH|ECONNRESET|ECONNREFUSED/i.test(msg)) {
-        verifyError = "connect";
-      } else {
-        verifyError = "other";
-      }
+      verifyError = connectionDiagnostic(err).code;
       verified = false;
     }
 
@@ -235,12 +164,11 @@ router.post("/", requireRole('owner', 'admin'), async (req, res) => {
       ok: true,
       verified,
       reason: verified ? null : verifyError,
+      id: serverId,
       identity: identity || null
     });
   } catch (err) {
-    const msg = String(err?.message || err || "Connect failed");
-    const upstream = /timeout|auth|connect|EHOST|ECONN|network/i.test(msg);
-    return res.status(upstream ? 502 : 500).json({ ok: false, error: msg });
+    return res.status(err?.code === 11000 ? 409 : 500).json({ ok: false, error: err?.code === 11000 ? 'A router with this name or address already exists.' : 'Unable to save router settings.' });
   }
 });
 

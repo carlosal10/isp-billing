@@ -1,102 +1,49 @@
+'use strict';
 const express = require('express');
+const { z } = require('zod');
+const requireRole = require('../middleware/requireRole');
+const service = require('../services/pppoeService');
+const { pickServerId } = require('../services/mikrotikSupport');
+const { connectionDiagnostic } = require('../services/routerConnectionDiagnostics');
+const AuditLog = require('../models/AuditLog');
 const router = express.Router();
-const Plan = require('../models/plan');
-const { sendCommand } = require('../utils/mikrotikConnectionManager');
-
-
-// ✅ Get profiles directly from MikroTik
-router.get('/profiles', async (req, res) => {
-  try {
-    const tenantId = req.tenantId;
-    const profiles = await sendCommand('/ppp/profile/print', [], { tenantId, timeoutMs: 10000 });
-
-    const formatted = (Array.isArray(profiles) ? profiles : []).map((p, index) => ({
-      id: p['.id'] || p.id || index,
-      name: p.name,
-      localAddress: p['local-address'] || p.localAddress || null,
-      rateLimit: p['rate-limit'] || p.rateLimit || null,
-    }));
-
-    return res.json({ message: 'Profiles loaded from MikroTik', profiles: formatted });
-  } catch (err) {
-    console.error("Error fetching MikroTik profiles:", err?.message || err);
-    // Degrade gracefully so clients can handle empty state without throwing
-    return res.json({ message: 'No PPPoE profiles available', profiles: [], error: String(err?.message || err) });
-  }
-});
-
-// Add user
-router.post('/', async (req, res) => {
-  const { username, password, profile } = req.body;
-
-  if (!username || !password || !profile) {
-    return res.status(400).json({ message: 'All fields required' });
-  }
-
-  try {
-    const args = [
-      `=name=${username}`,
-      `=password=${password}`,
-      `=service=pppoe`,
-      `=profile=${profile}`,
-    ];
-
-    const result = await sendCommand('/ppp/secret/add', args);
-
-    res.status(201).json({ message: 'User added successfully', result });
-  } catch (err) {
-    console.error("Error adding PPPoE user:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-// Remove user
-router.delete('/remove/:username', async (req, res) => {
-  try {
-    const users = await sendCommand('/ppp/secret/print', { name: req.params.username });
-    if (!users.length) return res.status(404).json({ message: 'User not found' });
-
-    const result = await sendCommand('/ppp/secret/remove', { '.id': users[0]['.id'] });
-    res.json({ message: 'User removed', result });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Update password
-router.put('/update/:username', async (req, res) => {
-  if (!req.body.password) {
-    return res.status(400).json({ message: 'Password required' });
-  }
-
-  try {
-    const users = await sendCommand('/ppp/secret/print', { name: req.params.username });
-    if (!users.length) return res.status(404).json({ message: 'User not found' });
-
-    const result = await sendCommand('/ppp/secret/set', { '.id': users[0]['.id'], password: req.body.password });
-    res.json({ message: 'Password updated', result });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// List users
-router.get('/list', async (req, res) => {
-  try {
-    const result = await sendCommand('/ppp/secret/print');
-    res.json({ message: 'PPPoE users fetched', users: result });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Online users
-router.get('/online', async (req, res) => {
-  try {
-    const result = await call('/ppp/active/print');
-    res.json({ message: 'Online users fetched', users: result });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
+const username = z.string().trim().min(1).max(128).regex(/^[^\x00-\x1f\x7f]+$/);
+const password = z.string().min(1).max(256).regex(/^[^\x00-\x1f\x7f]+$/);
+const context = req => ({ tenantId: req.tenantId, serverId: pickServerId(req) });
+function endpoint(action) {
+  return async (req, res) => {
+    try { await action(req, res); }
+    catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: 'Enter valid PPPoE credentials and a profile.' });
+      const diagnostic = connectionDiagnostic(error);
+      return res.status(error.statusCode || 502).json({ error: error.statusCode ? error.message : diagnostic.message,
+        reason: diagnostic.code, outcomeUnknown: !!error.outcomeUnknown });
+    }
+  };
+}
+async function audit(req, action, account) {
+  await AuditLog.create({ tenantId: req.tenantId, actor: req.user?.sub || null, action,
+    payload: { serverId: pickServerId(req), username: account } });
+}
+router.get('/profiles', endpoint(async (req, res) => res.json({ profiles: await service.profiles(context(req)) })));
+router.get('/list', endpoint(async (req, res) => res.json({ users: await service.list(context(req)) })));
+router.get('/online', endpoint(async (req, res) => res.json({ users: await service.online(context(req)) })));
+router.post('/', requireRole('owner', 'admin'), endpoint(async (req, res) => {
+  const body = z.object({ username, password, profile: username }).parse(req.body);
+  const user = await service.add(context(req), body);
+  await audit(req, 'pppoe.user.created', body.username);
+  res.status(201).json({ ok: true, user });
+}));
+router.put('/update/:username', requireRole('owner', 'admin'), endpoint(async (req, res) => {
+  const account = username.parse(req.params.username);
+  await service.password(context(req), account, password.parse(req.body?.password));
+  await audit(req, 'pppoe.password.updated', account);
+  res.json({ ok: true });
+}));
+router.delete('/remove/:username', requireRole('owner', 'admin'), endpoint(async (req, res) => {
+  const account = username.parse(req.params.username);
+  await service.remove(context(req), account);
+  await audit(req, 'pppoe.user.removed', account);
+  res.json({ ok: true });
+}));
 module.exports = router;
