@@ -17,10 +17,15 @@ async function evaluateFup({ tenantId, assignmentId, now = new Date() }) {
   const included = BigInt(policy.includedBytes);
   const percent = included === 0n ? 10000 : Number((consumed * 10000n) / included) / 100;
   const nextState = policy.hardBlockPercent && percent >= policy.hardBlockPercent ? 'blocked' : percent >= policy.throttlePercent ? 'throttled' : percent >= policy.warningPercent ? 'warned' : 'normal';
-  const state = await FupState.findOneAndUpdate({ tenantId, assignmentId, periodStart: start }, { $set: { customerId: assignment.customerId, policyId: policy._id, periodEnd: end, consumedBytes: consumed.toString(), state: nextState, lastEvaluatedAt: now, ...(nextState === 'throttled' || nextState === 'blocked' ? { appliedAt: now } : {}) } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+  const previous = await FupState.findOne({ tenantId, assignmentId, periodStart: start }).lean();
+  const state = await FupState.findOneAndUpdate({ tenantId, assignmentId, periodStart: start }, { $set: { customerId: assignment.customerId, policyId: policy._id, periodEnd: end, consumedBytes: consumed.toString(), state: nextState, lastEvaluatedAt: now, ...(nextState === 'throttled' || nextState === 'blocked' ? { appliedAt: now } : {}), ...(nextState === 'normal' && previous?.state !== 'normal' ? { restoredAt: now } : {}) } }, { upsert: true, new: true, setDefaultsOnInsert: true });
   if (nextState === 'throttled' || nextState === 'blocked') {
     const key = `fup:${assignmentId}:${start.toISOString()}:${nextState}`;
     await NetworkOperation.updateOne({ tenantId, idempotencyKey: key }, { $setOnInsert: { routerId: assignment.routerId, customerId: assignment.customerId, assignmentId, operationType: 'fup.apply', idempotencyKey: key, desiredState: { fupState: nextState, downloadRate: policy.throttleDownload, uploadRate: policy.throttleUpload }, status: 'pending' } }, { upsert: true });
+  }
+  if (nextState === 'normal' && previous && ['throttled', 'blocked'].includes(previous.state)) {
+    const key = `fup:${assignmentId}:${start.toISOString()}:restore`;
+    await NetworkOperation.updateOne({ tenantId, idempotencyKey: key }, { $setOnInsert: { routerId: assignment.routerId, customerId: assignment.customerId, assignmentId, operationType: 'fup.restore', idempotencyKey: key, desiredState: { fupState: 'normal', restoreRate: assignment.metadata?.normalRateLimit || null }, status: 'pending' } }, { upsert: true });
   }
   return { state: state.state, consumedBytes: state.consumedBytes, percent };
 }

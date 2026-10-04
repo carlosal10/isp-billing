@@ -19,7 +19,7 @@ async function applyStaticAssignment(assignment, operation) {
   const name = `billing-${assignment._id}`;
   const target = ip.includes('/') ? ip : `${ip}/32`;
   const context = { tenantId, serverId, timeoutMs: 10000 };
-  const fupRate = operation?.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : null;
+  const fupRate = operation?.operationType === 'fup.apply' ? `${operation.desiredState?.downloadRate || '2M'}/${operation.desiredState?.uploadRate || '512K'}` : operation?.operationType === 'fup.restore' ? operation.desiredState?.restoreRate : null;
   if (assignment.desiredState === 'absent' || assignment.status === 'released') {
     const rows = await sendCommand('/queue/simple/print', [word('name', name)], context);
     for (const row of Array.isArray(rows) ? rows : []) {
