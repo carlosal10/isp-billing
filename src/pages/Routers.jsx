@@ -13,7 +13,7 @@ export default function Routers() {
   const { role } = useAuth(), { servers, reload, selected, setSelected } = useServer();
   const [tab, setTab] = useState('routers'), [editing, setEditing] = useState(null), [removing, setRemoving] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
-  const [sessions, setSessions] = useState([]), [loadingSessions, setLoadingSessions] = useState(false), [operations, setOperations] = useState([]), [loadingOperations, setLoadingOperations] = useState(false), [health, setHealth] = useState({}), [healthLoading, setHealthLoading] = useState({}), [refresh, setRefresh] = useState(0);
+  const [sessions, setSessions] = useState([]), [loadingSessions, setLoadingSessions] = useState(false), [operations, setOperations] = useState([]), [loadingOperations, setLoadingOperations] = useState(false), [assignments, setAssignments] = useState([]), [loadingAssignments, setLoadingAssignments] = useState(false), [health, setHealth] = useState({}), [healthLoading, setHealthLoading] = useState({}), [refresh, setRefresh] = useState(0);
   const canManage = ['owner', 'admin'].includes(role);
   const rows = Array.isArray(servers) ? servers : [];
   useEffect(() => {
@@ -34,6 +34,14 @@ export default function Routers() {
     api.get('/network/assignments/operations?limit=200').then(({ data }) => { if (!disposed) setOperations(data.items || []); })
       .catch(err => { if (!disposed) setError(err.response?.data?.error || 'Unable to load network operations.'); })
       .finally(() => { if (!disposed) setLoadingOperations(false); });
+    return () => { disposed = true; };
+  }, [tab, refresh]);
+  useEffect(() => {
+    if (tab !== 'subscribers') return;
+    let disposed = false; setLoadingAssignments(true); setError('');
+    api.get('/network/assignments?limit=500').then(({ data }) => { if (!disposed) setAssignments(data.items || []); })
+      .catch(err => { if (!disposed) setError(err.response?.data?.error || 'Unable to load subscriber assignments.'); })
+      .finally(() => { if (!disposed) setLoadingAssignments(false); });
     return () => { disposed = true; };
   }, [tab, refresh]);
   async function action(work, success) {
@@ -62,11 +70,12 @@ export default function Routers() {
   return <main className="workspace-page network-workspace">
     <header className="workspace-header"><div><span className="eyebrow">NETWORK OPERATIONS</span><h1>Network workspace</h1><p>Manage router connections and inspect subscriber accounting.</p></div>
       {canManage && <button onClick={() => setEditing({})}>Add router</button>}</header>
-    <nav className="network-tabs" aria-label="Network views">{[['routers', 'Routers'], ['accounting', 'RADIUS accounting'], ['fup', 'Fair usage'], ['operations', 'Operations'], ['guide', 'Connection guide']].map(([key, label]) => <button key={key} className="secondary" aria-pressed={tab === key} onClick={() => { setTab(key); setError(''); setMessage(''); }}>{label}</button>)}</nav>
+    <nav className="network-tabs" aria-label="Network views">{[['routers', 'Routers'], ['subscribers', 'Subscribers'], ['accounting', 'RADIUS accounting'], ['fup', 'Fair usage'], ['operations', 'Operations'], ['guide', 'Connection guide']].map(([key, label]) => <button key={key} className="secondary" aria-pressed={tab === key} onClick={() => { setTab(key); setError(''); setMessage(''); }}>{label}</button>)}</nav>
     {error && <div role="alert" className="notice error">{error}</div>}
     {message && <div role="status" className="notice">{message}</div>}
     {tab === 'fup' && <FupPanel canManage={canManage} />}
     {tab === 'operations' && <section className="workspace-card"><h2>Network operations</h2><p>Router provisioning, FUP enforcement, retries, and failed operations are shown here.</p><button className="secondary" onClick={() => setRefresh(value => value + 1)} disabled={loadingOperations}>Refresh</button>{loadingOperations ? <p role="status">Loading operations…</p> : <div className="table-scroll" role="region" aria-label="Network operations" tabIndex={0}><table><thead><tr><th>Operation</th><th>State</th><th>Attempts</th><th>Error</th><th>Action</th></tr></thead><tbody>{operations.map(item => <tr key={item._id}><td>{item.operationType}<small>{new Date(item.createdAt).toLocaleString()}</small></td><td>{item.status}</td><td>{item.attempts}</td><td>{item.lastError || '—'}</td><td>{canManage && ['failed', 'dead-letter'].includes(item.status) && <button className="secondary" disabled={busy} onClick={() => action(() => api.post('/network/assignments/operations/' + item._id + '/retry'), 'Operation queued for retry.')}>Retry</button>}</td></tr>)}</tbody></table></div>}{!loadingOperations && !operations.length && <p className="empty-state">No network operations have been recorded.</p>}</section>}
+    {tab === 'subscribers' && <section className="workspace-card"><h2>Subscriber connectivity</h2><p>Review every PPPoE, static-IP, and hotspot assignment with its requested and confirmed network state.</p><button className="secondary" onClick={() => setRefresh(value => value + 1)} disabled={loadingAssignments}>Refresh</button>{loadingAssignments ? <p role="status">Loading assignments…</p> : assignments.length ? <div className="table-scroll" role="region" aria-label="Subscriber assignments" tabIndex={0}><table><thead><tr><th>Service</th><th>Subscriber</th><th>Router</th><th>Requested</th><th>Confirmed</th><th>FUP</th></tr></thead><tbody>{assignments.map(item => <tr key={item._id}><td><strong>{String(item.accessType || '').toUpperCase()}</strong><small>{item.username || item.ipAddress || item.macAddress || 'No identifier'}</small></td><td>{item.customerId || '—'}</td><td>{item.routerId || '—'}</td><td>{item.desiredState || item.status || '—'}</td><td>{item.appliedState || 'pending'}</td><td>{item.fup?.desired || 'not configured'}<small>{item.fup?.enforcement || '—'}</small></td></tr>)}</tbody></table></div> : <p className="empty-state">No subscriber assignments have been created.</p>}</section>}
     {tab === 'routers' && <section className="workspace-card"><h2>Router inventory</h2><p>A successful test verifies API access from the billing server. A saved address alone does not confirm connectivity.</p>
       {rows.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="Router inventory"><table><thead><tr><th>Router</th><th>Management address</th><th>Last verified</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={idOf(row)}>
         <td><strong>{row.name}</strong><small>{row.site || 'No site assigned'}{row.primary ? ' · Default' : ''}</small></td>
