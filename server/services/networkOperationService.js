@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const NetworkOperation = require('../models/NetworkOperation');
 const NetworkAssignment = require('../models/NetworkAssignment');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
+const { createPppoeService } = require('./pppoeService');
 
 const word = (key, value) => `=${key}=${value}`;
 const MAX_ATTEMPTS = 8;
@@ -37,6 +38,19 @@ async function applyStaticAssignment(assignment, operation) {
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', queueName: name, target };
 }
 
+async function applyPppoeAssignment(assignment) {
+  const username = String(assignment.username || '').trim();
+  if (!username) throw new Error('PPPoE assignment has no username');
+  const service = createPppoeService();
+  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId) };
+  if (assignment.desiredState === 'absent' || assignment.status === 'released') {
+    await service.remove(context, username);
+    return { state: 'absent', username };
+  }
+  const result = await service.setEnabled(context, [username], assignment.desiredState !== 'suspended');
+  return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', username, verified: result.verified };
+}
+
 async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   const summary = { completed: 0, retried: 0, failed: 0, unsupported: 0 };
   for (let index = 0; index < Math.min(limit, 100); index += 1) {
@@ -47,12 +61,14 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
     try {
       const assignment = await NetworkAssignment.findOne({ _id: operation.assignmentId, tenantId: operation.tenantId }).lean();
       if (!assignment) throw new Error('Network assignment no longer exists');
-      if (assignment.accessType !== 'static') {
+      let observed;
+      if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
+      else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
+      else {
         await NetworkOperation.updateOne(claim, { $set: { status: 'failed', lastError: `${assignment.accessType} provisioning adapter is not enabled yet` }, $unset: { leaseUntil: 1, leaseToken: 1 } });
         summary.unsupported += 1;
         continue;
       }
-      const observed = await applyStaticAssignment(assignment, operation);
       await NetworkOperation.updateOne(claim, { $set: { status: 'complete', observedState: observed, completedAt: new Date(), lastError: null }, $unset: { leaseUntil: 1, leaseToken: 1 } });
       await NetworkAssignment.updateOne({ _id: assignment._id, tenantId: assignment.tenantId }, { $set: { observedState: observed.state, status: observed.state === 'present' ? 'active' : assignment.status, lastSynchronizedAt: new Date(), lastError: null } });
       summary.completed += 1;
@@ -66,4 +82,4 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
-module.exports = { processNetworkOperations, applyStaticAssignment };
+module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment };

@@ -15,3 +15,8 @@ test('operation worker returns an empty summary when there is no due work', asyn
   try { assert.deepEqual(await processNetworkOperations({ limit: 1 }), { completed: 0, retried: 0, failed: 0, unsupported: 0 }); }
   finally { NetworkOperation.findOneAndUpdate = original; }
 });
+
+test('PPPoE adapter requires an explicit username before touching a router', async () => {
+  const { applyPppoeAssignment } = require('../services/networkOperationService');
+  await assert.rejects(() => applyPppoeAssignment({ tenantId: '507f1f77bcf86cd799439011', routerId: '507f1f77bcf86cd799439012', desiredState: 'present' }), /no username/);
+});
