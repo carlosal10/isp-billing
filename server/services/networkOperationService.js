@@ -3,6 +3,8 @@
 const crypto = require('node:crypto');
 const NetworkOperation = require('../models/NetworkOperation');
 const NetworkAssignment = require('../models/NetworkAssignment');
+const RadiusServer = require('../models/RadiusServer');
+const { decryptField } = require('../security/fieldEncryption');
 const { sendCommand } = require('../utils/mikrotikConnectionManager');
 const { createPppoeService } = require('./pppoeService');
 
@@ -51,6 +53,29 @@ async function applyPppoeAssignment(assignment) {
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', username, verified: result.verified };
 }
 
+async function configureRadiusForAssignment(assignment) {
+  if (assignment.authenticationMode !== 'radius') throw new Error('RADIUS operation requires authenticationMode=radius');
+  if (!assignment.radiusServerId) throw new Error('RADIUS assignment has no radiusServerId');
+  const radius = await RadiusServer.findOne({ _id: assignment.radiusServerId, tenantId: assignment.tenantId, enabled: true }).select('+sharedSecret').lean();
+  if (!radius) throw new Error('Enabled RADIUS server was not found in this tenant');
+  const secret = decryptField(radius.sharedSecret);
+  const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId), timeoutMs: 10000 };
+  const rows = await sendCommand('/radius/print', [], context);
+  const existing = (Array.isArray(rows) ? rows : []).find((row) => String(row.address || row.host || '') === String(radius.host));
+  const values = [word('address', radius.host), word('secret', secret), word('service', 'ppp,hotspot'), word('authentication-port', radius.authenticationPort), word('accounting-port', radius.accountingPort), word('timeout', `${Math.ceil(radius.timeoutMs / 1000)}s`), word('comment', `Billing RADIUS ${radius.name}`)];
+  if (existing && (existing['.id'] || existing.id)) await sendCommand('/radius/set', [word('numbers', existing['.id'] || existing.id), ...values], context);
+  else await sendCommand('/radius/add', values, context);
+  const verified = await sendCommand('/radius/print', [word('address', radius.host)], context);
+  if (!Array.isArray(verified) || !verified.length) throw new Error('Router did not confirm RADIUS configuration');
+  if (assignment.pppProfile) {
+    const profiles = await sendCommand('/ppp/profile/print', [word('name', assignment.pppProfile)], context);
+    const profile = Array.isArray(profiles) ? profiles[0] : null;
+    if (!profile?.['.id']) throw new Error('PPP profile for RADIUS assignment was not found');
+    await sendCommand('/ppp/profile/set', [word('numbers', profile['.id']), word('use-radius', 'yes'), word('accounting', 'yes'), word('interim-update', `${radius.interimAccountingInterval}s`)], context);
+  }
+  return { state: 'present', radiusServerId: String(radius._id), verified: true };
+}
+
 async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   const summary = { completed: 0, retried: 0, failed: 0, unsupported: 0 };
   for (let index = 0; index < Math.min(limit, 100); index += 1) {
@@ -63,6 +88,7 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
       if (!assignment) throw new Error('Network assignment no longer exists');
       let observed;
       if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
+      else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
       else if (assignment.accessType === 'pppoe') observed = await applyPppoeAssignment(assignment);
       else {
         await NetworkOperation.updateOne(claim, { $set: { status: 'failed', lastError: `${assignment.accessType} provisioning adapter is not enabled yet` }, $unset: { leaseUntil: 1, leaseToken: 1 } });
@@ -82,4 +108,4 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
   return summary;
 }
 
-module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment };
+module.exports = { processNetworkOperations, applyStaticAssignment, applyPppoeAssignment, configureRadiusForAssignment };

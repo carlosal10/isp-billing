@@ -8,6 +8,8 @@ const networkAssignmentSchema = new mongoose.Schema({
   routerId: { type: mongoose.Schema.Types.ObjectId, ref: 'MikroTikConnection', required: true, index: true },
   accessType: { type: String, enum: ['pppoe', 'static', 'hotspot'], required: true, index: true },
   authenticationMode: { type: String, enum: ['local', 'radius'], default: 'local', index: true },
+  radiusServerId: { type: mongoose.Schema.Types.ObjectId, ref: 'RadiusServer', default: null, index: true },
+  pppProfile: { type: String, trim: true, default: null },
   status: { type: String, enum: ['draft', 'provisioning', 'active', 'suspended', 'released', 'error'], default: 'draft', index: true },
   desiredState: { type: String, enum: ['absent', 'present', 'suspended'], default: 'present', index: true },
   observedState: { type: String, enum: ['unknown', 'absent', 'present', 'suspended', 'error'], default: 'unknown' },

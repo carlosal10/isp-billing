@@ -12,6 +12,7 @@ test('network assignments expose tenant, router, access type, and desired/observ
   assert.equal(paths.routerId.options.required, true);
   assert.deepEqual(paths.accessType.enumValues, ['pppoe', 'static', 'hotspot']);
   assert.deepEqual(paths.authenticationMode.enumValues, ['local', 'radius']);
+  assert.equal(paths.radiusServerId.options.ref, 'RadiusServer');
   assert.deepEqual(paths.desiredState.enumValues, ['absent', 'present', 'suspended']);
   assert.ok(NetworkAssignment.schema.indexes().some(([fields, options]) => options.unique && fields.customerId));
 });
