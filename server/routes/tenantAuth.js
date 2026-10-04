@@ -50,9 +50,11 @@ router.post("/register", registrationLimiter, async (req, res) => {
       console.warn('[auth] register invalid payload', parsed.error?.issues || []);
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
-    const { tenantName, displayName, email, password } = parsed.data;
+    const { displayName, password } = parsed.data;
+    const tenantName = parsed.data.tenantName.trim();
+    const normalizedEmail = parsed.data.email.trim().toLowerCase();
 
-    const existing = await User.findOne({ email }).lean();
+    const existing = await User.findOne({ email: normalizedEmail }).lean();
     if (existing) {
       console.warn('[auth] register rejected because identity already exists');
       return res.status(409).json({ ok: false, error: "Email already exists" });
@@ -62,7 +64,7 @@ router.post("/register", registrationLimiter, async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({
-      email,
+      email: normalizedEmail,
       passwordHash,
       displayName,
       isActive: true,
@@ -104,6 +106,10 @@ router.post("/register", registrationLimiter, async (req, res) => {
     });
   } catch (e) {
     console.error("[auth] register error:", e?.message || e);
+    if (e?.code === 11000) {
+      const field = Object.keys(e.keyPattern || {})[0];
+      return res.status(409).json({ ok: false, error: field === 'name' ? 'That ISP workspace name is already in use' : 'That email address is already registered' });
+    }
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
@@ -123,7 +129,8 @@ router.post("/login", loginLimiter, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid payload" });
     }
 
-    const { email, password, ispId } = parsed.data;
+    const { password, ispId } = parsed.data;
+    const email = parsed.data.email.trim().toLowerCase();
     const user = await User.findOne({ email });
     if (!user || !user.isActive) {
       console.warn('[auth] login rejected for invalid or inactive identity');
