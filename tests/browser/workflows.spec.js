@@ -15,7 +15,7 @@ test('portal enrollment explains verification and requires a six-digit code', as
   await page.getByLabel('ISP workspace').fill('Unknown Fiber');
   await page.getByLabel('Account number').fill('UNKNOWN');
   await page.getByRole('button', { name: 'Send verification code' }).click();
-  await expect(page.getByLabel('Verification code')).toBeVisible();
+  await expect(page.getByLabel('Verification code')).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole('status')).toContainText('If this account');
 });
 

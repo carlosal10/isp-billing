@@ -265,72 +265,16 @@ async function applyBandwidth(customer, plan) {
   return applyCustomerQueue(customer, plan);
 }
 
-// Enable PPPoE secret for a customer using the same alias-search logic
-async function enablePppoeSecret(customer) {
-  try {
-    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
-    if (!tenantId) throw new Error('Missing tenantId on customer');
-    const candidates = [];
-    if (customer?.accountNumber) candidates.push(String(customer.accountNumber).trim());
-    if (Array.isArray(customer?.accountAliases)) {
-      for (const a of customer.accountAliases) {
-        if (a) candidates.push(String(a).trim());
-      }
-    }
-    // try each candidate until we find a secret
-    for (const name of candidates) {
-      if (!name) continue;
-      const rows = await sendCommand('/ppp/secret/print', ['?name=' + name], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
-      const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
-      if (!row) continue;
-      const id = row['.id'] || row.id || row.numbers;
-      if (id) {
-        await sendCommand('/ppp/secret/set', [w('numbers', id), w('disabled', 'no')], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
-        return true;
-      }
-    }
-    return false;
-  } catch (err) {
-    console.error('enablePppoeSecret failed:', err);
-    return false;
-  }
+// Propagate failures to the durable access worker. Never acknowledge a failed router write.
+async function setPppoeAccess(customer, enabled) {
+  const tenantId = String(customer?.tenantId || '');
+  if (!tenantId) throw new Error('Missing tenantId on customer');
+  const candidates = [customer.accountNumber, ...(customer.accountAliases || [])].filter(Boolean).map(String);
+  const context = { tenantId, serverId: customer.routerId || undefined, host: customer.routerId ? undefined : customer.routerIp || undefined };
+  return require('../services/pppoeService').setEnabled(context, candidates, enabled);
 }
-
-// Disable PPPoE secret and remove any active sessions for the given customer
-async function disablePppoeSecret(customer) {
-  try {
-    const tenantId = String(customer && customer.tenantId ? customer.tenantId : '');
-    if (!tenantId) throw new Error('Missing tenantId on customer');
-    const candidates = [];
-    if (customer?.accountNumber) candidates.push(String(customer.accountNumber).trim());
-    if (Array.isArray(customer?.accountAliases)) {
-      for (const a of customer.accountAliases) {
-        if (a) candidates.push(String(a).trim());
-      }
-    }
-    for (const name of candidates) {
-      if (!name) continue;
-      const rows = await sendCommand('/ppp/secret/print', ['?name=' + name], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
-      const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
-      if (!row) continue;
-      const id = row['.id'] || row.id || row.numbers;
-      if (id) {
-        await sendCommand('/ppp/secret/set', [w('numbers', id), w('disabled', 'yes')], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
-      }
-      const active = await sendCommand('/ppp/active/print', ['?name=' + name], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => []);
-      for (const s of Array.isArray(active) ? active : []) {
-        const sid = s['.id'] || s.id || s.numbers;
-        if (!sid) continue;
-        await sendCommand('/ppp/active/remove', [w('=.id', sid)], { tenantId, timeoutMs: DEFAULT_TIMEOUT }).catch(() => {});
-      }
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error('disablePppoeSecret failed:', err);
-    return false;
-  }
-}
+async function enablePppoeSecret(customer) { return setPppoeAccess(customer, true); }
+async function disablePppoeSecret(customer) { return setPppoeAccess(customer, false); }
 
 module.exports = {
   applyCustomerQueue,

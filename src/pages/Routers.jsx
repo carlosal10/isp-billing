@@ -1,167 +1,67 @@
-// src/pages/Routers.jsx
-import React, { useMemo, useState } from "react";
-import { api } from "../lib/apiClient";
-import { useAuth } from "../context/AuthContext";
-import { useServer } from "../context/ServerContext";
-
-function getId(s) {
-  return String(s?.id ?? s?._id ?? s?.serverId ?? "");
-}
-function Row({ s, onPrimary, onTest, onDelete }) {
-  return (
-    <tr>
-      <td>{s.primary ? "★" : ""} {s.name}</td>
-      <td>{s.host}:{s.port}</td>
-      <td>{s.tls ? "yes" : "no"}</td>
-      <td>{s.site || "-"}</td>
-      <td>{s.lastVerifiedAt ? new Date(s.lastVerifiedAt).toLocaleString() : "-"}</td>
-      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-        {!s.primary && (
-          <button onClick={() => onPrimary(s)} title="Make primary">Primary</button>
-        )}
-        <button onClick={() => onTest(s)} style={{ marginLeft: 8 }}>Test</button>
-        <button onClick={() => onDelete(s)} style={{ marginLeft: 8 }} className="danger">
-          Delete
-        </button>
-      </td>
-    </tr>
-  );
-}
-
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../lib/apiClient';
+import { useAuth } from '../context/AuthContext';
+import { useServer } from '../context/ServerContext';
+import { Modal } from '../components/ui/Modal';
+import { Field } from '../components/ui/Field';
+import RouterConnectionForm from '../components/RouterConnectionForm';
+import '../network.css';
+const idOf = row => String(row.id || row._id);
 export default function Routers() {
-  const { status } = useAuth();                // "unknown" | "guest" | "auth"
-  const { servers, reload } = useServer();     // from ServerProvider
-  const [error, setError] = useState("");
-  const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({
-    name: "default",
-    host: "",
-    port: 8728,
-    username: "",
-    password: "",
-    tls: false,
-    primary: true,
-    site: "",
-  });
-
-  const items = useMemo(() => Array.isArray(servers) ? servers : [], [servers]);
-
-  const onChange = (e) => {
-    const { id, type, value, checked } = e.target;
-    setForm((f) => ({ ...f, [id]: type === "checkbox" ? checked : value }));
-  };
-
-  const onCreate = async (e) => {
-    e.preventDefault();
-    setMsg(""); setError("");
-    try {
-      await api.post("/mikrotik/servers", {
-        name: form.name.trim() || "default",
-        host: form.host.trim(),
-        port: Number(form.port) || (form.tls ? 8729 : 8728),
-        username: form.username.trim(),
-        password: form.password,
-        tls: !!form.tls,
-        primary: !!form.primary,
-        site: form.site || undefined,
-      });
-      setMsg("Created");
-      setForm((f) => ({ ...f, password: "" }));
-      await reload();
-    } catch (e2) {
-      setError(e2?.message || "Create failed");
-    }
-  };
-
-  const onPrimary = async (s) => {
-    setMsg(""); setError("");
-    try {
-      await api.put(`/mikrotik/servers/${getId(s)}`, { primary: true });
-      await reload();
-    } catch (e2) {
-      setError(e2?.message || "Failed to set primary");
-    }
-  };
-
-  const onTest = async (s) => {
-    setMsg(""); setError("");
-    try {
-      const { data } = await api.post(`/mikrotik/servers/${getId(s)}/test`);
-      setMsg(`Server ${s.name}: ${data?.identity || "ok"}`);
-      await reload();
-    } catch (e2) {
-      setError(e2?.message || "Test failed");
-    }
-  };
-
-  const onDelete = async (s) => {
-    if (!window.confirm(`Delete server ${s.name}?`)) return;
-    setMsg(""); setError("");
-    try {
-      await api.delete(`/mikrotik/servers/${getId(s)}`);
-      await reload();
-    } catch (e2) {
-      setError(e2?.message || "Delete failed");
-    }
-  };
-
-  // ---- Auth gating (prevents "Missing token" calls) ----
-  if (status === "unknown") {
-    return <div style={{ padding: 16 }}>Checking session…</div>;
+  const { role } = useAuth(), { servers, reload, selected, setSelected } = useServer();
+  const [tab, setTab] = useState('routers'), [editing, setEditing] = useState(null), [removing, setRemoving] = useState(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
+  const [sessions, setSessions] = useState([]), [loadingSessions, setLoadingSessions] = useState(false), [refresh, setRefresh] = useState(0);
+  const canManage = ['owner', 'admin'].includes(role);
+  const rows = Array.isArray(servers) ? servers : [];
+  useEffect(() => {
+    if (tab !== 'accounting') return;
+    setSessions([]); setError('');
+    if (!selected) return;
+    let disposed = false;
+    setLoadingSessions(true);
+    api.get('/mikrotik/servers/' + selected + '/sessions').then(({ data }) => { if (!disposed) setSessions(data.sessions || []); })
+      .catch(err => { if (!disposed) setError(err.response?.data?.error || 'Unable to load accounting.'); })
+      .finally(() => { if (!disposed) setLoadingSessions(false); });
+    return () => { disposed = true; };
+  }, [selected, tab, refresh]);
+  async function action(work, success) {
+    setBusy(true); setError(''); setMessage('');
+    try { const result = await work(); setMessage(typeof success === 'function' ? success(result) : success); await reload(); }
+    catch (err) { setError(err.response?.data?.error || 'The operation could not be completed.'); }
+    finally { setBusy(false); }
   }
-  if (status !== "auth") {
-    return <div style={{ padding: 16 }}>Please log in to manage MikroTik servers.</div>;
-  }
-
-  return (
-    <div style={{ padding: 16 }}>
-      <h1>MikroTik Servers</h1>
-      {error && <div className="msg-err" role="alert">{error}</div>}
-      {msg &&   <div className="msg-ok"  role="status">{msg}</div>}
-
-      <form onSubmit={onCreate} className="stacked-form" style={{ maxWidth: 720, marginBottom: 20 }}>
-        <h3>Add Server</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <label>Name<input id="name" value={form.name} onChange={onChange} required /></label>
-          <label>Site<input id="site" value={form.site} onChange={onChange} placeholder="Optional label" /></label>
-          <label>Host<input id="host" value={form.host} onChange={onChange} required /></label>
-          <label>Port<input id="port" type="number" value={form.port} onChange={onChange} /></label>
-          <label>User<input id="username" value={form.username} onChange={onChange} required /></label>
-          <label>Password<input id="password" type="password" value={form.password} onChange={onChange} required /></label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input id="tls" type="checkbox" checked={form.tls} onChange={onChange} /> TLS (8729)
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input id="primary" type="checkbox" checked={form.primary} onChange={onChange} /> Set as primary
-          </label>
-        </div>
-        <button type="submit" style={{ marginTop: 8 }}>Save</button>
-      </form>
-
-      <h3>Servers</h3>
-      <div className="table-wrapper">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Address</th>
-              <th>TLS</th>
-              <th>Site</th>
-              <th>Verified</th>
-              <th style={{ textAlign: "right" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length > 0 ? (
-              items.map((s) => (
-                <Row key={getId(s)} s={s} onPrimary={onPrimary} onTest={onTest} onDelete={onDelete} />
-              ))
-            ) : (
-              <tr><td colSpan={6} style={{ textAlign: "center" }}>No servers yet</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <main className="workspace-page network-workspace">
+    <header className="workspace-header"><div><span className="eyebrow">NETWORK OPERATIONS</span><h1>Network workspace</h1><p>Manage router connections and inspect subscriber accounting.</p></div>
+      {canManage && <button onClick={() => setEditing({})}>Add router</button>}</header>
+    <nav className="network-tabs" aria-label="Network views">{[['routers', 'Routers'], ['accounting', 'RADIUS accounting'], ['guide', 'Connection guide']].map(([key, label]) => <button key={key} className="secondary" aria-pressed={tab === key} onClick={() => { setTab(key); setError(''); setMessage(''); }}>{label}</button>)}</nav>
+    {error && <div role="alert" className="notice error">{error}</div>}
+    {message && <div role="status" className="notice">{message}</div>}
+    {tab === 'routers' && <section className="workspace-card"><h2>Router inventory</h2><p>A successful test verifies API access from the billing server. A saved address alone does not confirm connectivity.</p>
+      {rows.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="Router inventory"><table><thead><tr><th>Router</th><th>Management address</th><th>Last verified</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={idOf(row)}>
+        <td><strong>{row.name}</strong><small>{row.site || 'No site assigned'}{row.primary ? ' · Default' : ''}</small></td>
+        <td>{row.host}:{row.port}<small>{row.tls ? 'TLS verified on connect' : 'Private network API'}</small></td>
+        <td>{row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toLocaleString() : 'Not verified'}</td>
+        <td><div className="network-actions"><button className="secondary" disabled={busy} onClick={() => action(() => api.post('/mikrotik/servers/' + idOf(row) + '/test', {}, { timeout: 20000 }), response => 'Connection verified: ' + response.data.identity)}>Test {row.name}</button>
+          {canManage && <><button className="secondary" onClick={() => setEditing(row)}>Edit {row.name}</button><button className="secondary" onClick={() => setRemoving(row)}>Remove {row.name}</button></>}</div></td>
+      </tr>)}</tbody></table></div> : <div className="empty-state"><h3>Connect your first router</h3><p>Use its LAN or tunnel address if the billing server has a private route to it.</p><button className="secondary" onClick={() => setTab('guide')}>View connection guide</button></div>}
+      <div className="form-actions"><Link to="/pppoe">Manage local PPPoE users →</Link></div>
+    </section>}
+    {tab === 'accounting' && <section className="workspace-card"><h2>RADIUS session accounting</h2><p>Latest 100 session snapshots received from your trusted RADIUS integration. Accounting records report usage; they do not authenticate or disconnect subscribers.</p>
+      <div className="network-select"><Field label="Accounting router"><select value={selected || ''} onChange={event => setSelected(event.target.value)}><option value="">Select a router</option>{rows.map(row => <option key={idOf(row)} value={idOf(row)}>{row.name}</option>)}</select></Field></div>
+      <button className="secondary" onClick={() => setRefresh(value => value + 1)} disabled={!selected || loadingSessions}>Refresh accounting</button>
+      {loadingSessions ? <p role="status">Loading accounting…</p> : sessions.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="RADIUS sessions"><table><thead><tr><th>Subscriber</th><th>State</th><th>Upload bytes</th><th>Download bytes</th><th>Last event</th></tr></thead><tbody>{sessions.map(row => <tr key={row._id}><td>{row.username}<small>{row.framedIp || 'No address reported'}</small></td><td>{row.status}</td><td>{BigInt(row.uploadBytes).toLocaleString()}</td><td>{BigInt(row.downloadBytes).toLocaleString()}</td><td>{new Date(row.lastEventAt).toLocaleString()}</td></tr>)}</tbody></table></div>
+        : <p className="empty-state">No accounting snapshots received for this router. Connect your RADIUS exporter using an API key with the accounting scope.</p>}
+      <p className="network-note">An active session becomes stale after 15 minutes without a newer event. Stale is not proof of disconnection. Records are retained for 90 days.</p>
+    </section>}
+    {tab === 'guide' && <section className="workspace-card"><h2>Choose the connection path</h2><div className="network-guide">
+      <article><h3>Private tunnel · recommended</h3><p>The router initiates a VPN connection to your network gateway. Route the billing server to the router tunnel address. This works behind NAT without exposing the router API publicly.</p></article>
+      <article><h3>Local deployment</h3><p>A billing backend on the router network can use its LAN address. Opening the website from your laptop does not put a cloud backend on that LAN.</p></article>
+      <article><h3>Direct management</h3><p>A public address or DDNS name can work with a reachable API port and suitable firewall rules. DDNS names the router; it does not bypass NAT or CGNAT.</p></article>
+    </div><h3>Where RADIUS fits</h3><p>Use FreeRADIUS for subscriber authentication, authorization and accounting. RouterOS sends requests to it. Keep API management over a private route for provisioning and operational checks. Local PPP secrets can take precedence over RADIUS accounts, so migration needs a staged pilot.</p>
+    <p className="network-note">This release accepts accounting snapshots from a trusted exporter. It does not install a VPN or RADIUS server, enable RADIUS authentication, or send disconnect requests.</p></section>}
+    <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit router' : 'Add router'}>{editing && <RouterConnectionForm key={editing.id || 'new'} initial={editing.id ? editing : undefined} onSaved={text => { setEditing(null); setMessage(text); reload(); }} />}</Modal>
+    <Modal open={!!removing} onClose={() => { if (!busy) setRemoving(null); }} title="Remove router"><p>Remove {removing?.name} from this workspace? This removes its saved management connection. It does not reconfigure the router.</p><div className="form-actions"><button disabled={busy} onClick={() => action(async () => { await api.delete('/mikrotik/servers/' + idOf(removing)); setRemoving(null); }, 'Router removed.')}>Confirm removal</button><button className="secondary" onClick={() => setRemoving(null)} disabled={busy}>Cancel</button></div></Modal>
+  </main>;
 }
