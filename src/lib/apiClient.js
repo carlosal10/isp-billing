@@ -1,4 +1,5 @@
 import axios from "axios";
+import { validateApiResponse } from './apiResponse';
 
 /** ================================
  *  Config
@@ -243,7 +244,7 @@ function attachInterceptors(client, { includeTenantHeader }) {
   });
 
   client.interceptors.response.use(
-    (res) => res,
+    validateApiResponse,
     async (error) => {
       const original = error?.config || {};
       const status = error?.response?.status;
