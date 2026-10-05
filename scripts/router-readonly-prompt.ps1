@@ -1,4 +1,6 @@
+param([switch]$WriteTest)
 $ErrorActionPreference = 'Stop'
+$reportName = if ($WriteTest) { 'router-write-result.json' } else { 'router-readonly-result.json' }
 Add-Type -AssemblyName System.Windows.Forms
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'MikroTik read-only check'
@@ -8,6 +10,10 @@ $form.StartPosition = 'CenterScreen'
 $form.TopMost = $true
 $label = New-Object System.Windows.Forms.Label
 $label.Text = "Enter the billing-test password for 192.168.88.1.`nRead-only checks. Password is not saved."
+if ($WriteTest) {
+  $form.Text = 'MikroTik isolated PPPoE write test'
+  $label.Text = "billing-test password for 192.168.88.1.`nCreates and removes a temporary PPPoE account/profile."
+}
 $label.SetBounds(20, 20, 400, 50)
 $passwordBox = New-Object System.Windows.Forms.TextBox
 $passwordBox.UseSystemPasswordChar = $true
@@ -25,6 +31,7 @@ New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 $start = New-Object System.Diagnostics.ProcessStartInfo
 $start.FileName = (Get-Command node).Source
 $start.Arguments = 'scripts/router-readonly-check.cjs'
+if ($WriteTest) { $start.Arguments = 'scripts/router-write-check.cjs' }
 $start.WorkingDirectory = $workspace
 $start.UseShellExecute = $false
 $start.CreateNoWindow = $true
@@ -41,8 +48,8 @@ $process.WaitForExit()
 # Save only the structured report; discard dependency logs or raw errors.
 try {
   $report = $result | ConvertFrom-Json
-  $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $artifactDir 'router-readonly-result.json')
+  $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
 } catch {
-  '{"error":"Router test did not return a valid report"}' | Set-Content -LiteralPath (Join-Path $artifactDir 'router-readonly-result.json')
+  '{"error":"Router test did not return a valid report"}' | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
 }
 $process.Dispose()
