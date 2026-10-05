@@ -45,7 +45,7 @@ services:
     autoDeploy: true
     envVars:
       - key: REACT_APP_API_URL
-        sync: false
+        value: https://isp-billing-server.onrender.com/api
       - key: REQUIRE_PUBLIC_API_URL
         value: "true"
     routes:
