@@ -19,6 +19,25 @@ function createPppoeService(send = (...args) => manager.sendCommand(...args)) {
     }
   }
   return {
+    async ensureProvisioned(context, { username, password, profile, assignmentId, enabled }) {
+      const marker = 'billing-assignment:' + assignmentId;
+      let rows = await call(context, '/ppp/secret/print', ['?name=' + username]);
+      const creating = !rows.length;
+      if (rows.length && (rows.length !== 1 || rows[0].comment !== marker || rows[0].service !== 'pppoe')) {
+        throw fail(409, 'Username belongs to another router account. Choose a new username.');
+      }
+      if (!rows.length) {
+        if (!password || !profile) throw fail(400, 'PPPoE provisioning requires a password and profile.');
+        const profiles = await call(context, '/ppp/profile/print', ['?name=' + profile]);
+        if (!profiles.some(p => p.name === profile)) throw fail(400, 'Selected PPP profile does not exist.');
+        await call(context, '/ppp/secret/add', ['=name=' + username, '=password=' + password, '=service=pppoe', '=profile=' + profile, '=comment=' + marker, '=disabled=' + (enabled ? 'no' : 'yes')]);
+        rows = await call(context, '/ppp/secret/print', ['?name=' + username]);
+      }
+      const row = rows[0];
+      if (!row?.['.id'] || row.comment !== marker || row.service !== 'pppoe' || (creating && row.profile !== profile)) throw fail(502, 'Router did not confirm the requested PPPoE account.');
+      // A retry may recover an add that succeeded before the connection dropped.
+      return publicSecret(row);
+    },
     async profiles(context) {
       const rows = await call(context, '/ppp/profile/print');
       return rows.map(p => ({ id: p['.id'], name: p.name, localAddress: p['local-address'] || '', rateLimit: p['rate-limit'] || '' }));
@@ -41,8 +60,11 @@ function createPppoeService(send = (...args) => manager.sendCommand(...args)) {
       // password is intentionally never echoed or compared locally.
       await find(context, username);
     },
-    async remove(context, username) {
-      const row = await find(context, username);
+    async remove(context, username, assignmentId) {
+      let row;
+      try { row = await find(context, username); }
+      catch (error) { if (assignmentId && error.statusCode === 404) return; throw error; }
+      if (assignmentId && row.comment !== 'billing-assignment:' + assignmentId) throw fail(409, 'Router account ownership changed; removal refused.');
       await call(context, '/ppp/secret/set', ['=.id=' + row['.id'], '=disabled=yes']);
       await disconnect(context, username);
       await call(context, '/ppp/secret/remove', ['=.id=' + row['.id']]);

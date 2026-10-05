@@ -47,8 +47,11 @@ async function applyPppoeAssignment(assignment) {
   const service = createPppoeService();
   const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId) };
   if (assignment.desiredState === 'absent' || assignment.status === 'released') {
-    await service.remove(context, username);
+    await service.remove(context, username, assignment.provisioningPassword ? String(assignment._id) : undefined);
     return { state: 'absent', username };
+  }
+  if (assignment.provisioningPassword) {
+    await service.ensureProvisioned(context, { username, password: decryptField(assignment.provisioningPassword), profile: assignment.pppProfile, assignmentId: String(assignment._id), enabled: assignment.desiredState !== 'suspended' && assignment.fup?.desired !== 'blocked' });
   }
   const result = await service.setEnabled(context, [username], assignment.desiredState !== 'suspended' && assignment.fup?.desired !== 'blocked');
   return { state: assignment.desiredState === 'suspended' ? 'suspended' : 'present', username, verified: result.verified };
@@ -100,9 +103,11 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
     const operation = await NetworkOperation.findOneAndUpdate({ operationType: { $nin: ['fup.apply', 'fup.restore'] }, status: { $in: ['pending', 'processing'] }, nextAttemptAt: { $lte: now }, $or: [{ leaseUntil: null }, { leaseUntil: { $lte: now } }] }, { $set: { status: 'processing', leaseToken, leaseUntil: new Date(now.getTime() + 120000) }, $inc: { attempts: 1 } }, { sort: { nextAttemptAt: 1 }, new: true }).lean();
     if (!operation) break;
     const claim = { _id: operation._id, leaseToken };
+    let protectsCredential = false;
     try {
-      const assignment = await NetworkAssignment.findOne({ _id: operation.assignmentId, tenantId: operation.tenantId }).lean();
+      const assignment = await NetworkAssignment.findOne({ _id: operation.assignmentId, tenantId: operation.tenantId }).select('+provisioningPassword').lean();
       if (!assignment) throw new Error('Network assignment no longer exists');
+      protectsCredential = !!assignment.provisioningPassword;
       let observed;
       if (assignment.accessType === 'static') observed = await applyStaticAssignment(assignment, operation);
       else if (assignment.accessType === 'pppoe' && assignment.authenticationMode === 'radius') observed = await configureRadiusForAssignment(assignment);
@@ -114,9 +119,10 @@ async function processNetworkOperations({ limit = 20, now = new Date() } = {}) {
         continue;
       }
       await NetworkOperation.updateOne(claim, { $set: { status: 'complete', observedState: observed, completedAt: new Date(), lastError: null }, $unset: { leaseUntil: 1, leaseToken: 1 } });
-      await NetworkAssignment.updateOne({ _id: assignment._id, tenantId: assignment.tenantId }, { $set: { observedState: observed.state, status: observed.state === 'present' ? 'active' : assignment.status, lastSynchronizedAt: new Date(), lastError: null } });
+      await NetworkAssignment.updateOne({ _id: assignment._id, tenantId: assignment.tenantId }, { $set: { observedState: observed.state, status: observed.state === 'present' ? 'active' : observed.state === 'suspended' ? 'suspended' : observed.state === 'absent' ? 'released' : assignment.status, lastSynchronizedAt: new Date(), lastError: null } });
       summary.completed += 1;
     } catch (error) {
+      if (protectsCredential && !error.statusCode) error = new Error('PPPoE provisioning could not be confirmed. Check router connectivity and retry.');
       const failed = operation.attempts >= MAX_ATTEMPTS;
       await NetworkOperation.updateOne(claim, { $set: { status: failed ? 'dead-letter' : 'pending', nextAttemptAt: new Date(now.getTime() + Math.min(3600000, 1000 * 2 ** operation.attempts)), lastError: String(error?.message || error) }, $unset: { leaseUntil: 1, leaseToken: 1 } });
       await NetworkAssignment.updateOne({ _id: operation.assignmentId, tenantId: operation.tenantId }, { $set: { observedState: 'error', status: 'error', lastError: String(error?.message || error) } });

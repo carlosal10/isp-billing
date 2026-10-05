@@ -10,6 +10,7 @@ const networkAssignmentSchema = new mongoose.Schema({
   authenticationMode: { type: String, enum: ['local', 'radius'], default: 'local', index: true },
   radiusServerId: { type: mongoose.Schema.Types.ObjectId, ref: 'RadiusServer', default: null, index: true },
   pppProfile: { type: String, trim: true, default: null },
+  provisioningPassword: { type: String, select: false },
   status: { type: String, enum: ['draft', 'provisioning', 'active', 'suspended', 'released', 'error'], default: 'draft', index: true },
   desiredState: { type: String, enum: ['absent', 'present', 'suspended'], default: 'present', index: true },
   observedState: { type: String, enum: ['unknown', 'absent', 'present', 'suspended', 'error'], default: 'unknown' },
@@ -41,6 +42,7 @@ const networkAssignmentSchema = new mongoose.Schema({
 }, { timestamps: true, versionKey: false });
 
 const activeStatuses = ['draft', 'provisioning', 'active', 'suspended', 'error'];
+networkAssignmentSchema.set('toJSON', { transform(_doc, ret) { delete ret.provisioningPassword; return ret; } });
 networkAssignmentSchema.index({ tenantId: 1, customerId: 1, accessType: 1 }, { unique: true, partialFilterExpression: { status: { $in: activeStatuses } } });
 networkAssignmentSchema.index({ tenantId: 1, routerId: 1, ipAddress: 1 }, { unique: true, partialFilterExpression: { ipAddress: { $type: 'string' }, status: { $in: activeStatuses } } });
 networkAssignmentSchema.index({ tenantId: 1, desiredState: 1, status: 1 });

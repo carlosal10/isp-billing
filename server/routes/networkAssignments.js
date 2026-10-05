@@ -9,6 +9,7 @@ const NetworkOperation = require('../models/NetworkOperation');
 const Customer = require('../models/customers');
 const FupPolicy = require('../models/FupPolicy');
 const MikroTikConnection = require('../models/MikrotikConnection');
+const { encryptField } = require('../security/fieldEncryption');
 
 function tenantFilter(req, extra = {}) { return { tenantId: req.tenantId, ...extra }; }
 function validId(value) { return mongoose.isValidObjectId(value); }
@@ -33,6 +34,10 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
     return res.status(400).json({ ok: false, error: 'customerId, routerId and a valid accessType are required' });
   }
   if (!['pppoe', 'static', 'hotspot'].includes(accessType)) return res.status(400).json({ ok: false, error: 'Unsupported accessType' });
+  const localPpp = accessType === 'pppoe' && (!req.body.authenticationMode || req.body.authenticationMode === 'local');
+  if (localPpp && (!['username', 'pppProfile'].every(k => typeof req.body[k] === 'string' && req.body[k].trim().length > 0 && req.body[k].length <= 128) || typeof req.body.password !== 'string' || req.body.password.length < 8 || req.body.password.length > 128)) {
+    return res.status(400).json({ error: 'Enter a PPPoE username, router profile and password of 8–128 characters.' });
+  }
   try {
     if (req.body.fupPolicyId && !await FupPolicy.exists({ _id: req.body.fupPolicyId, tenantId: req.tenantId })) return res.status(404).json({ error: 'FUP policy not found' });
     const [customer, routerRecord] = await Promise.all([
@@ -46,6 +51,7 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
     }
     const permitted = ['username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'fupPolicyId', 'authenticationMode', 'radiusServerId', 'pppProfile'];
     const input = Object.fromEntries(permitted.filter(k => req.body[k] !== undefined).map(k => [k, req.body[k]]));
+    if (localPpp) input.provisioningPassword = encryptField(req.body.password);
     const assignment = await NetworkAssignment.create({ ...input, tenantId: req.tenantId, customerId, routerId, accessType });
     const operation = await NetworkOperation.create({
       tenantId: req.tenantId, routerId, customerId, assignmentId: assignment._id,
@@ -63,6 +69,10 @@ router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ ok: false, error: 'Invalid assignment id' });
   const allowed = ['status', 'desiredState', 'username', 'ipAddress', 'macAddress', 'vlanId', 'profileId', 'policyId', 'fupPolicyId', 'metadata', 'authenticationMode', 'radiusServerId', 'pppProfile'];
   const update = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+  if (['username', 'pppProfile', 'authenticationMode'].some(key => key in update)) {
+    const current = await NetworkAssignment.findOne(tenantFilter(req, { _id: req.params.id })).select('+provisioningPassword').lean();
+    if (current?.provisioningPassword) return res.status(409).json({ error: 'Provisioned PPPoE identity and profile changes require a dedicated account change workflow.' });
+  }
   if (update.fupPolicyId && !await FupPolicy.exists({ _id: update.fupPolicyId, tenantId: req.tenantId })) return res.status(404).json({ error: 'FUP policy not found' });
   const assignment = await NetworkAssignment.findOneAndUpdate(tenantFilter(req, { _id: req.params.id }), { $set: update }, { new: true, runValidators: true });
   if (!assignment) return res.status(404).json({ ok: false, error: 'Assignment not found' });
