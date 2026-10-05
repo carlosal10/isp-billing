@@ -1,5 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { createConnectionManager } = require('../server/utils/mikrotikConnectionManager');
 const { createPppoeService } = require('../server/services/pppoeService');
 let input = '';
@@ -9,13 +11,17 @@ process.stdin.on('end', async () => {
   const name = 'billing-test-' + crypto.randomBytes(8).toString('hex');
   const marker = 'billing-assignment:' + name;
   const report = { checkedAt: new Date().toISOString(), testName: name, checks: [], cleanup: 'not needed' };
+  const outputDir = path.join(__dirname, '../artifacts');
+  fs.mkdirSync(outputDir, { recursive: true });
+  const save = () => fs.writeFileSync(path.join(outputDir, 'router-write-result.json'), JSON.stringify(report, null, 2));
+  report.state = 'running'; save();
   const manager = createConnectionManager();
   const context = { tenantId: 'local-write-test', serverId: 'lan-test-router', timeoutMs: 8000 };
   const call = (path, words = []) => manager.sendCommand(path, words, context);
   const service = createPppoeService((...args) => manager.sendCommand(...args));
   let profileAttempted = false, secretAttempted = false;
   let stage = 'authentication';
-  const deadline = setTimeout(() => { console.log(JSON.stringify({ ...report, error: 'Test deadline exceeded', cleanup: 'unverified; inspect only objects named ' + name })); process.exit(1); }, 180000);
+  const deadline = setTimeout(() => { Object.assign(report, { state: 'failed', error: 'Test deadline exceeded', cleanup: 'unverified; inspect only objects named ' + name }); save(); console.log(JSON.stringify(report)); process.exit(1); }, 180000);
   try {
     const credentials = JSON.parse(input); input = '';
     const config = { id: context.serverId, host: '192.168.88.1', port: 8728, user: 'billing-test', password: credentials.password };
@@ -23,14 +29,28 @@ process.stdin.on('end', async () => {
     manager.setConfigLoader(async (tenant, selector) => tenant === context.tenantId && selector.id === context.serverId ? config : null);
     await call('/system/resource/print', ['=.proplist=version']);
     report.checks.push({ name: 'Authentication', passed: true });
+    stage = 'previous test cleanup inspection';
+    const leftovers = [];
+    for (const resource of ['profile', 'secret']) {
+      const rows = await call('/ppp/' + resource + '/print', ['=.proplist=name,comment']);
+      for (const row of rows) {
+        if (/^billing-test-[a-f0-9]{16}$/.test(row.name || '') && row.comment === 'billing-assignment:' + row.name) leftovers.push({ resource, name: row.name });
+      }
+    }
+    if (leftovers.length) {
+      report.previousTestObjects = leftovers;
+      throw new Error('Earlier test objects need inspection');
+    }
     stage = 'temporary profile creation';
     if ((await call('/ppp/profile/print', ['?name=' + name])).length || (await call('/ppp/secret/print', ['?name=' + name])).length) throw new Error('Name collision');
     profileAttempted = true;
+    report.cleanup = 'pending'; report.stage = stage; save();
     await call('/ppp/profile/add', ['=name=' + name, '=comment=' + marker, '=rate-limit=1M/2M']);
     const profiles = await call('/ppp/profile/print', ['?name=' + name, '=.proplist=.id,name,comment,rate-limit']);
     if (profiles.length !== 1 || profiles[0]['rate-limit'] !== '1M/2M') throw new Error('Profile not verified');
     report.checks.push({ name: 'Temporary profile and rate configuration', passed: true });
     stage = 'PPPoE account creation'; secretAttempted = true;
+    report.stage = stage; save();
     const options = { assignmentId: name, username: name, password: crypto.randomBytes(32).toString('hex'), profile: name, enabled: false };
     const created = await service.ensureProvisioned(context, options);
     if (!created.disabled) throw new Error('Account not disabled');
@@ -41,10 +61,12 @@ process.stdin.on('end', async () => {
     report.checks.push({ name: 'Retry reuses the same account', passed: true });
     // Random credentials stay in memory and are never used by a subscriber.
     stage = 'enable and suspend';
+    report.stage = stage; save();
     await service.setEnabled(context, [name], true);
     await service.setEnabled(context, [name], false);
     report.checks.push({ name: 'Enable and suspend temporary account', passed: true });
     stage = 'account release';
+    report.stage = stage; save();
     await service.remove(context, name, name);
     await service.remove(context, name, name);
     report.checks.push({ name: 'Release and repeat release', passed: true });
@@ -66,5 +88,6 @@ process.stdin.on('end', async () => {
     } catch { report.cleanup = 'unverified; inspect only objects named ' + name; process.exitCode = 1; }
     await manager.shutdown(); clearTimeout(deadline);
   }
+  report.state = report.error || report.cleanup !== 'verified' ? 'failed' : 'complete'; save();
   console.log(JSON.stringify(report, null, 2));
 });

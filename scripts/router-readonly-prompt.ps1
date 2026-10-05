@@ -25,6 +25,7 @@ $button.DialogResult = [System.Windows.Forms.DialogResult]::OK
 $form.Controls.AddRange(@($label, $passwordBox, $button))
 $form.AcceptButton = $button
 if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { $form.Dispose(); exit }
+try {
 $workspace = Split-Path -Parent $PSScriptRoot
 $artifactDir = Join-Path $workspace 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
@@ -53,3 +54,7 @@ try {
   '{"error":"Router test did not return a valid report"}' | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
 }
 $process.Dispose()
+[System.Windows.Forms.MessageBox]::Show('Checks finished. The local report is ready for review.', 'MikroTik test completed') | Out-Null
+} catch {
+  [System.Windows.Forms.MessageBox]::Show('The local test could not finish. Tell the assistant this message appeared. No password has been saved.', 'MikroTik test error') | Out-Null
+}
