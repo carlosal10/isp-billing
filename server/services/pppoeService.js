@@ -19,6 +19,17 @@ function createPppoeService(send = (...args) => manager.sendCommand(...args)) {
     }
   }
   return {
+    async ensureLinked(context, assignment) {
+      const row = await find(context, assignment.username);
+      const marker = 'billing-assignment:' + assignment._id;
+      if (row.comment === marker) return publicSecret(row);
+      if (row['.id'] !== assignment.linkedAccount?.routerId || String(row.comment || '') !== String(assignment.linkedAccount?.originalComment || '') || String(row.comment || '').startsWith('billing-assignment:')) {
+        throw fail(409, 'Existing account changed or is owned by another assignment. Review the link again.');
+      }
+      await call(context, '/ppp/secret/set', ['=.id=' + row['.id'], '=comment=' + marker]);
+      if ((await find(context, assignment.username)).comment !== marker) throw fail(502, 'Account link was not confirmed');
+      return publicSecret(row);
+    },
     async ensureProvisioned(context, { username, password, profile, assignmentId, enabled }) {
       const marker = 'billing-assignment:' + assignmentId;
       let rows = await call(context, '/ppp/secret/print', ['?name=' + username]);
@@ -76,6 +87,7 @@ function createPppoeService(send = (...args) => manager.sendCommand(...args)) {
         try { row = await find(context, username); break; } catch (error) { if (error.statusCode !== 404) throw error; }
       }
       if (!row) throw fail(404, 'No local PPPoE secret matches this customer on the selected router.');
+      if (context.requireUnmanaged && String(row.comment || '').startsWith('billing-assignment:')) throw fail(409, 'Managed subscriber access must use its linked assignment.');
       await call(context, '/ppp/secret/set', ['=.id=' + row['.id'], '=disabled=' + (enabled ? 'no' : 'yes')]);
       if (!enabled) await disconnect(context, row.name);
       const observed = publicSecret(await find(context, row.name));

@@ -1512,6 +1512,114 @@ paths:
       summary: Public STK paylink starter
       responses:
         '200': { description: OK }
+  /customers:
+    get:
+      summary: List tenant customer identity and billing records
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Customer records }
+    post:
+      summary: Create a billing customer without router writes
+      description: Owners and admins create identity and billing records; provision or link service separately. Router availability is not required.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan, connectionType]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                phone: { type: string }
+                address: { type: string }
+                accountNumber: { type: string }
+                plan: { type: string }
+                connectionType: { type: string, enum: [pppoe, static, hotspot] }
+                billingProfile: { type: object }
+      responses:
+        '201': { description: Billing customer saved; no router service provisioned }
+        '400': { description: Invalid billing details or duplicate account }
+        '403': { description: Owner or administrator required }
+        '409': { description: Router settings must be managed through a service }
+  /customers/{id}:
+    put:
+      summary: Update customer billing and contact details without router writes
+      description: Router setting edits are rejected. Account number edits do not rename service usernames. Billing plan changes do not change router profiles.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Customer updated }
+        '400': { description: Invalid fields }
+        '403': { description: Owner or administrator required }
+        '404': { description: Customer not found }
+        '409': { description: Archived customer, network-setting edit or active service conflict }
+    delete:
+      summary: Archive customer and retain financial history
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Customer archived }
+        '403': { description: Owner or administrator required }
+        '404': { description: Customer not found }
+        '409': { description: Release all services or migrate unlinked legacy service first }
+  /network/assignments/discover/pppoe:
+    get:
+      summary: Preview unlinked local accounts on a tenant router without exposing passwords
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: query, name: routerId, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Unreserved account usernames, profiles and disabled states }
+        '400': { description: Invalid router identifier }
+        '403': { description: Owner or administrator required }
+        '404': { description: Tenant router not found }
+        '500': { description: Router discovery failed }
+  /network/assignments/link:
+    post:
+      summary: Queue explicit linking of an existing local PPPoE account
+      description: Preserves credentials and profile; worker verifies preview identity and ownership. Billing restrictions still apply.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, routerId, username]
+              properties:
+                customerId: { type: string }
+                routerId: { type: string }
+                username: { type: string, maxLength: 128 }
+      responses:
+        '201': { description: Link queued; router confirmation pending }
+        '400': { description: Invalid linking fields }
+        '403': { description: Owner or administrator required }
+        '404': { description: Tenant customer or router not found }
+        '409': { description: Missing, reserved, ambiguous or owned account }
+  /network/assignments/{id}/password:
+    post:
+      summary: Queue an encrypted versioned credential update for a linked local PPPoE service
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
+      responses:
+        '200': { description: Credential update queued; active sessions retain their connection }
+        '400': { description: Invalid password or identifier }
+        '403': { description: Owner or administrator required }
+        '404': { description: Editable local PPPoE service not found }
   /network/assignments:
     get:
       summary: List tenant assignments with cursor pagination

@@ -9,7 +9,6 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const isAnonymized = customer?.status === "anonymized" || customer?.privacyProfile?.isAnonymized === true;
@@ -41,36 +40,6 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
   const plan = customer.plan;
   const billingProfile = customer.billingProfile || {};
   const isAnonymized = customer.status === "anonymized" || customer.privacyProfile?.isAnonymized === true;
-  const canToggle = !isAnonymized && customer.connectionType === "pppoe" && health && typeof health.disabled === "boolean";
-
-  const doEnable = async () => {
-    if (!customer?.accountNumber) return;
-    setSaving(true);
-    try {
-      await api.post(`/pppoe/${encodeURIComponent(customer.accountNumber)}/enable`);
-      const { data } = await api.get(`/customers/health/${encodeURIComponent(customer.accountNumber)}`);
-      setHealth(data);
-    } catch (e) {
-      setError(e.message || "Enable failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const doDisable = async () => {
-    if (!customer?.accountNumber) return;
-    setSaving(true);
-    try {
-      await api.post(`/pppoe/${encodeURIComponent(customer.accountNumber)}/disable`, null, { params: { disconnect: true } });
-      const { data } = await api.get(`/customers/health/${encodeURIComponent(customer.accountNumber)}`);
-      setHealth(data);
-    } catch (e) {
-      setError(e.message || "Disable failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 16, background: '#fff', boxShadow: '0 2px 5px rgba(10,31,68,.08)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -79,7 +48,7 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
           <div style={{ color: '#334155', marginTop: 2 }}>Account #{customer.accountNumber || '-'}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {!!health && (
+          {!!health && typeof health.disabled === "boolean" && (
             <span
               title={health.disabled ? 'Disabled on router' : 'Active on router'}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, padding: '6px 12px', background: health.disabled ? '#fee2e2' : '#eafaf1', color: health.disabled ? '#991b1b' : '#166534', fontWeight: 800, border: `1px solid ${health.disabled ? '#fecaca' : '#bbf7d0'}` }}
@@ -120,13 +89,13 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
       </div>
 
       <div style={{ border: '1px solid #e6eaf2', borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Router Health</div>
+        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Service status</div>
         {isAnonymized && <div style={{ color: '#64748b' }}>Router checks are disabled for anonymized customer records.</div>}
         {loading && <div>Loading health…</div>}
         {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
         {!isAnonymized && !!health && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
-            <div><div style={{ color: '#64748b', fontSize: 12 }}>Status</div><div style={{ fontWeight: 700 }}>{health.status || (health.disabled ? 'inactive' : 'active')}</div></div>
+            <div><div style={{ color: '#64748b', fontSize: 12 }}>Billing status</div><div style={{ fontWeight: 700 }}>{health.status || (health.disabled ? 'inactive' : 'active')}</div></div>
             {health.online !== null && (
               <div><div style={{ color: '#64748b', fontSize: 12 }}>Online</div><div style={{ fontWeight: 700 }}>{health.online ? 'Yes' : 'No'}</div></div>
             )}
@@ -148,15 +117,7 @@ export default function CustomerDetailsPanel({ customer, onClose, onUpdated }) {
           </div>
         )}
 
-        {canToggle && (
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            {health?.disabled ? (
-              <button disabled={saving} onClick={doEnable} className="btn">Enable Account</button>
-            ) : (
-              <button disabled={saving} onClick={doDisable} className="btn">Disable Account</button>
-            )}
-          </div>
-        )}
+
       </div>
     </div>
   );

@@ -2,6 +2,10 @@
 
 ## Implemented scope
 
+Customers, PPPoE and Subscribers now share one assignment workflow. See
+[customer and network workflow](customer-network-workflow.md) for onboarding,
+existing PPPoE account linking, billing/manual access precedence and archival.
+
 The Network > Subscribers screen supports local PPPoE and hotspot accounts and
 managed static IPv4 queues. Owners and admins can provision, suspend, resume and
 release these assignments. Existing PPP/hotspot profiles, address delivery and

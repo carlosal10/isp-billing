@@ -19,6 +19,8 @@ async function resolvePlan(customer) {
 }
 
 async function restoreCustomerAccess({ customer, plan, debugId }) {
+  const managed = await require('./subscriberAccessService').synchronizeBilling(customer, true);
+  if (managed.managed) return managed;
   const blocked = await require('../models/NetworkAssignment').exists({ tenantId: customer.tenantId, customerId: customer._id, status: { $ne: 'released' }, 'fup.desired': 'blocked' });
   if (blocked) { await suspendCustomerAccess({ customer, debugId }); return; }
   const tenantId = String(customer?.tenantId || '');
@@ -46,6 +48,8 @@ async function restoreCustomerAccess({ customer, plan, debugId }) {
 }
 
 async function suspendCustomerAccess({ customer, debugId }) {
+  const managed = await require('./subscriberAccessService').synchronizeBilling(customer, false);
+  if (managed.managed) return managed;
   const tenantId = String(customer?.tenantId || '');
   const context = {
     tenantId,
@@ -91,48 +95,53 @@ async function syncCustomerNetworkState({ customer, debugId }) {
 }
 
 async function syncCustomerAccessFromPayments({ tenantId, customerId, debugId = `pay-sync-${Date.now()}` }) {
-  const customer = await Customer.findOne({ _id: customerId, tenantId }).populate('plan');
+  const customer = await require('./financialTransaction').financialTransaction(async () => {
+    const customer = await Customer.findOneAndUpdate({ _id: customerId, tenantId }, { $inc: { __v: 1 } }, { new: true }).populate('plan');
+    if (!customer) return null;
+    if (customer.status === 'archived') return customer;
+
+    const payments = await Payment.find({
+      tenantId,
+      customer: customerId,
+      isDeleted: { $ne: true },
+      status: { $in: ['Success', 'Validated'] },
+      isFinanciallyApplied: true,
+    })
+      .populate('plan', 'duration durationDays')
+      .lean();
+
+    let maxExpiry = null;
+    const now = Date.now();
+
+    for (const payment of payments) {
+      const durationDays = resolvePlanDurationDays(payment?.plan);
+      if (!Number.isFinite(durationDays) || durationDays <= 0) continue;
+
+      const baseStart = payment.validatedAt || payment.createdAt;
+      const computedExpiry = payment.expiryDate
+        ? new Date(payment.expiryDate).getTime()
+        : baseStart
+        ? new Date(baseStart).getTime() + durationDays * 86400000
+        : null;
+
+      if (!computedExpiry) continue;
+      if (maxExpiry == null || computedExpiry > maxExpiry) maxExpiry = computedExpiry;
+    }
+
+    if (maxExpiry && maxExpiry > now) {
+      customer.status = 'active';
+      customer.expiryDate = new Date(maxExpiry);
+    } else {
+      customer.status = 'inactive';
+      if (maxExpiry) customer.expiryDate = new Date(maxExpiry);
+      else customer.expiryDate = undefined;
+    }
+
+    await customer.save();
+    return customer;
+  });
   if (!customer) return null;
-
-  const payments = await Payment.find({
-    tenantId,
-    customer: customerId,
-    isDeleted: { $ne: true },
-    status: { $in: ['Success', 'Validated'] },
-    isFinanciallyApplied: true,
-  })
-    .populate('plan', 'duration durationDays')
-    .lean();
-
-  let maxExpiry = null;
-  const now = Date.now();
-
-  for (const payment of payments) {
-    const durationDays = resolvePlanDurationDays(payment?.plan);
-    if (!Number.isFinite(durationDays) || durationDays <= 0) continue;
-
-    const baseStart = payment.validatedAt || payment.createdAt;
-    const computedExpiry = payment.expiryDate
-      ? new Date(payment.expiryDate).getTime()
-      : baseStart
-      ? new Date(baseStart).getTime() + durationDays * 86400000
-      : null;
-
-    if (!computedExpiry) continue;
-    if (maxExpiry == null || computedExpiry > maxExpiry) maxExpiry = computedExpiry;
-  }
-
-  if (maxExpiry && maxExpiry > now) {
-    customer.status = 'active';
-    customer.expiryDate = new Date(maxExpiry);
-  } else {
-    customer.status = 'inactive';
-    if (maxExpiry) customer.expiryDate = new Date(maxExpiry);
-    else customer.expiryDate = undefined;
-  }
-
-  await customer.save();
-
+  if (customer.status === 'archived') return { customerId: String(customer._id), active: false, archived: true };
   return syncCustomerNetworkState({ customer, debugId });
 }
 

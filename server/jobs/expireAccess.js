@@ -120,6 +120,7 @@ async function _removeHotspotUserTask(tenantId, mac) {
     return [];
   });
   const row = Array.isArray(list) && list[0] ? list[0] : null;
+  if (String(row?.comment || '').startsWith('billing-assignment:')) throw new Error('Managed subscriber cannot be removed by voucher expiry');
   const id = getId(row);
   if (id) {
     await sendCommand('/ip/hotspot/user/remove', [`=numbers=${id}`], { tenantId, timeoutMs: ROUTER_TIMEOUT_MS }).catch((err) => {
@@ -181,6 +182,7 @@ async function _removePppoeUserTask(tenantId, username) {
   });
 
   const secret = Array.isArray(secrets) && secrets[0] ? secrets[0] : null;
+  if (String(secret?.comment || '').startsWith('billing-assignment:')) throw new Error('Managed subscriber cannot be removed by voucher expiry');
   const secretId = getId(secret);
   if (secretId) {
     await sendCommand('/ppp/secret/remove', [`=numbers=${secretId}`], { tenantId, timeoutMs: ROUTER_TIMEOUT_MS }).catch((err) => {

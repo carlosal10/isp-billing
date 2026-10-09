@@ -9,6 +9,7 @@ const customerSchema = new mongoose.Schema({
   address: String,
   routerIp: { type: String, default: null },
   status: { type: String, default: 'active' },
+  networkWorkflowVersion: { type: Number, default: 1 },
   expiryDate: { type: Date },
   // Unique per-tenant (not globally unique)
   accountNumber: { type: String },
@@ -21,7 +22,7 @@ const customerSchema = new mongoose.Schema({
   plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan' },
 
   // Network setup
-  connectionType: { type: String, enum: ['pppoe', 'static'], required: true },
+  connectionType: { type: String, enum: ['pppoe', 'static', 'hotspot'], required: true },
 
   // PPPoE config as an object instead of ObjectId reference
   pppoeConfig: {

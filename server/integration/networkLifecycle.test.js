@@ -19,6 +19,7 @@ before(async () => {
   app.use((req, res, next) => { req.tenantId = String(req.headers['x-test-tenant'] || tenant); req.user = { sub: String(oid()) }; req.membership = { role: req.headers['x-test-role'] || 'owner' }; next(); });
   app.use('/assignments', require('../routes/networkAssignments'));
   app.use('/routers', require('../routes/mikrotikServers'));
+  app.use('/legacy-pppoe', require('../routes/mikrotikUser'));
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   url = 'http://127.0.0.1:' + server.address().port;
 }, { timeout: 180000 });
@@ -28,7 +29,7 @@ async function request(path, method = 'GET', body, headers = {}) {
   return { status: response.status, body: await response.json() };
 }
 async function input(type = 'pppoe') {
-  const customer = await Customer.create({ tenantId: tenant, accountNumber: String(oid()), name: 'Test', connectionType: type === 'static' ? 'static' : 'pppoe' });
+  const customer = await Customer.create({ tenantId: tenant, accountNumber: String(oid()), name: 'Test', expiryDate: new Date(Date.now() + 86400000), connectionType: type === 'static' ? 'static' : 'pppoe' });
   const router = await Router.create({ tenant, name: String(oid()), host: '192.0.2.1', port: routerPort++, username: 'test', password: 'test-only' });
   return { customerId: String(customer._id), routerId: String(router._id), accessType: type, ...(type === 'static' ? { ipAddress: '192.0.2.30' } : { username: 'sub-' + oid(), password: 'subscriber-test-only', [type === 'pppoe' ? 'pppProfile' : 'hotspotProfile']: 'basic' }) };
 }
@@ -98,6 +99,103 @@ test('router deletion cannot orphan a concurrently created assignment', async ()
     fetch(url + '/routers/' + payload.routerId, { method: 'DELETE' }),
   ]);
   assert.ok((created.status === 201 && deleted.status === 409) || (created.status === 404 && deleted.status === 200));
-  if (created.status === 201) assert.ok(await Router.exists({ _id: payload.routerId }));
+  if (created.status === 201) { assert.ok(await Router.exists({ _id: payload.routerId })); await drain(fakeNetworkRouter({ '/ppp/profile': [{ name: 'basic' }] }).send); }
   else assert.equal(await A.countDocuments({ routerId: payload.routerId }), 0);
+});
+test('customer creation and contact/account edits perform no router writes; archival preserves identity', async () => {
+  const { createCustomer, updateCustomer, deleteCustomer } = require('../services/customerWriteService');
+  const plan = await require('../models/plan').create({ tenantId: tenant, name: String(oid()), description: 'test', duration: '30 days', speed: 10, rateLimit: '10M/10M', price: 100 });
+  const manager = require('../utils/mikrotikConnectionManager'), original = manager.sendCommand;
+  manager.sendCommand = async () => { throw new Error('Customer CRUD must not touch router'); };
+  try {
+    await assert.rejects(createCustomer({ tenantId: tenant, payload: { plan: plan._id, connectionType: 'pppoe', pppoeConfig: { profile: 'basic' } } }), { statusCode: 409 });
+    const c = await createCustomer({ tenantId: tenant, payload: { name: 'Billing only', accountNumber: String(oid()), connectionType: 'pppoe', plan: plan._id } });
+    assert.equal(c.networkWorkflowVersion, 2); assert.equal(c.pppoeConfig?.profile, undefined);
+    const edited = await updateCustomer({ tenantId: tenant, customerId: c._id, payload: { name: 'Updated', accountNumber: 'NEW-' + oid() } });
+    assert.equal(edited.name, 'Updated');
+    await deleteCustomer({ tenantId: tenant, customerId: c._id });
+    assert.equal((await Customer.findById(c._id)).status, 'archived');
+    const { syncCustomerAccessFromPayments } = require('../services/customerAccessService');
+    assert.equal((await syncCustomerAccessFromPayments({ tenantId: tenant, customerId: c._id })).archived, true);
+    assert.equal((await Customer.findById(c._id)).status, 'archived');
+  } finally { manager.sendCommand = original; }
+});
+test('billing resume preserves manual suspension and billing suspension survives manual resume', async () => {
+  const payload = await input(); const created = await request('', 'POST', payload), id = created.body.assignment._id;
+  const { synchronizeBilling } = require('../services/subscriberAccessService');
+  const c = await Customer.findById(payload.customerId);
+  await request('/' + id, 'PATCH', { desiredState: 'suspended' });
+  await synchronizeBilling(c, false); await synchronizeBilling(c, true);
+  let a = await A.findById(id); assert.equal(a.desiredState, 'suspended'); assert.equal(a.manualState, 'suspended');
+  await synchronizeBilling(c, false);
+  await request('/' + id, 'PATCH', { desiredState: 'present' });
+  a = await A.findById(id); assert.equal(a.desiredState, 'suspended'); assert.equal(a.manualState, 'present');
+  await synchronizeBilling(c, true); a = await A.findById(id); assert.equal(a.desiredState, 'present');
+  const count = await O.countDocuments({ assignmentId: id });
+  await synchronizeBilling(c, true); assert.equal(await O.countDocuments({ assignmentId: id }), count);
+  await drain(fakeNetworkRouter({ '/ppp/profile': [{ name: 'basic' }] }).send);
+});
+test('new service without entitlement is provisioned suspended and cannot bypass billing', async () => {
+  const payload = await input(); await Customer.updateOne({ _id: payload.customerId }, { $unset: { expiryDate: 1 } });
+  const created = await request('', 'POST', payload), id = created.body.assignment._id;
+  assert.equal(created.body.assignment.billingState, 'blocked'); assert.equal(created.body.assignment.desiredState, 'suspended');
+  await request('/' + id, 'PATCH', { desiredState: 'present' });
+  const fake = fakeNetworkRouter({ '/ppp/profile': [{ name: 'basic' }] }); await drain(fake.send);
+  assert.equal((await A.findById(id)).observedState, 'suspended');
+  assert.equal(fake.tables['/ppp/secret'][0].disabled, 'yes');
+});
+test('existing account linking adopts exactly one account without resetting credentials; rotation is durable', async () => {
+  const payload = await input();
+  const fake = fakeNetworkRouter({ '/ppp/secret': [{ '.id': '*legacy', name: payload.username, password: 'original-test', profile: 'basic', service: 'pppoe', comment: 'Customer: Test', disabled: 'no' }] });
+  const manager = require('../utils/mikrotikConnectionManager'), original = manager.sendCommand;
+  manager.sendCommand = fake.send;
+  try {
+    const discovery = await request('/discover/pppoe?routerId=' + payload.routerId);
+    assert.equal(discovery.status, 200); assert.ok(!JSON.stringify(discovery.body).includes('original-test'));
+    const body = { customerId: payload.customerId, routerId: payload.routerId, username: payload.username };
+    const result = await request('/link', 'POST', body); assert.equal(result.status, 201);
+    const id = result.body.assignment._id;
+    assert.equal((await request('/link', 'POST', body)).status, 409);
+    await drain(fake.send); assert.equal(fake.tables['/ppp/secret'].length, 1);
+    assert.equal(fake.tables['/ppp/secret'][0].password, 'original-test');
+    assert.equal(fake.tables['/ppp/secret'][0].comment, 'billing-assignment:' + id);
+    const rotation = await request('/' + id + '/password', 'POST', { password: 'rotated-test-pass' }); assert.equal(rotation.status, 200);
+    await drain(fake.send); assert.equal(fake.tables['/ppp/secret'][0].password, 'rotated-test-pass');
+    const a = await A.findById(id).select('+provisioningPassword');
+    assert.equal(decryptField(a.provisioningPassword), 'rotated-test-pass'); assert.equal(a.appliedCredentialVersion, a.credentialVersion);
+    const { getCustomerHealth } = require('../services/customerNetworkReadService');
+    assert.equal((await getCustomerHealth(tenant, (await Customer.findById(payload.customerId)).accountNumber)).services[0].username, payload.username);
+    await request('/' + id, 'DELETE'); await drain(fake.send); assert.equal(fake.tables['/ppp/secret'].length, 0);
+    await require('../services/customerWriteService').deleteCustomer({ tenantId: tenant, customerId: payload.customerId });
+    assert.equal((await Customer.findById(payload.customerId)).status, 'archived');
+  } finally { manager.sendCommand = original; }
+});
+test('link preview and mutations enforce tenant and role boundaries; direct writes are retired', async () => {
+  const payload = await input();
+  assert.equal((await request('/discover/pppoe?routerId=' + payload.routerId, 'GET', null, { 'x-test-tenant': String(other) })).status, 404);
+  assert.equal((await request('/link', 'POST', { ...payload }, { 'x-test-role': 'operator' })).status, 403);
+  const response = await fetch(url + '/legacy-pppoe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  assert.equal(response.status, 409);
+});
+test('archival and service creation serialize; customer edits never overwrite ownership', async () => {
+  const { deleteCustomer, updateCustomer } = require('../services/customerWriteService');
+  const payload = await input(); await Customer.updateOne({ _id: payload.customerId }, { $set: { networkWorkflowVersion: 2 } });
+  const [created, archived] = await Promise.all([request('', 'POST', payload), deleteCustomer({ tenantId: tenant, customerId: payload.customerId }).then(() => true).catch(e => e.statusCode)]);
+  assert.ok((created.status === 201 && archived === 409) || (created.status === 404 && archived === true));
+  if (created.status === 201) {
+    await assert.rejects(updateCustomer({ tenantId: tenant, customerId: payload.customerId, payload: { pppoeConfig: { profile: 'other' } } }), { statusCode: 409 });
+    await drain(fakeNetworkRouter({ '/ppp/profile': [{ name: 'basic' }] }).send);
+  }
+});
+test('release queued before linking completes still verifies ownership and removal', async () => {
+  const payload = await input();
+  const fake = fakeNetworkRouter({ '/ppp/secret': [{ '.id': '*pending', name: payload.username, profile: 'basic', service: 'pppoe', comment: 'legacy' }] });
+  const manager = require('../utils/mikrotikConnectionManager'), original = manager.sendCommand; manager.sendCommand = fake.send;
+  try {
+    const linked = await request('/link', 'POST', { customerId: payload.customerId, routerId: payload.routerId, username: payload.username });
+    assert.equal(linked.status, 201);
+    await request('/' + linked.body.assignment._id, 'DELETE'); await drain(fake.send);
+    assert.equal((await A.findById(linked.body.assignment._id)).status, 'released');
+    assert.equal(fake.tables['/ppp/secret'].length, 0);
+  } finally { manager.sendCommand = original; }
 });

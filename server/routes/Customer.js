@@ -208,7 +208,7 @@ router.post("/:id/privacy/anonymize", requireRole("owner", "admin"), async (req,
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireRole('owner', 'admin'), async (req, res) => {
   try {
     const customer = await createCustomer({
       tenantId: req.tenantId,
@@ -219,7 +219,7 @@ router.post("/", async (req, res) => {
         headers: req.headers,
       },
     });
-    res.status(201).json({ message: "Customer created successfully", customer });
+    res.status(201).json({ message: "Customer billing record created. Add or link a network service separately.", customer });
   } catch (err) {
     console.error("Create customer failed:", err);
     if (err?.statusCode) {
@@ -229,14 +229,14 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireRole('owner', 'admin'), async (req, res) => {
   try {
     const customer = await updateCustomer({
       tenantId: req.tenantId,
       customerId: req.params.id,
       payload: req.body,
     });
-    res.json({ message: "Customer updated successfully", customer });
+    res.json({ message: "Customer billing details updated; network accounts unchanged.", customer });
   } catch (err) {
     console.error("Update customer failed:", err);
     if (err?.statusCode) {
@@ -246,13 +246,13 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireRole('owner', 'admin'), async (req, res) => {
   try {
     await deleteCustomer({
       tenantId: req.tenantId,
       customerId: req.params.id,
     });
-    res.json({ message: "Customer deleted successfully" });
+    res.json({ message: "Customer archived; billing history retained" });
   } catch (err) {
     console.error("Delete customer failed:", err);
     if (err?.statusCode) {

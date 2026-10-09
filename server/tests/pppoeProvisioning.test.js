@@ -56,3 +56,12 @@ test('provisioning credential is excluded from assignment JSON and normal querie
   assert.equal(assignment.toJSON().provisioningPassword, undefined);
   assert.equal(Assignment.schema.path('provisioningPassword').options.select, false);
 });
+test('linking verifies its snapshot and never recreates a missing existing account', async () => {
+  const { fakeNetworkRouter } = require('../testing/fakeNetworkRouter');
+  const assignment = { _id: 'link-1', username: 'legacy', linkedAccount: { routerId: '*legacy', originalComment: 'Customer: Test' } };
+  const fake = fakeNetworkRouter({ '/ppp/secret': [{ '.id': '*legacy', name: 'legacy', service: 'pppoe', comment: 'changed' }] });
+  const service = createPppoeService(fake.send);
+  await assert.rejects(service.ensureLinked({}, assignment), { statusCode: 409 }); assert.equal(fake.writes.length, 0);
+  fake.tables['/ppp/secret'] = [];
+  await assert.rejects(service.ensureLinked({}, assignment), { statusCode: 404 }); assert.equal(fake.writes.length, 0);
+});

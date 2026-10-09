@@ -6,7 +6,7 @@ const text = z.string().trim().min(1).max(128).regex(/^[^\x00-\x1f\x7f]+$/);
 const schema = z.object({
   customerId: id, routerId: id, accessType: z.enum(['pppoe', 'static', 'hotspot']),
   authenticationMode: z.literal('local').default('local'),
-  username: text.optional(), password: z.string().min(8).max(128).optional(),
+  username: text.optional(), password: z.string().min(8).max(128).regex(/^[^\x00-\x1f\x7f]+$/).optional(),
   pppProfile: text.optional(), hotspotProfile: text.optional(),
   ipAddress: z.string().refine(v => isIP(v) === 4).optional(),
   macAddress: z.string().regex(/^(?:[a-f0-9]{2}:){5}[a-f0-9]{2}$/i).optional(),

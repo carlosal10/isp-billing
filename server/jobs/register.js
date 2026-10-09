@@ -16,15 +16,7 @@ function registerJobs() {
   require('./billingCollections');
   require('./smsReminders');
 
-  if (String(process.env.LEGACY_ENFORCEMENT_JOBS || 'false').toLowerCase() === 'true') {
-    const { registerExpireAccessJob } = require('./expireAccess');
-    registerExpireAccessJob();
-    require('./expireStatic');
-    require('./enforceInactiveCustomers');
-    console.log('[jobs] registered legacy enforcement jobs');
-    return;
-  }
-
+  // Customer expiry uses the same access outbox as payment activation.
   require('./enforceAllExpired');
   console.log('[jobs] registered unified enforcement job');
 }

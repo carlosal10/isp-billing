@@ -31,6 +31,13 @@ async function getCustomerHealth(tenantId, accountNumber) {
     status: customer.status || "active",
   };
 
+  const services = await require('../models/NetworkAssignment').find({ tenantId, customerId: customer._id, status: { $ne: 'released' } }).select('-fup.leaseToken').lean();
+  if (services.length || customer.networkWorkflowVersion === 2 || await require('../models/NetworkAssignment').exists({ tenantId, customerId: customer._id })) {
+    out.services = services; out.source = 'assignments';
+    out.disabled = services.length && services.every(a => ['present', 'suspended'].includes(a.observedState)) ? services.every(a => a.observedState === 'suspended') : null;
+    out.status = customer.status; out.online = null;
+    return out;
+  }
   if (customer.connectionType === "pppoe") {
     let secret = [];
     let active = [];

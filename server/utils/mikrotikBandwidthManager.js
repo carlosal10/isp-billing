@@ -270,7 +270,7 @@ async function setPppoeAccess(customer, enabled) {
   const tenantId = String(customer?.tenantId || '');
   if (!tenantId) throw new Error('Missing tenantId on customer');
   const candidates = [customer.accountNumber, ...(customer.accountAliases || [])].filter(Boolean).map(String);
-  const context = { tenantId, serverId: customer.routerId || undefined, host: customer.routerId ? undefined : customer.routerIp || undefined };
+  const context = { tenantId, serverId: customer.routerId || undefined, host: customer.routerId ? undefined : customer.routerIp || undefined, requireUnmanaged: true };
   return require('../services/pppoeService').setEnabled(context, candidates, enabled);
 }
 async function enablePppoeSecret(customer) { return setPppoeAccess(customer, true); }

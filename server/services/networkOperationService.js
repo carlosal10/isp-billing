@@ -20,11 +20,20 @@ async function applyPppoeAssignment(assignment, send = sendCommand) {
   const service = createPppoeService(send);
   const context = { tenantId: String(assignment.tenantId), serverId: String(assignment.routerId) };
   if (assignment.desiredState === 'absent' || assignment.status === 'released') {
-    await service.remove(context, username, assignment.provisioningPassword ? String(assignment._id) : undefined);
+    if (assignment.provisioningMode === 'link') {
+      try { await service.ensureLinked(context, assignment); }
+      catch (error) { if (error.statusCode !== 404) throw error; }
+    }
+    await service.remove(context, username, assignment.provisioningPassword || assignment.provisioningMode === 'link' ? String(assignment._id) : undefined);
     return { state: 'absent', username };
   }
-  if (assignment.provisioningPassword) {
+  if (assignment.provisioningMode === 'link') {
+    await service.ensureLinked(context, assignment);
+  } else if (assignment.provisioningPassword) {
     await service.ensureProvisioned(context, { username, password: decryptField(assignment.provisioningPassword), profile: assignment.pppProfile, assignmentId: String(assignment._id), enabled: assignment.desiredState !== 'suspended' && assignment.fup?.desired !== 'blocked' });
+  }
+  if (assignment.provisioningPassword && assignment.credentialVersion > assignment.appliedCredentialVersion) {
+    await service.password(context, username, decryptField(assignment.provisioningPassword));
   }
   const result = await service.setEnabled(context, [username], assignment.desiredState !== 'suspended' && assignment.fup?.desired !== 'blocked');
   return { state: result.enabled ? 'present' : 'suspended', username, verified: result.verified };
@@ -50,7 +59,7 @@ async function processNetworkOperations({ limit = 20, now = new Date(), send = s
     }, { $set: { status: 'processing', leaseToken: token, leaseUntil: new Date(Date.now() + 180000) }, $inc: { attempts: 1 } }, { sort: { nextAttemptAt: 1 }, new: true }).lean();
     if (!op) break;
     const claim = { _id: op._id, leaseToken: token };
-    let a;
+    let a, fence;
     try {
       a = await NetworkAssignment.findOneAndUpdate({
         _id: op.assignmentId, tenantId: op.tenantId,
@@ -61,7 +70,8 @@ async function processNetworkOperations({ limit = 20, now = new Date(), send = s
         await NetworkOperation.updateOne(claim, { $set: { status: 'pending', nextAttemptAt: new Date(Date.now() + 10000) }, $unset: { leaseUntil: 1, leaseToken: 1 }, $inc: { attempts: -1 } });
         continue;
       }
-      const fence = { _id: a._id, tenantId: a.tenantId, 'fup.leaseToken': token, desiredState: a.desiredState, 'fup.generation': a.fup?.generation || 0 };
+      fence = { _id: a._id, tenantId: a.tenantId, 'fup.leaseToken': token, desiredState: a.desiredState, 'fup.generation': a.fup?.generation || 0,
+        $expr: { $and: [ { $eq: [{ $ifNull: ['$accessRevision', 0] }, a.accessRevision || 0] }, { $eq: [{ $ifNull: ['$credentialVersion', 0] }, a.credentialVersion || 0] } ] } };
       const guardedSend = async (...args) => {
         const held = await NetworkAssignment.updateOne(fence, { $set: { 'fup.leaseUntil': new Date(Date.now() + 180000) } });
         const lease = await NetworkOperation.updateOne(claim, { $set: { leaseUntil: new Date(Date.now() + 180000) } });
@@ -77,7 +87,7 @@ async function processNetworkOperations({ limit = 20, now = new Date(), send = s
       await financialTransaction(async () => {
         const updated = await NetworkAssignment.updateOne(fence, { $set: {
           observedState: observed.state, status: observed.state === 'present' ? 'active' : observed.state === 'absent' ? 'released' : 'suspended',
-          lastSynchronizedAt: new Date(), lastError: null, ...(observed.state === 'absent' ? { releasedAt: new Date() } : {}),
+          lastSynchronizedAt: new Date(), lastError: null, appliedCredentialVersion: a.credentialVersion || 0, ...(observed.state === 'absent' ? { releasedAt: new Date() } : {}),
         } });
         if (!updated.matchedCount) throw new Error('Assignment changed before confirmation');
         const completed = await NetworkOperation.updateOne(claim, { $set: { status: 'complete', observedState: observed, completedAt: new Date(), lastError: null }, $unset: { leaseUntil: 1, leaseToken: 1 } });
@@ -88,7 +98,7 @@ async function processNetworkOperations({ limit = 20, now = new Date(), send = s
       const failed = op.attempts >= MAX_ATTEMPTS;
       const error = cause.statusCode ? cause.message : 'Network change was not confirmed. Check router connectivity, permissions and requested state, then retry.';
       await NetworkOperation.updateOne(claim, { $set: { status: failed ? 'dead-letter' : 'pending', nextAttemptAt: new Date(Date.now() + Math.min(3600000, 1000 * 2 ** op.attempts)), lastError: error }, $unset: { leaseUntil: 1, leaseToken: 1 } });
-      if (a) await NetworkAssignment.updateOne({ _id: a._id, tenantId: a.tenantId, 'fup.leaseToken': token, desiredState: a.desiredState }, { $set: { observedState: 'error', status: 'error', lastError: error } });
+      if (fence) await NetworkAssignment.updateOne(fence, { $set: { observedState: 'error', status: 'error', lastError: error } });
       summary[failed ? 'failed' : 'retried']++;
     } finally {
       if (a) await NetworkAssignment.updateOne({ _id: a._id, tenantId: a.tenantId, 'fup.leaseToken': token }, { $unset: { 'fup.leaseToken': 1, 'fup.leaseUntil': 1 } });

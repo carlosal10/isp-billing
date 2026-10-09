@@ -33,7 +33,7 @@ async function processFupOperations({ limit = 20, enforce: injected } = {}) {
       }
       const enforce = injected || createFupEnforcer({ send: async (...args) => {
         // Renew and fence before every command, including verification reads.
-        const lease = await Assignment.updateOne({ _id: held._id, tenantId: op.tenantId, 'fup.leaseToken': token, 'fup.generation': generation, status: { $ne: 'released' }, desiredState: { $ne: 'absent' } },
+        const lease = await Assignment.updateOne({ _id: held._id, tenantId: op.tenantId, 'fup.leaseToken': token, 'fup.generation': generation, status: { $ne: 'released' }, desiredState: held.desiredState, $expr: { $eq: [{ $ifNull: ['$accessRevision', 0] }, held.accessRevision || 0] } },
           { $set: { 'fup.leaseUntil': new Date(Date.now() + 180000) } });
         if (!lease.matchedCount) throw new Error('FUP policy changed while applying');
         await Operation.updateOne(claim, { $set: { leaseUntil: new Date(Date.now() + 180000) } });
@@ -41,7 +41,7 @@ async function processFupOperations({ limit = 20, enforce: injected } = {}) {
       } });
       const observed = await enforce(held, op);
       await financialTransaction(async () => {
-        const updated = await Assignment.updateOne({ _id: held._id, tenantId: op.tenantId, 'fup.generation': generation, 'fup.leaseToken': token },
+        const updated = await Assignment.updateOne({ _id: held._id, tenantId: op.tenantId, 'fup.generation': generation, 'fup.leaseToken': token, desiredState: held.desiredState, $expr: { $eq: [{ $ifNull: ['$accessRevision', 0] }, held.accessRevision || 0] } },
           { $set: { 'fup.applied': op.desiredState.fupState, 'fup.lastAppliedAt': new Date(), 'fup.lastError': null,
             ...(op.desiredState.fupState === 'normal' ? { 'fup.baseline': null } : {}) } });
         if (!updated.matchedCount) throw new Error('FUP target changed before confirmation');
