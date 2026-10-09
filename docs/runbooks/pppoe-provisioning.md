@@ -1,5 +1,8 @@
 # Local PPPoE provisioning
 
+See [network lifecycle readiness](network-readiness.md) for hotspot/static support,
+deployment requirements, and the remaining live acceptance checks.
+
 The Subscribers form creates a local PPPoE secret through the durable worker.
 Select an existing PPPoE customer and saved router, then enter a unique username,
 a password of 8–128 characters, and the exact RouterOS PPP profile name.

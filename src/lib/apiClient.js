@@ -236,7 +236,7 @@ function attachInterceptors(client, { includeTenantHeader }) {
       }
     }
     const server = accessors.getServerId?.();
-    if (server) {
+    if (server && !config.headers?.['x-isp-server']) {
       config.headers = config.headers || {};
       config.headers["x-isp-server"] = server;
     }

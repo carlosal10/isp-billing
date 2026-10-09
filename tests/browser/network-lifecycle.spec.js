@@ -1,0 +1,44 @@
+const { test, expect } = require('@playwright/test');
+const AxeBuilder = require('@axe-core/playwright').default;
+for (const width of [360, 1440]) test('subscriber forms and lifecycle controls at ' + width + 'px', async ({ page }) => {
+  await page.setViewportSize({ width, height: 1000 });
+  const routerId = 'a'.repeat(24), customerId = 'b'.repeat(24);
+  let items = [], created;
+  await page.route('**/api/mikrotik/servers', route => route.fulfill({ json: { servers: [{ id: routerId, name: 'Test router', host: '192.0.2.1', port: 8728 }] } }));
+  await page.route('**/api/customers', route => route.fulfill({ json: [{ _id: customerId, name: 'Test Subscriber', accountNumber: 'TEST-1', connectionType: 'pppoe' }] }));
+  await page.route('**/api/network/assignments**', async route => {
+    const req = route.request();
+    if (req.method() === 'POST') { created = req.postDataJSON(); items = [{ ...created, password: undefined, _id: 'c'.repeat(24), desiredState: 'present', observedState: 'unknown', status: 'provisioning' }]; }
+    if (req.method() === 'PATCH') items[0].desiredState = req.postDataJSON().desiredState;
+    if (req.method() === 'DELETE') items[0].desiredState = 'absent';
+    await route.fulfill({ json: { ok: true, items, nextCursor: null } });
+  });
+  await page.goto('/login'); await page.getByLabel('Email', { exact: true }).fill('owner@demo.example');
+  await page.getByLabel('Password', { exact: true }).fill('Demo-Only-2026!');
+  await page.getByRole('button', { name: 'Login', exact: true }).click(); await expect(page).not.toHaveURL(/login/);
+  await page.goto('/routers'); await page.getByRole('button', { name: 'Subscribers', exact: true }).click();
+  await page.getByRole('button', { name: 'Add subscriber', exact: true }).click();
+  await page.getByLabel('Service type', { exact: true }).selectOption('hotspot');
+  await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption(customerId);
+  await page.getByRole('textbox', { name: 'Subscriber username', exact: true }).fill('test-user');
+  await page.getByLabel(/^Subscriber password/).fill('Test-Only-2026!');
+  await page.getByRole('textbox', { name: 'Hotspot profile name', exact: true }).fill('basic');
+  const customerField = await page.getByRole('combobox', { name: 'Customer', exact: true }).boundingBox();
+  expect(customerField.width).toBeGreaterThan(200);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
+  const axe = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(axe.violations.filter(v => ['serious', 'critical'].includes(v.impact))).toEqual([]);
+  await page.screenshot({ path: 'artifacts/ui/network-subscriber-' + width + '.png', fullPage: true });
+  await page.getByRole('button', { name: 'Queue provisioning', exact: true }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  expect(created).toMatchObject({ accessType: 'hotspot', username: 'test-user', hotspotProfile: 'basic' });
+  expect(created).not.toHaveProperty('ipAddress');
+  await expect(page.getByText('Awaiting router confirmation')).toBeVisible();
+  await page.getByRole('button', { name: 'Suspend', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm change', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Release', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(items[0].desiredState).toBe('suspended');
+  await page.screenshot({ path: 'artifacts/ui/network-overview-' + width + '.png', fullPage: true });
+});

@@ -10,6 +10,7 @@ const networkAssignmentSchema = new mongoose.Schema({
   authenticationMode: { type: String, enum: ['local', 'radius'], default: 'local', index: true },
   radiusServerId: { type: mongoose.Schema.Types.ObjectId, ref: 'RadiusServer', default: null, index: true },
   pppProfile: { type: String, trim: true, default: null },
+  hotspotProfile: { type: String, trim: true, default: null },
   provisioningPassword: { type: String, select: false },
   status: { type: String, enum: ['draft', 'provisioning', 'active', 'suspended', 'released', 'error'], default: 'draft', index: true },
   desiredState: { type: String, enum: ['absent', 'present', 'suspended'], default: 'present', index: true },

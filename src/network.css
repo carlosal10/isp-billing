@@ -1,6 +1,6 @@
 .network-workspace { max-width: 1280px; margin: 0 auto; }
 .network-workspace .workspace-header { align-items: flex-start; }
-.network-form { display: grid; gap: 18px; }
+.network-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; width: 100%; max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; }
 .network-form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 22px; }
 .network-form-grid > * { min-width: 0; }
 .network-form :is(input:not([type=checkbox]), select) { width: 100%; min-width: 0; min-height: 38px; padding: 8px 11px; border-radius: 8px; }
@@ -10,6 +10,10 @@
 .network-options input[type=checkbox] { width: 16px; height: 16px; margin: 0; }
 .network-note { color: #475569; font-size: 13px; line-height: 1.6; margin: 0; }
 .network-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.network-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin: 18px 0; }
+.network-toolbar .ui-field { flex: 1 1 180px; min-width: 0; }
+.network-workspace .network-error-detail { color: #b91c1c; max-width: 280px; overflow-wrap: anywhere; }
+.network-metrics article { min-width: 0; overflow-wrap: anywhere; }
 .network-workspace .network-actions button { padding: 6px 10px; min-height: 34px; font-size: 12px; white-space: nowrap; }
 .network-workspace .table-scroll { overflow-x: auto; }
 .network-workspace td { vertical-align: middle; }

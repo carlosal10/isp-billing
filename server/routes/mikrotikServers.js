@@ -65,7 +65,16 @@ router.put('/:id', requireRole('owner', 'admin'), async (req, res) => {
 });
 router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
-    const record = await Router.findOneAndDelete({ _id: req.params.id, tenant: req.tenantId });
+    const result = await require('../services/financialTransaction').financialTransaction(async () => {
+      // Assignment creation writes this same record, preventing a concurrent orphan.
+      const record = await Router.findOneAndUpdate({ _id: req.params.id, tenant: req.tenantId }, { $inc: { __v: 1 } });
+      if (!record) return { record: null };
+      if (await require('../models/NetworkAssignment').exists({ tenantId: req.tenantId, routerId: req.params.id, status: { $ne: 'released' } })) return { blocked: true };
+      await Router.deleteOne({ _id: record._id, tenant: req.tenantId });
+      return { record };
+    });
+    if (result.blocked) return res.status(409).json({ error: 'Release subscriber assignments and confirm removal before deleting this router.' });
+    const { record } = result;
     if (!record) return res.status(404).json({ ok: false, error: 'Router not found.' });
     await manager.invalidate(req.tenantId, record._id);
     res.json({ ok: true });

@@ -1514,7 +1514,15 @@ paths:
         '200': { description: OK }
   /network/assignments:
     get:
-      summary: Tenant network assignments
+      summary: List tenant assignments with cursor pagination
+      description: Returns items and nextCursor; credentials and lease tokens are omitted.
+      parameters:
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { in: query, name: after, schema: { type: string, pattern: "^[a-fA-F0-9]{24}$" } }
+        - { in: query, name: customerId, schema: { type: string } }
+        - { in: query, name: routerId, schema: { type: string } }
+        - { in: query, name: accessType, schema: { type: string, enum: [pppoe, static, hotspot] } }
+        - { in: query, name: status, schema: { type: string } }
       security:
         - bearerAuth: []
       responses:
@@ -1525,13 +1533,29 @@ paths:
         '404': { description: Tenant resource not found }
         '409': { description: Conflict or stale generation }
     post:
-      summary: Tenant network assignments
+      summary: Queue a local subscriber assignment
+      description: PPPoE/hotspot require username, password and the corresponding existing profile name. Static requires one IPv4 address. Creation and the operation queue are atomic; success means queued, not router-confirmed.
       security:
         - bearerAuth: []
       requestBody:
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
+              additionalProperties: false
+              required: [customerId, routerId, accessType]
+              properties:
+                customerId: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+                routerId: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+                accessType: { type: string, enum: [pppoe, static, hotspot] }
+                authenticationMode: { type: string, enum: [local], default: local }
+                username: { type: string, maxLength: 128 }
+                password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
+                pppProfile: { type: string, maxLength: 128 }
+                hotspotProfile: { type: string, maxLength: 128 }
+                ipAddress: { type: string, format: ipv4 }
+                macAddress: { type: string }
+                fupPolicyId: { type: string }
       responses:
         '200': { description: Success }
         '201': { description: Created }
@@ -1541,7 +1565,8 @@ paths:
         '409': { description: Conflict or stale generation }
   /network/assignments/{id}:
     patch:
-      summary: Update or release an assignment
+      summary: Change requested access state or fair usage policy
+      description: Local lifecycle changes are queued; releasing and released assignments cannot be changed.
       security:
         - bearerAuth: []
       parameters:
@@ -1552,7 +1577,13 @@ paths:
       requestBody:
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                desiredState: { type: string, enum: [present, suspended] }
+                fupPolicyId: { type: string, nullable: true }
       responses:
         '200': { description: Success }
         '201': { description: Created }
@@ -1561,7 +1592,8 @@ paths:
         '404': { description: Tenant resource not found }
         '409': { description: Conflict or stale generation }
     delete:
-      summary: Update or release an assignment
+      summary: Queue verified release of a local assignment
+      description: Username and IP reservations remain until router removal is confirmed. Repeated release requests are idempotent.
       security:
         - bearerAuth: []
       parameters:
