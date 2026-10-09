@@ -47,6 +47,16 @@ Stopped sessions remain stopped even when their last update is old.
 
 ## Acceptance evidence and remaining live checks
 
+Run `npm run verify:deployment` after Render finishes deploying. It compares the
+public frontend asset bytes with the local production build, checks `/health` and
+`/ready` against the current Git commit, and verifies that the API permits the
+frontend origin. Render supplies `RENDER_GIT_COMMIT`; other hosts can set
+`DEPLOYMENT_REVISION` to the full deployed commit. Unknown revisions fail this
+verification rather than being treated as a version match. Reports are saved to
+`artifacts/deployment-verification.json` without credentials. Optional overrides:
+`DEPLOY_CLIENT_URL`, `DEPLOY_API_URL`, and `EXPECTED_DEPLOYMENT_REVISION`.
+This verifies deployment consistency, not router reachability or subscriber traffic.
+
 Automated checks cover local account/queue lifecycle, ownership, encrypted credential
 handling, transaction rollback, tenant isolation, duplicate requests, worker fencing
 and router deletion races. Browser checks exercise subscriber controls on mobile

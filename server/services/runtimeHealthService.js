@@ -13,11 +13,17 @@ function connectionStateName(readyState) {
   return MONGOOSE_STATES[readyState] || 'unknown';
 }
 
+function deploymentRevision(env = process.env) {
+  const revision = env.RENDER_GIT_COMMIT || env.DEPLOYMENT_REVISION || '';
+  return /^[a-f0-9]{40}$/i.test(revision) ? revision.toLowerCase() : null;
+}
+
 function buildLiveness(options = {}) {
   return {
     ok: true,
     service: options.service || 'isp-billing-api',
     version: options.version || process.env.npm_package_version || '0.1.0',
+    revision: deploymentRevision(options.env || process.env),
     uptimeSeconds: Math.round(process.uptime()),
     timestamp: (options.now || new Date()).toISOString(),
   };
@@ -53,6 +59,7 @@ function buildReadiness(options = {}) {
     ok: Object.values(checks).every((check) => check.ok === true),
     service: options.service || 'isp-billing-api',
     version: options.version || process.env.npm_package_version || '0.1.0',
+    revision: deploymentRevision(options.env || process.env),
     checks,
     timestamp: (options.now || new Date()).toISOString(),
   };
@@ -63,6 +70,7 @@ function readinessStatusCode(report) {
 }
 
 module.exports = {
+  deploymentRevision,
   buildLiveness,
   buildReadiness,
   connectionStateName,

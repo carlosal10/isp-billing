@@ -7,7 +7,7 @@ servers:
 paths:
   /health:
     get:
-      summary: Public API liveness check
+      summary: Public API liveness check with deployed commit revision (null when unknown)
       responses:
         '200': { description: OK }
   /health/detail:
@@ -19,7 +19,7 @@ paths:
         '200': { description: OK }
   /ready:
     get:
-      summary: Public readiness check for database connectivity and graceful shutdown state
+      summary: Public readiness check with deployed revision, database connectivity and graceful shutdown state
       responses:
         '200': { description: Ready }
         '503': { description: Not ready }

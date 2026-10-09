@@ -8,8 +8,19 @@ const {
   buildReadiness,
   connectionStateName,
   databaseStatus,
+  deploymentRevision,
   readinessStatusCode,
 } = require('../services/runtimeHealthService');
+
+test('public revision exposes only a validated commit identifier', () => {
+  const revision = 'ABCDEF01'.repeat(5);
+  assert.equal(deploymentRevision({ RENDER_GIT_COMMIT: revision }), revision.toLowerCase());
+  assert.equal(deploymentRevision({ DEPLOYMENT_REVISION: revision }), revision.toLowerCase());
+  assert.equal(deploymentRevision({ RENDER_GIT_COMMIT: 'not-a-commit' }), null);
+  assert.equal(deploymentRevision({}), null);
+  assert.equal(buildLiveness({ env: { RENDER_GIT_COMMIT: revision } }).revision, revision.toLowerCase());
+  assert.equal(buildReadiness({ env: { RENDER_GIT_COMMIT: revision } }).revision, revision.toLowerCase());
+});
 
 test('connectionStateName maps known mongoose states', () => {
   assert.equal(connectionStateName(0), 'disconnected');
