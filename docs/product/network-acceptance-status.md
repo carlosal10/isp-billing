@@ -53,8 +53,10 @@ configuration was changed to obtain that restoration; its transient cause is
 not established. PPPoE authentication, browsing, suspension and restoration have
 passed in this local lab. Measured throughput and accounting remain separate gates.
 
-At static provisioning, counters were zero. Static subscriber traffic, shaping,
-and suspension/restoration remain pending.
+At static provisioning, counters were zero. After configuring the Tenda WAN to
+`10.254.251.2/30` with gateway `10.254.251.1`, the user confirmed connected status
+and successful browsing. A fresh queue-counter observation is pending; static
+shaping and suspension/restoration are not yet accepted.
 The lab resources intentionally remain for the user's Tenda tests. The runbook
 `docs/runbooks/tenda-subscriber-lab.md` records settings, controls and cleanup.
 
@@ -62,7 +64,7 @@ The lab resources intentionally remain for the user's Tenda tests. The runbook
 
 - The live write test called the service directly from this PC. The complete
   deployed customer/assignment/outbox path has not been exercised against the router.
-- Cloud-to-router reachability, static subscriber traffic, accounting accuracy,
+- Cloud-to-router reachability, static traffic counter verification, accounting accuracy,
   measured shaping/FUP enforcement and full recovery remain pending.
 
 ## Next acceptance steps
