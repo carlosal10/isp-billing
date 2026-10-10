@@ -11,32 +11,43 @@ Checked 10 October 2026, Africa/Nairobi. Implementation under review:
 - Public API `/ready` reports database connected, lifecycle ready, and jobs enabled.
   Jobs enabled is a configuration indicator, not proof of worker progress.
 - Both API responses allow the production frontend origin.
-- Previous implementation validation: 214 server tests passed, and API contract
-  audit passed. These checks were not repeated on 10 October because no runtime
-  code changed during this checkpoint.
+- After redeployment, `/health` and `/ready` both identify the expected commit
+  `dffc89f190dc09c66390d18a6f74dbe6070669ee`; deployment verification passed.
+- LAN read-only authentication, PPP profiles, simple queues, hotspot profiles,
+  PPP session reads and API reconnection passed through the application connection
+  manager on an RB951Ui-2HnD running RouterOS 7.24.1.
+- An isolated PPPoE write test passed after correcting the local RouterOS adapter:
+  temporary profile/rate creation, disabled account creation, idempotent retry,
+  enable/suspend, repeated release and verified cleanup. Test identifier:
+  `billing-test-7bfc1660a5ab8a05`. No real subscriber was used.
+- Validation after the RouterOS adapter fix: all 215 server tests passed,
+  including a receiver/channel regression test for consecutive empty replies.
+  The PowerShell prompt passed syntax validation and was used for the successful
+  live write check. The previous API contract audit remains unchanged by this fix.
 
 ## Not verified
 
-- API responses omit the `revision` field added in `465fba4`. The running backend
-  cannot be confirmed as the matching version. A healthy response alone does not
-  establish that the shared service endpoints are deployed.
-- The local router API at `192.168.88.1:8728` times out. No router write was
-  attempted at this checkpoint.
+- The latest RouterOS compatibility fix still needs deployment verification after
+  push. The earlier successful deployment check refers to `dffc89f`, before this fix.
+- The live write test called the service directly from this PC. The complete
+  deployed customer/assignment/outbox path has not been exercised against the router.
 - Cloud-to-router reachability, real subscriber authentication and traffic,
   accounting accuracy, measured FUP enforcement and live recovery remain pending.
 
 ## Next acceptance steps
 
-1. On Render, verify that the API service uses the intended repository and `main`
-   branch, then deploy the latest commit. If deployment fails, inspect its logs.
+1. Deploy the RouterOS compatibility fix to the Render API service once pushed.
+   If deployment fails, inspect its logs.
 2. Run `npm run verify:deployment` once deployment completes. Both health endpoints
    must report the expected commit, and the frontend content must match the build.
    If a revision is still absent, investigate the service's source/start command;
    do not assume a database-ready result proves the new backend is running.
-3. Restore this PC's route to the router LAN or supply the actual router LAN
-   address. Use the existing local masked password prompt for authentication;
+3. Keep the PC connected to the router LAN for remaining local acceptance. Its
+   Ethernet address at the successful check was `192.168.88.185`, with router
+   `192.168.88.1`. Use the local masked password prompt for authentication;
    never put a router password into chat or a committed file.
-4. Confirm read-only authentication and reconnection before isolated live writes.
+4. Establish and verify cloud-to-router routing before claiming the Render backend
+   can control the router. A successful local PC test does not establish that route.
 5. Test the shared customer/service lifecycle with an isolated test subscriber,
    then verify real accounting and FUP traffic as specified in the network
    readiness runbook. Verify cleanup of temporary router objects.

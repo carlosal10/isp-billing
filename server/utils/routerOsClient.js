@@ -7,7 +7,9 @@ class CompatibleRouterOSAPI extends RouterOSAPI {
     const channel = super.openChannel();
     const processPacket = channel.processPacket.bind(channel);
     channel.processPacket = (packet) => {
-      if (packet[0] === '!empty') { channel.emit('done', []); channel.close(); return; }
+      // !empty is a data reply, not command completion. Removing the reader
+      // here makes the subsequent !done crash node-routeros with UNREGISTEREDTAG.
+      if (packet[0] === '!empty') return;
       if (!['!re', '!done', '!trap'].includes(packet[0])) {
         channel.emit('trap', { message: 'Unsupported RouterOS reply' });
         channel.close();

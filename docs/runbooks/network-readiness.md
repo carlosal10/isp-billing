@@ -62,9 +62,14 @@ handling, transaction rollback, tenant isolation, duplicate requests, worker fen
 and router deletion races. Browser checks exercise subscriber controls on mobile
 and desktop with simulated router/API records; they do not prove live connectivity.
 
-Earlier LAN read-only checks passed. The previous live-write progress artifact was
-incomplete and is not proof of provisioning or cleanup. Cloud routing and end-to-end
-live write validation remain outstanding. Before claiming production acceptance:
+On 10 October 2026, LAN read-only authentication/reconnection and an isolated local
+PPPoE profile/account lifecycle passed on an RB951Ui-2HnD running RouterOS 7.24.1.
+The test verified disabled creation, duplicate retry, enable/suspend, repeated
+release and cleanup. It exposed and verified a fix for premature channel closure
+on RouterOS `!empty` replies. This was a direct service-level test from the PC;
+it did not exercise the deployed API/outbox, subscriber authentication or traffic.
+Cloud routing and end-to-end subscriber validation remain outstanding. Before
+claiming production acceptance:
 
 1. Verify the router from the deployed backend and confirm reconnect after interruption.
 2. Provision isolated PPPoE, hotspot and static test subscribers; authenticate/send traffic.

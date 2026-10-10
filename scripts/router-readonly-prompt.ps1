@@ -40,21 +40,32 @@ $start.RedirectStandardInput = $true
 $start.RedirectStandardOutput = $true
 $start.RedirectStandardError = $true
 $process = [System.Diagnostics.Process]::Start($start)
+$stdoutTask = $process.StandardOutput.ReadToEndAsync()
+$stderrTask = $process.StandardError.ReadToEndAsync()
 $process.StandardInput.WriteLine((@{ password = $passwordBox.Text } | ConvertTo-Json -Compress))
 $process.StandardInput.Close()
 $passwordBox.Clear()
 $form.Dispose()
-$result = $process.StandardOutput.ReadToEnd()
 $process.WaitForExit()
+$result = $stdoutTask.GetAwaiter().GetResult()
+# Drain stderr concurrently to prevent pipe backpressure. Never persist its contents.
+$stderrText = $stderrTask.GetAwaiter().GetResult()
 # Save only the structured report; discard dependency logs or raw errors.
 try {
   $report = $result | ConvertFrom-Json
+  if (-not $report -or ($WriteTest -and $report.state -notin @('complete', 'failed'))) { throw 'Incomplete report' }
   $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
 } catch {
-  '{"error":"Router test did not return a valid report"}' | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
+  # Collect only code identifiers and source locations, never raw diagnostic text.
+  $errorCodes = @([regex]::Matches($stderrText, '\bERR_[A-Z_]+\b') | ForEach-Object Value | Select-Object -Unique)
+  $sourceLocations = @([regex]::Matches($stderrText, '[\w.-]+\.(?:cjs|js):\d+:\d+') | ForEach-Object Value | Select-Object -Unique)
+  @{ state = 'failed'; checkedAt = [DateTime]::UtcNow.ToString('o'); exitCode = $process.ExitCode; errorCodes = $errorCodes; sourceLocations = $sourceLocations; outputLength = $result.Length; error = 'Router test did not return a complete valid report'; cleanup = 'unverified; inspect the test runner report and temporary objects' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
 }
 $process.Dispose()
 [System.Windows.Forms.MessageBox]::Show('Checks finished. The local report is ready for review.', 'MikroTik test completed') | Out-Null
 } catch {
+  if ($artifactDir) {
+    @{ state = 'failed'; checkedAt = [DateTime]::UtcNow.ToString('o'); error = 'Local password prompt could not finish'; failureType = $_.Exception.GetType().Name; cleanup = 'unverified' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactDir $reportName)
+  }
   [System.Windows.Forms.MessageBox]::Show('The local test could not finish. Tell the assistant this message appeared. No password has been saved.', 'MikroTik test error') | Out-Null
 }
