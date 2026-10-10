@@ -27,6 +27,25 @@ Checked 10 October 2026, Africa/Nairobi. Implementation under review:
 
 ## Not verified
 
+## Dedicated subscriber lab setup
+
+The user connected a dedicated Tenda N300 (LAN management `192.168.0.1`) WAN port
+to the service MikroTik's `ether3`. On 10 October, read-only inspection confirmed
+ether3 is active on the existing PPPoE service bridge. The subscriber lab provisioned:
+
+- PPPoE account `billing-lab-tenda`, dedicated profile and addresses
+  `10.254.250.1` / `10.254.250.2`, with a 2 Mbps bidirectional test rate.
+- Static service `10.254.251.2/30`, gateway `10.254.251.1` on the bridge, and the
+  owned queue `billing-lab-tenda-static` with verified 2 Mbps bidirectional limits.
+  No active FastTrack rules were observed.
+
+At provisioning, the test PPPoE session was not connected and static counters were
+zero. These are setup results, not subscriber authentication or traffic acceptance.
+The lab resources intentionally remain for the user's Tenda tests. The runbook
+`docs/runbooks/tenda-subscriber-lab.md` records settings, controls and cleanup.
+
+## Remaining verification
+
 - The latest RouterOS compatibility fix still needs deployment verification after
   push. The earlier successful deployment check refers to `dffc89f`, before this fix.
 - The live write test called the service directly from this PC. The complete

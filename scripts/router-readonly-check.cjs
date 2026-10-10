@@ -7,7 +7,7 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', async () => {
   let client;
   const report = { checkedAt: new Date().toISOString(), checks: [] };
-  const timer = setTimeout(() => { console.log(JSON.stringify({ ...report, error: 'Read-only check timed out' })); process.exit(1); }, 45000);
+  const timer = setTimeout(() => { console.log(JSON.stringify({ ...report, error: 'Read-only check timed out' })); process.exit(1); }, 120000);
   try {
     const credentials = JSON.parse(input); input = '';
     client = createConnectionManager();
@@ -21,6 +21,28 @@ process.stdin.on('end', async () => {
     report.transport = 'Application connection manager';
     const r = resources[0] || {};
     report.router = { version: r.version, board: r['board-name'], uptime: r.uptime };
+    if (credentials.topology === true) {
+      report.topology = {};
+      // Explicit allowlists exclude passwords, scripts, VPN keys and subscriber identities.
+      const queries = [
+        ['interfaces', '/interface/print', 'name,type,running,disabled'],
+        ['bridgePorts', '/interface/bridge/port/print', 'interface,bridge,disabled,pvid'],
+        ['addresses', '/ip/address/print', 'address,network,interface,disabled'],
+        ['pools', '/ip/pool/print', 'name,ranges,next-pool'],
+        ['pppProfiles', '/ppp/profile/print', 'name,local-address,remote-address,rate-limit,dns-server'],
+        ['pppoeServers', '/interface/pppoe-server/server/print', 'service-name,interface,disabled,default-profile,authentication,one-session-per-host'],
+        ['dhcpServers', '/ip/dhcp-server/print', 'name,interface,address-pool,disabled'],
+        ['dhcpNetworks', '/ip/dhcp-server/network/print', 'address,gateway,dns-server'],
+        ['nat', '/ip/firewall/nat/print', 'chain,action,src-address,out-interface,out-interface-list,disabled'],
+        ['interfaceLists', '/interface/list/member/print', 'interface,list,disabled'],
+      ];
+      for (const [key, command, fields] of queries) {
+        try {
+          const rows = await read(command, ['=.proplist=' + fields]);
+          report.topology[key] = rows.filter(row => row.type !== 'pppoe-in' && !String(row.interface || '').startsWith('<')).map(row => Object.fromEntries(fields.split(',').filter(field => row[field] !== undefined).map(field => [field, row[field]])));
+        } catch { report.topology[key] = { error: 'Read unavailable' }; }
+      }
+    }
     for (const [name, path] of [['PPP profiles', '/ppp/profile/print'], ['Simple queues', '/queue/simple/print'], ['Hotspot profiles', '/ip/hotspot/user/profile/print'], ['PPP sessions', '/ppp/active/print']]) {
       try {
         // Request identifiers only; never collect subscriber credentials or traffic.
