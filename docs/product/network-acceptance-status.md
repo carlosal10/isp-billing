@@ -1,7 +1,8 @@
 # Network acceptance checkpoint
 
-Checked 10 October 2026, Africa/Nairobi. Implementation under review:
-`465fba4efa70993b8a47c0fbab3491df6b3007ca` on `main`.
+Checked 10 October 2026, Africa/Nairobi. Deployed RouterOS fix verified at
+`f97fd963813343a0029098a5c022d45efade3dab`. Dedicated lab tooling was subsequently
+pushed as `4c08cf1705ac0658fca34f4f3fdd17a726bc9360` on `main`.
 
 ## Verified
 
@@ -11,8 +12,9 @@ Checked 10 October 2026, Africa/Nairobi. Implementation under review:
 - Public API `/ready` reports database connected, lifecycle ready, and jobs enabled.
   Jobs enabled is a configuration indicator, not proof of worker progress.
 - Both API responses allow the production frontend origin.
-- After redeployment, `/health` and `/ready` both identify the expected commit
-  `dffc89f190dc09c66390d18a6f74dbe6070669ee`; deployment verification passed.
+- After redeployment, `/health` and `/ready` both identified the expected commit
+  `f97fd963813343a0029098a5c022d45efade3dab`; deployment verification passed,
+  including the RouterOS compatibility fix.
 - LAN read-only authentication, PPP profiles, simple queues, hotspot profiles,
   PPP session reads and API reconnection passed through the application connection
   manager on an RB951Ui-2HnD running RouterOS 7.24.1.
@@ -24,8 +26,6 @@ Checked 10 October 2026, Africa/Nairobi. Implementation under review:
   including a receiver/channel regression test for consecutive empty replies.
   The PowerShell prompt passed syntax validation and was used for the successful
   live write check. The previous API contract audit remains unchanged by this fix.
-
-## Not verified
 
 ## Dedicated subscriber lab setup
 
@@ -39,24 +39,37 @@ ether3 is active on the existing PPPoE service bridge. The subscriber lab provis
   owned queue `billing-lab-tenda-static` with verified 2 Mbps bidirectional limits.
   No active FastTrack rules were observed.
 
-At provisioning, the test PPPoE session was not connected and static counters were
-zero. These are setup results, not subscriber authentication or traffic acceptance.
+PPPoE subscriber authentication was subsequently verified: the MikroTik reported
+an active `billing-lab-tenda` session with address `10.254.250.2`, and the user
+confirmed browsing through the Tenda. Suspension passed on the router, removed
+the test session, and the user confirmed internet access stopped. Resume was
+accepted by the router. A subsequent observation confirmed the subscriber had
+reauthenticated at `10.254.250.2` with an active route and enabled account. A
+three-packet upstream probe from the PPP gateway address had no packet loss.
+The user initially reported connected status without internet after resume, then
+confirmed the connection was restored during follow-up checks. Subscriber
+browsing restoration is accepted on that confirmation. No additional router
+configuration was changed to obtain that restoration; its transient cause is
+not established. PPPoE authentication, browsing, suspension and restoration have
+passed in this local lab. Measured throughput and accounting remain separate gates.
+
+At static provisioning, counters were zero. Static subscriber traffic, shaping,
+and suspension/restoration remain pending.
 The lab resources intentionally remain for the user's Tenda tests. The runbook
 `docs/runbooks/tenda-subscriber-lab.md` records settings, controls and cleanup.
 
 ## Remaining verification
 
-- The latest RouterOS compatibility fix still needs deployment verification after
-  push. The earlier successful deployment check refers to `dffc89f`, before this fix.
 - The live write test called the service directly from this PC. The complete
   deployed customer/assignment/outbox path has not been exercised against the router.
-- Cloud-to-router reachability, real subscriber authentication and traffic,
-  accounting accuracy, measured FUP enforcement and live recovery remain pending.
+- Cloud-to-router reachability, static subscriber traffic, accounting accuracy,
+  measured shaping/FUP enforcement and full recovery remain pending.
 
 ## Next acceptance steps
 
-1. Deploy the RouterOS compatibility fix to the Render API service once pushed.
-   If deployment fails, inspect its logs.
+1. Keep the Render API on the intended `main` revision. The RouterOS compatibility
+   fix has passed deployment verification; later lab-only tooling is not required
+   to run inside Render.
 2. Run `npm run verify:deployment` once deployment completes. Both health endpoints
    must report the expected commit, and the frontend content must match the build.
    If a revision is still absent, investigate the service's source/start command;

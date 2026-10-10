@@ -81,6 +81,23 @@ process.stdin.on('end', async () => {
     const sessions = await call('/ppp/active/print', ['?name=' + username, '=.proplist=name,service,address,uptime']);
     report.sessions = sessions.filter(row => row.name === username).map(row => ({ service: row.service, address: row.address, uptime: row.uptime }));
     report.authenticatedSubscriber = report.sessions.some(row => row.service === 'pppoe' && row.address === remoteAddress);
+    if (action === 'observe') {
+      report.diagnostics = {};
+      const queries = [
+        ['queue', '/queue/simple/print', ['?target=' + remoteAddress + '/32'], ['target','max-limit','bytes','packets','disabled']],
+        ['subscriberRoute', '/ip/route/print', ['?dst-address=' + remoteAddress + '/32'], ['dst-address','active','gateway','disabled']],
+        ['testAccount', '/ppp/secret/print', ['?name=' + username], ['name','profile','disabled']],
+      ];
+      for (const [key, command, filters, fields] of queries) {
+        try {
+          report.diagnostics[key] = (await call(command, [...filters, '=.proplist=' + fields.join(',')])).map(row => Object.fromEntries(fields.filter(field => row[field] !== undefined).map(field => [field, row[field]])));
+        } catch { report.diagnostics[key] = { error: 'Read unavailable' }; }
+      }
+      try {
+        const replies = await call('/ping', ['=address=1.1.1.1', '=src-address=' + localAddress, '=count=3', '=interval=300ms']);
+        report.diagnostics.upstreamFromPppGateway = replies.map(row => Object.fromEntries(['sent','received','packet-loss','status'].filter(field => row[field] !== undefined).map(field => [field, row[field]])));
+      } catch { report.diagnostics.upstreamFromPppGateway = { error: 'Probe unavailable; ping may require test permission' }; }
+    }
     report.state = 'complete';
   } catch {
     report.state = 'failed'; report.error = 'Failed during ' + stage;

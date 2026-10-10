@@ -40,6 +40,13 @@ from a device connected through the Tenda, with mobile data/other uplinks disabl
 Use `suspend`, then `resume`, and observe actual loss/restoration of access.
 Use `release` after acceptance to disconnect/remove only the owned account/profile.
 
+The observe action also reports the test account's enabled/profile state, its
+subscriber route, matching queue counters where available, and a three-packet
+upstream probe sourced from the dedicated PPP gateway. Successful gateway probes
+do not prove subscriber forwarding or DNS. If resume reconnects but browsing
+fails, test an IP-based page and a hostname from the Tenda LAN before changing
+router configuration or marking restoration passed.
+
 ## Static IP
 
 Launch the prompt with `-LabAction provision -StaticLab`. It checks subnet conflicts,
