@@ -2,7 +2,15 @@
 
 ## Current implementation checkpoint
 
-The billing completion batch fixes invoice pricing, overpayment reversal accounting, tenant/currency validation, and the staff billing route. It adds provider receipt comparison, canonical M-Pesa configuration, fault-injection coverage, and enforced browser/restore checks. The next implementation batch is Phase 3 network orchestration. Evidence and the exact support boundary are recorded in `docs/product/billing-completion-status.md`.
+The billing completion batch fixes invoice pricing, overpayment reversal accounting, tenant/currency validation, and the staff billing route. It adds provider receipt comparison, canonical M-Pesa configuration, fault-injection coverage, and enforced browser/restore checks. Evidence and the exact billing support boundary are recorded in `docs/product/billing-completion-status.md`.
+
+Phase 3 now includes durable local PPPoE/hotspot/static service operations, billing
+and manual suspension coordination, FUP worker fencing, and one shared Customers /
+PPPoE service workflow. These are implemented engineering changes; live network
+acceptance is still pending. See `docs/runbooks/network-readiness.md` for support
+limits and `docs/product/network-acceptance-status.md` for the latest deployment
+and router evidence. External RADIUS subscriber authorization and cloud-to-LAN
+routing are not complete.
 
 This is a local engineering checkpoint, not production launch approval. Live provider acceptance, a deployment-specific restore rehearsal, MikroTik lab validation, operational ownership, the remaining site-wide UI workflows, and the controlled pilot remain release gates. PayPal currently supports manually recorded receipts and statement comparison; its unused checkout helpers are not a verified online payment integration.
 
